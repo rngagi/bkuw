@@ -1,0 +1,12 @@
+{
+  "project": "Tibetan demo",
+  "writingSystems": ["Tibetan", "Wylie", "IPA"],
+  "entries": [
+    {
+      "forms": ["བོད", "bod", "/pʰøː/"],
+      "senses": [
+        { "partOfSpeech": "Noun", "gloss": "Tibet", "examples": [] }
+      ]
+    }
+  ]
+}

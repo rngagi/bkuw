@@ -1,0 +1,76 @@
+{
+  "name": "bkuw",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "check": "tsc --noEmit --pretty false && cargo fmt --manifest-path src-tauri/Cargo.toml --check && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "test:e2e:build": "tauri build --debug --no-bundle --features e2e --config src-tauri/tauri.e2e.conf.json",
+    "test:e2e": "wdio run wdio.conf.ts",
+    "preview": "vite preview",
+    "tauri": "tauri"
+  },
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "packageManager": "pnpm@11.1.0",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ],
+    "ignoredBuiltDependencies": [
+      "edgedriver",
+      "geckodriver"
+    ]
+  },
+  "dependencies": {
+    "@hookform/resolvers": "latest",
+    "@radix-ui/react-alert-dialog": "^1.1.23",
+    "@radix-ui/react-dialog": "latest",
+    "@radix-ui/react-select": "latest",
+    "@radix-ui/react-separator": "latest",
+    "@radix-ui/react-tooltip": "latest",
+    "@tanstack/react-virtual": "latest",
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-dialog": "^2",
+    "@tauri-apps/plugin-opener": "^2.5.4",
+    "class-variance-authority": "latest",
+    "clsx": "latest",
+    "i18next": "latest",
+    "lucide-react": "latest",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-hook-form": "latest",
+    "react-i18next": "latest",
+    "react-resizable-panels": "latest",
+    "tailwind-merge": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "latest",
+    "@tauri-apps/cli": "^2",
+    "@testing-library/jest-dom": "latest",
+    "@testing-library/react": "latest",
+    "@testing-library/user-event": "latest",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.6.0",
+    "@wdio/cli": "latest",
+    "@wdio/globals": "latest",
+    "@wdio/local-runner": "latest",
+    "@wdio/mocha-framework": "latest",
+    "@wdio/spec-reporter": "latest",
+    "@wdio/tauri-plugin": "latest",
+    "@wdio/tauri-service": "latest",
+    "jsdom": "latest",
+    "tailwindcss": "latest",
+    "typescript": "~5.8.3",
+    "vite": "^7.0.4",
+    "vitest": "latest"
+  }
+}

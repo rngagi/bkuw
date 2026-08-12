@@ -1,0 +1,140 @@
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import i18n from "./i18n";
+import type { LexicalEntry, ProjectSnapshot } from "./types/domain";
+
+const { backendMock } = vi.hoisted(() => ({
+  backendMock: {
+    chooseFolder: vi.fn(),
+    createProject: vi.fn(),
+    openProject: vi.fn(),
+    closeProject: vi.fn(),
+    updateProjectSettings: vi.fn(),
+    queryEntries: vi.fn(),
+    loadEntry: vi.fn(),
+    createEntry: vi.fn(),
+    saveEntry: vi.fn(),
+    deleteEntry: vi.fn(),
+    restoreEntry: vi.fn(),
+  },
+}));
+
+vi.mock("./lib/tauri", () => ({
+  backend: backendMock,
+  CommandError: class CommandError extends Error {
+    code: string;
+    details?: string;
+    constructor(code: string, message: string, details?: string) {
+      super(message);
+      this.code = code;
+      this.details = details;
+    }
+  },
+}));
+
+import App from "./App";
+import { CommandError } from "./lib/tauri";
+
+const entry: LexicalEntry = {
+  id: "entry-1",
+  notes: null,
+  revision: 0,
+  createdAt: "2026-01-01T00:00:00Z",
+  updatedAt: "2026-01-01T00:00:00Z",
+  forms: [],
+  senses: [],
+  relations: [],
+};
+
+const snapshot: ProjectSnapshot = {
+  rootPath: "/tmp/Test.bkuw",
+  project: {
+    id: "project-1", name: "Test", languageName: null, languageCode: null,
+    description: null, createdAt: entry.createdAt, updatedAt: entry.updatedAt,
+  },
+  writingSystems: [{
+    id: "ws-1", name: "Primary orthography", type: "orthography", scriptCode: null,
+    languageTag: null, displayRole: "primary", sortOrder: 0, fontFamily: null, notes: null,
+  }],
+  partOfSpeechOptions: ["Verb", "Noun"],
+  semanticDomainOptions: ["Motion"],
+  entries: [],
+};
+
+describe("App keyboard and delete workflow", () => {
+  beforeEach(async () => {
+    await i18n.changeLanguage("en");
+    vi.clearAllMocks();
+    vi.stubGlobal("crypto", { randomUUID: vi.fn(() => `id-${Math.random()}`) });
+    backendMock.chooseFolder.mockResolvedValue("/tmp");
+    backendMock.createProject.mockResolvedValue(snapshot);
+    backendMock.createEntry.mockResolvedValue(entry);
+    backendMock.queryEntries.mockResolvedValue([]);
+    backendMock.saveEntry.mockImplementation(async (draft: LexicalEntry) => ({ ...draft, revision: draft.revision + 1 }));
+    backendMock.deleteEntry.mockResolvedValue({ id: entry.id, deletedAt: "2026-01-01T00:00:01Z" });
+    backendMock.restoreEntry.mockResolvedValue({ ...entry, revision: 2 });
+  });
+
+  it("supports create, focus, add-sense, save, delete, and undo shortcuts", async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Create project" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
+    await waitFor(() => expect(screen.getByDisplayValue("/tmp")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("Project name"), { target: { value: "Test" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    expect(await screen.findByRole("dialog", { name: "Set up this project's writing systems" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await screen.findByRole("button", { name: "New entry" });
+
+    fireEvent.keyDown(window, { key: "n", ctrlKey: true });
+    await screen.findByRole("button", { name: "Delete entry" });
+    fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
+    expect(await screen.findByText("Sense 1")).toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "f", ctrlKey: true });
+    expect(screen.getByRole("textbox", { name: "Search every lexical form…" })).toHaveFocus();
+    fireEvent.keyDown(window, { key: "s", ctrlKey: true });
+    await waitFor(() => expect(backendMock.saveEntry).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete entry" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete entry" }));
+    await waitFor(() => expect(backendMock.deleteEntry).toHaveBeenCalled());
+    fireEvent.click(await screen.findByRole("button", { name: "Undo" }));
+    await waitFor(() => expect(backendMock.restoreEntry).toHaveBeenCalledWith(entry.id));
+
+    fireEvent.click(screen.getByRole("button", { name: "Close project" }));
+    await screen.findByRole("heading", { name: "Your lexical projects, stored on this device" });
+    expect(backendMock.closeProject).toHaveBeenCalled();
+  });
+
+  it("shows a modal when a project name already exists", async () => {
+    backendMock.createProject.mockRejectedValue(new CommandError("project_exists", "exists"));
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Create project" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
+    await waitFor(() => expect(screen.getByDisplayValue("/tmp")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("Project name"), { target: { value: "Test" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    expect(await screen.findByRole("alertdialog", { name: "Project name already exists" })).toBeInTheDocument();
+  });
+
+  it("shows Saved as soon as the entry save succeeds without waiting for list refresh", async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Create project" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
+    await waitFor(() => expect(screen.getByDisplayValue("/tmp")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("Project name"), { target: { value: "Test" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    const onboardingDialog = await screen.findByRole("dialog", { name: "Set up this project's writing systems" });
+    fireEvent.click(within(onboardingDialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Set up this project's writing systems" })).not.toBeInTheDocument());
+    fireEvent.click(await screen.findByRole("button", { name: "New entry" }));
+    const text = await screen.findByLabelText("Text");
+    fireEvent.change(text, { target: { value: "中" } });
+    backendMock.queryEntries.mockImplementation(() => new Promise(() => undefined));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(backendMock.saveEntry).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByText("Saved")).toBeInTheDocument(), { timeout: 500 });
+  });
+});

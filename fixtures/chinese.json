@@ -1,0 +1,19 @@
+{
+  "project": "Chinese demo",
+  "writingSystems": ["Traditional Chinese", "Pinyin", "IPA"],
+  "entries": [
+    {
+      "forms": ["過", "guò", "/ku̯ɔ˥˩/"],
+      "senses": [
+        {
+          "partOfSpeech": "Verb",
+          "gloss": "cross",
+          "definition": "to pass across",
+          "examples": [
+            { "forms": ["他過河了。", "Tā guò hé le.", "/tʰa˥ ku̯ɔ˥˩ xɤ˧˥ lɤ/"], "translation": "He crossed the river." }
+          ]
+        }
+      ]
+    }
+  ]
+}

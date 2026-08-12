@@ -1,0 +1,18 @@
+{
+  "project": "Latin-script demo",
+  "writingSystems": ["Practical orthography", "IPA"],
+  "entries": [
+    {
+      "forms": ["ambuka", "/ambuka/"],
+      "senses": [
+        {
+          "partOfSpeech": "Verb",
+          "gloss": "cross",
+          "examples": [
+            { "forms": ["Ng'ona yaambuka."], "translation": "The crocodile crossed." }
+          ]
+        }
+      ]
+    }
+  ]
+}
