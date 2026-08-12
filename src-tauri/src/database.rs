@@ -384,18 +384,36 @@ impl ProjectSession {
         load_entry(&self.connection, id, false)
     }
 
+    #[cfg(test)]
     pub fn preview_export(
         &self,
         kind: crate::domain::ExportKind,
     ) -> AppResult<crate::domain::ExportPreview> {
-        crate::export::preview(&self.export_snapshot()?, kind)
+        crate::export::preview(&self.export_snapshot()?, kind, None)
     }
 
+    pub fn preview_export_with_fonts(
+        &self,
+        kind: crate::domain::ExportKind,
+        fonts: &crate::font_manager::FontManager,
+    ) -> AppResult<crate::domain::ExportPreview> {
+        crate::export::preview(&self.export_snapshot()?, kind, Some(fonts))
+    }
+
+    #[cfg(test)]
     pub fn export_project(
         &self,
         request: crate::domain::ExportProjectRequest,
     ) -> AppResult<crate::domain::ExportResult> {
-        crate::export::run(&self.export_snapshot()?, request)
+        crate::export::run(&self.export_snapshot()?, request, None)
+    }
+
+    pub fn export_project_with_fonts(
+        &self,
+        request: crate::domain::ExportProjectRequest,
+        fonts: &crate::font_manager::FontManager,
+    ) -> AppResult<crate::domain::ExportResult> {
+        crate::export::run(&self.export_snapshot()?, request, Some(fonts))
     }
 
     fn export_snapshot(&self) -> AppResult<crate::export::ExportSnapshot> {
@@ -1246,6 +1264,7 @@ mod tests {
         Example, ExampleForm, ExportKind, ExportProjectRequest, SaveEntryRequest, Sense,
         UpdateProjectSettingsRequest, WritingSystem,
     };
+    use crate::font_manager::FontManager;
 
     fn create_session() -> (tempfile::TempDir, ProjectSession) {
         let directory = tempdir().expect("temp directory");
@@ -1989,14 +2008,23 @@ mod tests {
             })
             .expect("save");
 
-        let preview = session.preview_export(ExportKind::Latex).expect("preview");
+        let fonts = FontManager::seeded_for_tests(
+            directory.path().join("font-cache"),
+            &["tex-gyre-termes", "noto-serif-cjk-tc"],
+        );
+        let preview = session
+            .preview_export_with_fonts(ExportKind::Latex, &fonts)
+            .expect("preview");
         let result = session
-            .export_project(ExportProjectRequest {
-                kind: ExportKind::Latex,
-                destination: directory.path().to_string_lossy().into_owned(),
-                snapshot_token: preview.snapshot_token,
-                overwrite: false,
-            })
+            .export_project_with_fonts(
+                ExportProjectRequest {
+                    kind: ExportKind::Latex,
+                    destination: directory.path().to_string_lossy().into_owned(),
+                    snapshot_token: preview.snapshot_token,
+                    overwrite: false,
+                },
+                &fonts,
+            )
             .expect("LaTeX export");
         let project = std::path::PathBuf::from(result.latex_directory.expect("project path"));
         for name in [
@@ -2025,17 +2053,50 @@ mod tests {
             .map(|index| archive.by_index(index).expect("member").name().to_owned())
             .collect::<Vec<_>>();
         names.sort();
-        assert_eq!(
-            names,
-            [
-                ".latexmkrc",
-                "README.md",
-                "entries.tex",
-                "main.tex",
-                "reverse-index.tex"
-            ]
-        );
+        assert!(names.contains(&"fonts/tex-gyre-termes/texgyretermes-regular.otf".into()));
+        assert!(names.contains(&"fonts/tex-gyre-termes/LICENSE.txt".into()));
+        assert!(names.contains(&"fonts/noto-serif-cjk-tc/NotoSerifCJKtc-Regular.otf".into()));
+        assert!(names.contains(&"fonts/noto-serif-cjk-tc/LICENSE.txt".into()));
         assert_eq!(result.pdf_status, crate::domain::PdfStatus::NotRequested);
+    }
+
+    #[test]
+    fn latex_preview_fails_when_the_mandatory_termes_pack_is_missing() {
+        let (directory, mut session) = create_session();
+        let snapshot = session.snapshot().expect("snapshot");
+        let mut entry = session.create_entry().expect("entry");
+        entry.forms.push(EntryForm {
+            id: super::new_id(),
+            writing_system_id: snapshot.writing_systems[0].id.clone(),
+            text: "word".into(),
+            variant_label: None,
+            dialect: None,
+            status: None,
+            notes: None,
+            sort_order: 0,
+        });
+        session
+            .save_entry(SaveEntryRequest {
+                expected_revision: 0,
+                entry,
+            })
+            .expect("save");
+        let fonts = FontManager::new(directory.path().join("font-cache"));
+
+        let preview = session
+            .preview_export_with_fonts(ExportKind::Latex, &fonts)
+            .expect("preview");
+        assert!(preview.has_errors());
+        assert!(preview.issues.iter().any(|issue| {
+            issue.code == "latex.font_pack_missing"
+                && issue.details.as_deref() == Some("tex-gyre-termes")
+        }));
+        assert!(
+            preview
+                .required_font_packs
+                .iter()
+                .any(|pack| pack.id == "tex-gyre-termes")
+        );
     }
 
     #[cfg(unix)]
@@ -2072,14 +2133,23 @@ mod tests {
                 entry,
             })
             .expect("save");
-        let preview = session.preview_export(ExportKind::Pdf).expect("preview");
+        let fonts = FontManager::seeded_for_tests(
+            directory.path().join("font-cache"),
+            &["tex-gyre-termes", "noto-serif"],
+        );
+        let preview = session
+            .preview_export_with_fonts(ExportKind::Pdf, &fonts)
+            .expect("preview");
         let export = |session: &ProjectSession| {
-            session.export_project(ExportProjectRequest {
-                kind: ExportKind::Pdf,
-                destination: directory.path().to_string_lossy().into_owned(),
-                snapshot_token: preview.snapshot_token.clone(),
-                overwrite: false,
-            })
+            session.export_project_with_fonts(
+                ExportProjectRequest {
+                    kind: ExportKind::Pdf,
+                    destination: directory.path().to_string_lossy().into_owned(),
+                    snapshot_token: preview.snapshot_token.clone(),
+                    overwrite: false,
+                },
+                &fonts,
+            )
         };
 
         crate::export::with_test_xelatex(None, Duration::from_secs(1), || {
@@ -2179,16 +2249,28 @@ mod tests {
                 entry,
             })
             .expect("save");
-        let preview = session.preview_export(ExportKind::Pdf).expect("preview");
+        let fonts = FontManager::new(directory.path().join("font-cache"));
+        fonts
+            .install("tex-gyre-termes")
+            .expect("install TeX Gyre Termes");
+        fonts
+            .install("noto-serif-cjk-tc")
+            .expect("install Noto Serif CJK TC");
+        let preview = session
+            .preview_export_with_fonts(ExportKind::Pdf, &fonts)
+            .expect("preview");
         let destination = std::env::var("BKUW_LATEX_SMOKE_DESTINATION")
             .unwrap_or_else(|_| directory.path().to_string_lossy().into_owned());
         let result = session
-            .export_project(ExportProjectRequest {
-                kind: ExportKind::Pdf,
-                destination,
-                snapshot_token: preview.snapshot_token,
-                overwrite: false,
-            })
+            .export_project_with_fonts(
+                ExportProjectRequest {
+                    kind: ExportKind::Pdf,
+                    destination,
+                    snapshot_token: preview.snapshot_token,
+                    overwrite: false,
+                },
+                &fonts,
+            )
             .unwrap_or_else(|error| {
                 let diagnostic = error
                     .details

@@ -2,7 +2,7 @@
 
 ## 系統形狀
 
-React 負責 presentation、interaction、draft state 與 localization；Rust 負責 project lifecycle、filesystem、validation、SQLite、migrations、backup、locking 與 aggregate transactions。
+React 負責 presentation、interaction、draft state 與 localization；Rust 負責 project lifecycle、filesystem、validation、SQLite、migrations、backup、locking、font-pack supply chain 與 aggregate transactions。
 
 ```text
 React UI
@@ -44,9 +44,11 @@ save_export_settings(settings) -> ExportSettingsV1
 preview_export(kind) -> ExportPreview
 export_project(request) -> ExportResult
 detect_xelatex() -> TexEngineStatus
+list_font_packs() -> FontPackStatus[]
+install_font_pack(packId) -> FontPackStatus
 ```
 
-Errors 使用 `{ code, message, details? }`，其中 export 另穩定區分 `export_validation`、`export_stale`、`export_filesystem`、`latex_compile`、`latex_timeout`。UI 顯示依 code 本地化的安全訊息；compile failure/timeout 的 detail 指向保留的 diagnostic log，frontend 只針對這兩個 code 將完整路徑顯示為可選取文字，不把其他內部 error details 外洩。
+Errors 使用 `{ code, message, details? }`，其中 export 另穩定區分 `export_validation`、`export_stale`、`export_filesystem`、`latex_compile`、`latex_timeout`，字型管理另使用 `font_download`、`font_integrity`、`font_filesystem`、`font_unknown`。UI 顯示依 code 本地化的安全訊息；compile failure/timeout 的 detail 指向保留的 diagnostic log，frontend 只針對這兩個 code 將完整路徑顯示為可選取文字，不把其他內部 error details 外洩。
 
 Main window 的 close request 由 React 攔截，先 flush entry autosave、關閉 active project session，再呼叫 Tauri `destroy()` 完成真正關窗。Capability 僅對 `main` window 額外授權 `core:window:allow-destroy`；這是 `core:default` 未包含、Windows 會強制檢查的必要權限。
 
@@ -104,9 +106,13 @@ Migration 2 新增 `metadata_options`。Migration 3 新增 `projects.analysis_la
 
 CSV renderer 固定 rngagi-corpus v0.3 九欄。ICU4X 依 profile language tag 排 primary form，entry UUID 與 sense order 是 deterministic tie-breakers。Writer 使用 UTF-8、無 BOM、CRLF 及 RFC 4180 quoting。輸出先寫同層 temporary sibling；Unix 使用 replace rename，Windows 使用 `MoveFileExW` 的 replace/write-through flags，避免留下半成品。
 
-LaTeX renderer 從零建立通用 XeLaTeX source，不複製 `docs/main.tex` 的授權巨集。所有 user text 經集中 escaping；writing-system font macros 使用純字母 control sequence，Hant analysis text 有 Noto/Source Han fallback。Reverse index 由 Rust 排序並直接產生 `hyperlink`／`pageref`，不使用 makeindex。
+LaTeX renderer 從零建立通用 XeLaTeX source，不複製 `docs/main.tex` 的授權巨集。所有 user text 經集中 escaping；writing-system font macros 使用純字母 control sequence與 project-relative font paths。Reverse index 由 Rust 排序並直接產生 `hyperlink`／`pageref`，不使用 makeindex。
 
-ZIP 僅打包 `main.tex`、`entries.tex`、`reverse-index.tex`、`.latexmkrc` 與 bilingual `README.md`。PDF runner 從 PATH、macOS TeX path 與 Windows 常見路徑找 XeLaTeX，把 sources 複製到 temporary build directory，兩次執行 `-no-shell-escape -interaction=nonstopmode -halt-on-error -file-line-error`，每次最多 120 秒。成功只複製 PDF；失敗/timeout 保留 source project 與 `diagnostic.log`。
+Font manager 是另一個 deep module。固定 catalog 記錄 pack ID、上游固定 commit/release、HTTPS URL、archive members、逐檔與 archive SHA-256、版本、LaTeX faces 與授權檔。下載先進 app-local staging directory；只有 archive 與每個 extracted/downloaded file 全部通過雜湊驗證，才以 manifest 啟用 cache。cache 每次使用前依 manifest 重驗，損毀 pack 視為 invalid。React 不接觸網路或 filesystem，只能列出狀態與請求安裝；Rust HTTP client 只能使用 catalog 內建 URL。
+
+TeX Gyre Termes 是所有 LaTeX/PDF export 的 mandatory base pack，缺少或 invalid 時 preview 產生 fatal blocking issue。分析語言與每個 writing system 依 profile/script 決定其他必要 packs；phonemic／phonetic 類型不接受 preset override，固定解析為 Charis SIL。需要的字型檔與相應 license 都放進 `fonts/<pack-id>/`，LaTeX folder 與 Overleaf ZIP 因此不依賴 OS font registry。
+
+ZIP 打包 `main.tex`、`entries.tex`、`reverse-index.tex`、`.latexmkrc`、bilingual `README.md` 以及 `fonts/` 下的必要 font/license files，不含 PDF/log/aux。PDF runner 從 PATH、macOS TeX path 與 Windows 常見路徑找 XeLaTeX，把完整 sources tree 複製到 temporary build directory，兩次執行 `-no-shell-escape -interaction=nonstopmode -halt-on-error -file-line-error`，每次最多 120 秒。成功只複製 PDF；失敗/timeout 保留 source project 與 `diagnostic.log`。
 
 CSV 的外部相容契約見 `docs/corpus-csv-contract.md`。目前沒有跨 repository 自動 contract test；`rngagi-corpus` 版本變更必須人工重驗與更新 golden fixture。
 

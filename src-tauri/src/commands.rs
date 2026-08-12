@@ -1,16 +1,32 @@
 use std::sync::{Mutex, MutexGuard};
 
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 
 use crate::{
     database::ProjectSession,
     domain::{
         CreateProjectRequest, DeleteEntryRequest, DeletedEntry, EntrySummary, ExportKind,
-        ExportPreview, ExportProjectRequest, ExportResult, ExportSettingsV1, LexicalEntry,
-        ProjectSnapshot, SaveEntryRequest, TexEngineStatus, UpdateProjectSettingsRequest,
+        ExportPreview, ExportProjectRequest, ExportResult, ExportSettingsV1, FontPackStatus,
+        LexicalEntry, ProjectSnapshot, SaveEntryRequest, TexEngineStatus,
+        UpdateProjectSettingsRequest,
     },
     error::{AppError, AppResult},
 };
+
+fn font_manager(app: &AppHandle) -> AppResult<crate::font_manager::FontManager> {
+    let root = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| {
+            AppError::with_details(
+                "font_filesystem",
+                "The bkuw font cache directory is unavailable.",
+                error.to_string(),
+            )
+        })?
+        .join("fonts");
+    Ok(crate::font_manager::FontManager::new(root))
+}
 
 #[derive(Default)]
 pub struct AppState {
@@ -176,27 +192,53 @@ pub fn save_export_settings(
 }
 
 #[tauri::command]
-pub fn preview_export(state: State<'_, AppState>, kind: ExportKind) -> AppResult<ExportPreview> {
+pub fn preview_export(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    kind: ExportKind,
+) -> AppResult<ExportPreview> {
+    let fonts = font_manager(&app)?;
     let guard = active_session(&state)?;
     guard
         .as_ref()
         .ok_or_else(|| AppError::new("no_project", "No project is currently open."))?
-        .preview_export(kind)
+        .preview_export_with_fonts(kind, &fonts)
 }
 
 #[tauri::command]
 pub fn export_project(
+    app: AppHandle,
     state: State<'_, AppState>,
     request: ExportProjectRequest,
 ) -> AppResult<ExportResult> {
+    let fonts = font_manager(&app)?;
     let guard = active_session(&state)?;
     guard
         .as_ref()
         .ok_or_else(|| AppError::new("no_project", "No project is currently open."))?
-        .export_project(request)
+        .export_project_with_fonts(request, &fonts)
 }
 
 #[tauri::command]
 pub fn detect_xelatex() -> TexEngineStatus {
     crate::export::detect_xelatex()
+}
+
+#[tauri::command]
+pub fn list_font_packs(app: AppHandle) -> AppResult<Vec<FontPackStatus>> {
+    Ok(font_manager(&app)?.statuses())
+}
+
+#[tauri::command]
+pub async fn install_font_pack(app: AppHandle, pack_id: String) -> AppResult<FontPackStatus> {
+    let manager = font_manager(&app)?;
+    tauri::async_runtime::spawn_blocking(move || manager.install(&pack_id))
+        .await
+        .map_err(|error| {
+            AppError::with_details(
+                "internal",
+                "The font installation task could not complete.",
+                error.to_string(),
+            )
+        })?
 }

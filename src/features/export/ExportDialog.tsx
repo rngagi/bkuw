@@ -10,6 +10,7 @@ import type {
   ExportPreview,
   ExportResult,
   ExportSettings,
+  FontPackStatus,
   ProjectSnapshot,
   TexEngineStatus,
 } from "../../types/domain";
@@ -45,6 +46,8 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
   const [preview, setPreview] = useState<ExportPreview | null>(null);
   const [result, setResult] = useState<ExportResult | null>(null);
   const [engine, setEngine] = useState<TexEngineStatus | null>(null);
+  const [fontPacks, setFontPacks] = useState<FontPackStatus[]>([]);
+  const [installingPack, setInstallingPack] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ExportError | null>(null);
   const [pendingDestination, setPendingDestination] = useState<string | null>(null);
@@ -58,6 +61,7 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
     setError(null);
     setPendingDestination(null);
     void backend.detectXeLatex().then(setEngine).catch(() => setEngine(null));
+    void backend.listFontPacks().then(setFontPacks).catch(() => setFontPacks([]));
   }, [open, snapshot]);
 
   function patchLatex(value: Partial<ExportSettings["latex"]>) {
@@ -76,12 +80,34 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
       }
       const saved = await backend.saveExportSettings(settings);
       setSettings(saved);
-      setPreview(await backend.previewExport(kind));
+      const nextPreview = await backend.previewExport(kind);
+      setPreview(nextPreview);
+      if (nextPreview.requiredFontPacks.length > 0) {
+        setFontPacks((current) => mergeFontPacks(current, nextPreview.requiredFontPacks));
+      }
       setResult(null);
     } catch (value) {
       setError({ message: value instanceof CommandError ? t(`error.${value.code}`) : t("error.generic") });
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function installAndRetry(packId: string) {
+    setInstallingPack(packId);
+    setError(null);
+    try {
+      const installed = await backend.installFontPack(packId);
+      setFontPacks((current) => mergeFontPacks(current, [installed]));
+      if (preview) {
+        const nextPreview = await backend.previewExport(kind);
+        setPreview(nextPreview);
+        setFontPacks((current) => mergeFontPacks(current, nextPreview.requiredFontPacks));
+      }
+    } catch (value) {
+      setError({ message: value instanceof CommandError ? t(`error.${value.code}`) : t("error.generic") });
+    } finally {
+      setInstallingPack(null);
     }
   }
 
@@ -161,13 +187,15 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
                 <label className="field"><span>{t("export.collationLanguage")}</span><input value={settings.latex.collationLanguageTag ?? ""} placeholder="zh-Hant" onChange={(event) => patchLatex({ collationLanguageTag: event.target.value || null })} /></label>
                 <label className="field"><span>{t("export.sectionMode")}</span><select value={settings.latex.sectionMode} onChange={(event) => patchLatex({ sectionMode: event.target.value as ExportSettings["latex"]["sectionMode"] })}><option value="auto">{t("export.auto")}</option><option value="firstGrapheme">{t("export.firstGrapheme")}</option><option value="none">{t("common.none")}</option></select></label>
                 <label className="field"><span>{t("export.reverseIndex")}</span><select value={settings.latex.reverseIndex} onChange={(event) => patchLatex({ reverseIndex: event.target.value as ExportSettings["latex"]["reverseIndex"] })}><option value="gloss">{t("export.gloss")}</option><option value="none">{t("common.none")}</option></select></label>
-                {snapshot.writingSystems.map((system) => <label className="field" key={system.id}><span>{t("export.fontFor", { name: system.name })}</span><select value={settings.latex.fontPresets[system.id] ?? "auto"} onChange={(event) => patchLatex({ fontPresets: { ...settings.latex.fontPresets, [system.id]: event.target.value as typeof fontPresets[number] } })}>{fontPresets.map((preset) => <option value={preset} key={preset}>{t(`export.font.${preset}`)}</option>)}</select></label>)}
+                {snapshot.writingSystems.map((system) => <label className="field" key={system.id}><span>{t("export.fontFor", { name: system.name })}</span>{system.type === "phonemic" || system.type === "phonetic" ? <output>{t("export.ipaFixedFont")}</output> : <select value={settings.latex.fontPresets[system.id] ?? "auto"} onChange={(event) => patchLatex({ fontPresets: { ...settings.latex.fontPresets, [system.id]: event.target.value as typeof fontPresets[number] } })}>{fontPresets.map((preset) => <option value={preset} key={preset}>{t(`export.font.${preset}`)}</option>)}</select>}</label>)}
                 {kind === "pdf" && <p className="engine-status">{engine?.available ? t("export.xelatexFound", { path: engine.path }) : t("export.xelatexMissing")}</p>}
               </div>}
             </section>
 
+            {kind !== "corpusCsv" && <section className="font-pack-manager"><h3>{t("export.fontPacks")}</h3><p className="section-help">{t("export.fontPacksHelp")}</p><ul>{fontPacks.map((pack) => <li key={pack.id}><div><strong>{t(`export.fontPack.${pack.id}`)}</strong><small>{t(`export.fontState.${pack.state}`)} · {pack.version}{pack.mandatory ? ` · ${t("export.mandatory")}` : ""}</small></div>{pack.state !== "installed" && <Button disabled={installingPack !== null} onClick={() => void installAndRetry(pack.id)}>{installingPack === pack.id ? t("export.downloadingFont") : t("export.downloadAndRetry")}</Button>}</li>)}</ul></section>}
+
             {preview && <section className="export-preview" aria-live="polite"><h3>{t("export.preview")}</h3><p>{t("export.rowsReady", { count: preview.rowCount })}</p><p>{t("export.issueCounts", { errors: blockers.length, warnings: warnings.length })}</p>
-              {preview.issues.length > 0 && <ul>{preview.issues.map((issue, index) => <li key={`${issue.code}-${index}`} className={issue.severity}>{issue.entryId ? <button type="button" className="inline-link" onClick={() => onNavigateEntry(issue.entryId!)}>{t(`export.issue.${issue.code}`, { defaultValue: issue.code })}</button> : t(`export.issue.${issue.code}`, { defaultValue: issue.code })}</li>)}</ul>}
+              {preview.issues.length > 0 && <ul>{preview.issues.map((issue, index) => { const label = t(`export.issue.${issue.code}`, { defaultValue: issue.code, font: issue.details ? t(`export.fontPack.${issue.details}`, { defaultValue: issue.details }) : "" }); return <li key={`${issue.code}-${index}`} className={issue.severity}>{issue.entryId ? <button type="button" className="inline-link" onClick={() => onNavigateEntry(issue.entryId!)}>{label}</button> : label}</li>; })}</ul>}
               {(preview.omitted.examples > 0 || preview.omitted.exampleForms > 0 || preview.omitted.baseRelations > 0) && <p>{t("export.omitted", preview.omitted)}</p>}
             </section>}
 
@@ -180,6 +208,12 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
       </Dialog.Portal>
     </Dialog.Root>
   );
+}
+
+function mergeFontPacks(current: FontPackStatus[], updates: FontPackStatus[]) {
+  const merged = new Map(current.map((pack) => [pack.id, pack]));
+  for (const pack of updates) merged.set(pack.id, pack);
+  return Array.from(merged.values());
 }
 
 function WritingSystemSelect({ label, value, systems, optional = false, onChange }: { label: string; value: string; systems: ProjectSnapshot["writingSystems"]; optional?: boolean; onChange(value: string): void }) {

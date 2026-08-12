@@ -153,3 +153,20 @@
 - [x] 以 version tag 自動建立 Windows x64／macOS Apple Silicon Draft GitHub Release。
   - 完成條件：全部 CI jobs 成功後才建立；四處 version 必須符合 tag；只上傳一個 NSIS、一個 DMG 與 `SHA256SUMS.txt`；release notes 含雙語 unsigned 安裝提醒並接續 GitHub generated notes。
   - 驗證：workflow／release-note YAML parse、local version/installers collection shell checks，以及 `v0.2.2` tag 的 GitHub Actions／Draft Release assets。
+
+## 12. v0.2.3 managed portable fonts
+
+- [x] 建立 Rust font-manager deep module 與固定 catalog。
+  - 完成條件：官方固定 commit/release、archive/member SHA-256、license、staging/manifest/cache verification；frontend 不直接執行 HTTP 或 filesystem。
+  - 驗證：missing、checksum mismatch、cache corruption、namespaced export/license Rust tests，`pnpm check`。
+- [x] LaTeX/PDF preview 與 export 改用 bkuw-managed fonts。
+  - 完成條件：TeX Gyre Termes 缺少或 invalid 時 fatal；輸出使用 project-relative paths；folder/ZIP/temporary build 都含 required fonts/licenses，不查詢 OS fonts。
+  - 驗證：fatal preview、portable folder/ZIP member 與 real-XeLaTeX tests。
+- [x] Phonemic／phonetic writing systems 固定使用 Charis SIL。
+  - 完成條件：Rust 忽略 IPA 類型的 preset override；Export wizard 顯示固定設定；preview 將 Charis SIL 列入 required packs。
+  - 驗證：Rust font selection 與 ExportDialog component tests。
+- [x] 完成雙語 font-pack status、下載與 retry 流程。
+  - 完成條件：missing/installed/invalid/mandatory 狀態完整本地化；下載錯誤可重試；成功後自動重新 preview。
+  - 驗證：English／zh-TW translations、ExportDialog download/retry test。
+- [ ] package、Cargo、Cargo lock 與 Tauri app version 一致升為 `0.2.3`，完成全部本機與遠端驗收。
+  - 驗證：`pnpm check && pnpm test && pnpm test:rust && pnpm test:e2e:build && pnpm test:e2e && pnpm tauri build --no-bundle`，Windows x64／macOS Apple Silicon CI、Draft Release assets 與 checksums。

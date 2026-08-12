@@ -16,5 +16,5 @@ export const config: Options.Testrunner = {
   logLevel: "warn",
   waitforTimeout: 10_000,
   connectionRetryTimeout: 30_000,
-  mochaOpts: { ui: "bdd", timeout: 30_000 },
+  mochaOpts: { ui: "bdd", timeout: 300_000 },
 };

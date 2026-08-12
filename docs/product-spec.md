@@ -93,6 +93,8 @@ Corpus CSV 固定輸出 rngagi-corpus v0.3 的九欄簡版，每個未刪除 ent
 
 LaTeX 匯出包含可編輯來源資料夾與不含 PDF／aux／log 的 Overleaf-ready ZIP。通用 template 使用 `fontspec`、雙欄、懸掛縮排、頁眉、例句標記與 Rust 產生的 reverse index，不依賴日文專用套件或 makeindex。所有 user text 完整 TeX escape。
 
+bkuw 自行管理 portable font packs，不依賴 OS 已安裝字型，也不把字型安裝進系統。首次需要時，由使用者在 Export wizard 下載官方固定版本；Rust 必須先驗證 SHA-256 與 pack manifest，才寫入 app-private cache。匯出資料夾與 ZIP 必須包含實際需要的字型及授權檔。TeX Gyre Termes 是所有 LaTeX/PDF 匯出的必要 base；缺少或 invalid 時屬 fatal validation error。Phonemic／phonetic writing systems 固定使用 Charis SIL，其他 scripts 依 project export profile 選擇 Noto/Charis packs。
+
 PDF 只在本機偵測到 XeLaTeX 時產生。bkuw 在隔離 build directory 中以 `-no-shell-escape` 執行兩次並限制 120 秒；失敗保留來源與 diagnostic log，並在錯誤區顯示可選取、可複製的完整 log 路徑。找不到引擎仍是成功的 LaTeX 匯出，UI 提供 Overleaf 上傳步驟，但不自動上傳 lexical data。
 
 關閉主視窗時必須先完成有效草稿的 autosave 並釋放 project lock，之後程式才結束；Windows 與 macOS 的標準關窗操作皆須可用。
@@ -105,4 +107,4 @@ PDF 只在本機偵測到 XeLaTeX 時產生。bkuw 在隔離 build directory 中
 
 ## 明確排除
 
-v0.2 不包含 accounts、authentication、cloud sync、team collaboration、permissions、server backend、audio、CSV import、mobile、AI transcription、ASR、ELAN-style timeline、waveform segmentation、Git syncing、code signing、notarization、auto-update 或自動上傳 lexical data。v0.2.2 可透過受信任 version tag 建立 unsigned Draft GitHub Release；正式發布前須人工確認安裝包、checksums 與警告內容。
+v0.2 不包含 accounts、authentication、cloud sync、team collaboration、permissions、server backend、audio、CSV import、mobile、AI transcription、ASR、ELAN-style timeline、waveform segmentation、Git syncing、code signing、notarization、auto-update 或自動上傳 lexical data。v0.2.3 可透過受信任 version tag 建立 unsigned Draft GitHub Release；正式發布前須人工確認安裝包、checksums 與警告內容。

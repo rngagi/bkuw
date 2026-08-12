@@ -17,8 +17,9 @@
 - Put project lifecycle, validation, migrations, backups, filesystem access, and SQLite transactions behind the Rust project/database module.
 - Expose typed Tauri commands through the single frontend adapter in `src/lib/tauri.ts`; do not scatter `invoke` calls through UI modules.
 - Save a lexical entry as one aggregate transaction, including forms, senses, examples, example forms, and relations.
-- Keep Tauri capabilities narrow. Do not add shell, HTTP, or broad filesystem access without a reviewed requirement.
-- Keep all export validation, sorting, escaping, filesystem writes, and XeLaTeX process execution behind the Rust export module. React may only call its four typed commands through `src/lib/tauri.ts`.
+- Keep Tauri capabilities narrow. Do not add shell, frontend HTTP, or broad filesystem access without a reviewed requirement. The Rust font manager may download only fixed catalog URLs and must verify SHA-256 before activation.
+- Keep all export validation, sorting, escaping, filesystem writes, font-pack resolution, and XeLaTeX process execution behind the Rust export/font-manager modules. React may only call their typed commands through `src/lib/tauri.ts`.
+- Portable LaTeX/PDF exports must use bkuw-managed fonts, include the used font files and licenses, and never depend on system-installed fonts. TeX Gyre Termes is mandatory; phonemic/phonetic writing systems always use Charis SIL.
 - Treat the rngagi-corpus v0.3 nine-column order as a versioned external contract. This repository currently has no cross-repository automated contract test; corpus changes require manual revalidation and a golden-fixture update.
 - CI and packaging support Windows x64 and macOS Apple Silicon only. Do not add macOS Intel targets.
 - Prefer a small module interface with substantial behavior behind it. Avoid pass-through modules and speculative seams.

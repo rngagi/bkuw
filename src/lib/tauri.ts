@@ -10,7 +10,7 @@ import {
   exportSettingsSchema,
   lexicalEntrySchema,
   projectSnapshotSchema,
-  texEngineStatusSchema,
+  texEngineStatusSchema, fontPackStatusSchema,
   type ExportKind,
   type ExportSettings,
   type LexicalEntry,
@@ -135,6 +135,14 @@ export const backend = {
 
   detectXeLatex() {
     return call("detect_xelatex", {}, texEngineStatusSchema);
+  },
+
+  listFontPacks() {
+    return call("list_font_packs", {}, z.array(fontPackStatusSchema));
+  },
+
+  installFontPack(packId: string) {
+    return call("install_font_pack", { packId }, fontPackStatusSchema);
   },
 
   queryEntries(query: string) {

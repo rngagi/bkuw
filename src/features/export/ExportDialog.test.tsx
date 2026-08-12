@@ -13,6 +13,8 @@ const { backendMock } = vi.hoisted(() => ({
     chooseFolder: vi.fn(),
     openOverleaf: vi.fn(),
     openOverleafCompilerHelp: vi.fn(),
+    listFontPacks: vi.fn(),
+    installFontPack: vi.fn(),
   },
 }));
 vi.mock("../../lib/tauri", () => ({
@@ -41,7 +43,12 @@ describe("ExportDialog", () => {
     vi.clearAllMocks();
     backendMock.saveExportSettings.mockImplementation(async (value) => value);
     backendMock.detectXeLatex.mockResolvedValue({ available: false, path: null });
-    backendMock.previewExport.mockResolvedValue({ snapshotToken: "token", rowCount: 1, issues: [], omitted: { examples: 0, exampleForms: 0, baseRelations: 0 } });
+    backendMock.listFontPacks.mockResolvedValue([
+      { id: "tex-gyre-termes", version: "2.004", state: "missing", mandatory: true, installedBytes: 0 },
+      { id: "noto-serif-cjk-tc", version: "2.003", state: "installed", mandatory: false, installedBytes: 1 },
+    ]);
+    backendMock.installFontPack.mockResolvedValue({ id: "tex-gyre-termes", version: "2.004", state: "installed", mandatory: true, installedBytes: 1 });
+    backendMock.previewExport.mockResolvedValue({ snapshotToken: "token", rowCount: 1, issues: [], omitted: { examples: 0, exampleForms: 0, baseRelations: 0 }, requiredFontPacks: [] });
     backendMock.chooseCsvDestination.mockResolvedValue("/tmp/Test.csv");
     backendMock.exportProject.mockResolvedValue({ csvPath: "/tmp/Test.csv", latexDirectory: null, zipPath: null, pdfPath: null, pdfStatus: "notRequested", rowCount: 1, issues: [], diagnosticPath: null });
   });
@@ -61,7 +68,7 @@ describe("ExportDialog", () => {
 
   it("renders the missing-XeLaTeX Overleaf flow in Taiwan Traditional Chinese", async () => {
     await i18n.changeLanguage("zh-TW");
-    backendMock.previewExport.mockResolvedValue({ snapshotToken: "pdf-token", rowCount: 1, issues: [], omitted: { examples: 0, exampleForms: 0, baseRelations: 0 } });
+    backendMock.previewExport.mockResolvedValue({ snapshotToken: "pdf-token", rowCount: 1, issues: [], omitted: { examples: 0, exampleForms: 0, baseRelations: 0 }, requiredFontPacks: [] });
     backendMock.chooseFolder.mockResolvedValue("/tmp");
     backendMock.exportProject.mockResolvedValue({ csvPath: null, latexDirectory: "/tmp/Test-latex", zipPath: "/tmp/Test.zip", pdfPath: null, pdfStatus: "xeLatexMissing", rowCount: 1, issues: [], diagnosticPath: null });
     render(<ExportDialog open snapshot={snapshot} onOpenChange={vi.fn()} onFlush={vi.fn(async () => undefined)} onSetAnalysisLanguage={vi.fn()} onNavigateEntry={vi.fn()} />);
@@ -91,5 +98,42 @@ describe("ExportDialog", () => {
 
     expect(await screen.findByText("Diagnostic log location")).toBeInTheDocument();
     expect(screen.getByText(diagnosticPath)).toBeInTheDocument();
+  });
+
+  it("downloads a missing mandatory font pack and retries the LaTeX preview", async () => {
+    backendMock.previewExport
+      .mockResolvedValueOnce({
+        snapshotToken: "blocked",
+        rowCount: 1,
+        issues: [{ severity: "error", code: "latex.font_pack_missing", entryId: null, senseId: null, field: "fontPacks", details: "tex-gyre-termes" }],
+        omitted: { examples: 0, exampleForms: 0, baseRelations: 0 },
+        requiredFontPacks: [{ id: "tex-gyre-termes", version: "2.004", state: "missing", mandatory: true, installedBytes: 0 }],
+      })
+      .mockResolvedValueOnce({
+        snapshotToken: "ready",
+        rowCount: 1,
+        issues: [],
+        omitted: { examples: 0, exampleForms: 0, baseRelations: 0 },
+        requiredFontPacks: [{ id: "tex-gyre-termes", version: "2.004", state: "installed", mandatory: true, installedBytes: 1 }],
+      });
+
+    render(<ExportDialog open snapshot={snapshot} onOpenChange={vi.fn()} onFlush={vi.fn(async () => undefined)} onSetAnalysisLanguage={vi.fn()} onNavigateEntry={vi.fn()} />);
+    fireEvent.click(screen.getByLabelText("LaTeX"));
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    expect(await screen.findByText("TeX Gyre Termes is required; LaTeX/PDF export is blocked until it is installed.")) .toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Download and retry" }));
+    await waitFor(() => expect(backendMock.installFontPack).toHaveBeenCalledWith("tex-gyre-termes"));
+    await waitFor(() => expect(backendMock.previewExport).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("0 blocking errors · 0 warnings")).toBeInTheDocument();
+  });
+
+  it("shows Charis SIL as fixed for phonemic and phonetic writing systems", async () => {
+    const ipaSnapshot: ProjectSnapshot = {
+      ...snapshot,
+      writingSystems: [{ ...snapshot.writingSystems[0], name: "IPA", type: "phonetic", scriptCode: "Latn" }],
+    };
+    render(<ExportDialog open snapshot={ipaSnapshot} onOpenChange={vi.fn()} onFlush={vi.fn(async () => undefined)} onSetAnalysisLanguage={vi.fn()} onNavigateEntry={vi.fn()} />);
+    fireEvent.click(screen.getByLabelText("LaTeX"));
+    expect(screen.getByText("Charis SIL (fixed for IPA)")).toBeInTheDocument();
   });
 });

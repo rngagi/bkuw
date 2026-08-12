@@ -88,14 +88,25 @@ describe("bkuw desktop shell", () => {
         "過,經歷,guo,我經歷過。,我經歷過。,kuo˥˩,verb,,\r\n",
       );
 
+      for (const packId of ["tex-gyre-termes", "noto-serif-cjk-tc", "noto-serif", "charis-sil", "noto-serif-tibetan"]) {
+        const installed = await browser.tauri.execute(
+          ({ core }, id) => core.invoke("install_font_pack", { packId: id }),
+          packId,
+        ) as any;
+        expect(installed.state).toBe("installed");
+      }
+
       const latexPreview = await browser.tauri.execute(
         ({ core }) => core.invoke("preview_export", { kind: "latex" }),
       ) as any;
+      expect(latexPreview.issues.filter((issue: any) => issue.severity === "error")).toHaveLength(0);
       const latexResult = await browser.tauri.execute(
         ({ core }, request) => core.invoke("export_project", { request }),
         { kind: "latex", destination: parentDir, snapshotToken: latexPreview.snapshotToken, overwrite: false },
       ) as any;
-      expect(readdirSync(latexResult.latexDirectory).sort()).toEqual([".latexmkrc", "README.md", "entries.tex", "main.tex", "reverse-index.tex"]);
+      expect(readdirSync(latexResult.latexDirectory).sort()).toEqual([".latexmkrc", "README.md", "entries.tex", "fonts", "main.tex", "reverse-index.tex"]);
+      expect(existsSync(join(latexResult.latexDirectory, "fonts", "tex-gyre-termes", "LICENSE.txt"))).toBe(true);
+      expect(existsSync(join(latexResult.latexDirectory, "fonts", "charis-sil", "Charis-Regular.ttf"))).toBe(true);
       expect(existsSync(latexResult.zipPath)).toBe(true);
 
       await browser.tauri.execute(({ core }) => core.invoke("close_project"));

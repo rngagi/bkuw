@@ -122,6 +122,7 @@ pub struct ExportPreview {
     pub row_count: usize,
     pub issues: Vec<ExportIssue>,
     pub omitted: OmittedExportData,
+    pub required_font_packs: Vec<FontPackStatus>,
 }
 
 impl ExportPreview {
@@ -169,6 +170,24 @@ pub struct ExportResult {
 pub struct TexEngineStatus {
     pub available: bool,
     pub path: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum FontPackState {
+    Missing,
+    Installed,
+    Invalid,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct FontPackStatus {
+    pub id: String,
+    pub version: String,
+    pub state: FontPackState,
+    pub mandatory: bool,
+    pub installed_bytes: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

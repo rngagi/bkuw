@@ -120,6 +120,13 @@ export const exportIssueSchema = z.object({
   field: nullableText,
   details: nullableText,
 });
+export const fontPackStatusSchema = z.object({
+  id: z.string(),
+  version: z.string(),
+  state: z.enum(["missing", "installed", "invalid"]),
+  mandatory: z.boolean(),
+  installedBytes: z.number(),
+});
 export const exportPreviewSchema = z.object({
   snapshotToken: z.string(),
   rowCount: z.number(),
@@ -129,6 +136,7 @@ export const exportPreviewSchema = z.object({
     exampleForms: z.number(),
     baseRelations: z.number(),
   }),
+  requiredFontPacks: z.array(fontPackStatusSchema),
 });
 export const exportResultSchema = z.object({
   csvPath: nullableText,
@@ -188,6 +196,7 @@ export type ExportIssue = z.infer<typeof exportIssueSchema>;
 export type ExportPreview = z.infer<typeof exportPreviewSchema>;
 export type ExportResult = z.infer<typeof exportResultSchema>;
 export type TexEngineStatus = z.infer<typeof texEngineStatusSchema>;
+export type FontPackStatus = z.infer<typeof fontPackStatusSchema>;
 
 export function createId(): string {
   return crypto.randomUUID();

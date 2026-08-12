@@ -25,6 +25,10 @@ use crate::{
         PdfStatus, Project, TexEngineStatus, WritingSystem,
     },
     error::{AppError, AppResult},
+    font_manager::{
+        CHARIS_PACK_ID, FontManager, NOTO_CJK_TC_PACK_ID, NOTO_SERIF_PACK_ID, NOTO_THAI_PACK_ID,
+        NOTO_TIBETAN_PACK_ID, TERMES_PACK_ID,
+    },
 };
 
 pub(crate) const CORPUS_HEADERS: [&str; 9] = [
@@ -63,7 +67,11 @@ struct CorpusRow {
     sense_order: i64,
 }
 
-pub(crate) fn preview(snapshot: &ExportSnapshot, kind: ExportKind) -> AppResult<ExportPreview> {
+pub(crate) fn preview(
+    snapshot: &ExportSnapshot,
+    kind: ExportKind,
+    fonts: Option<&FontManager>,
+) -> AppResult<ExportPreview> {
     let token = snapshot_token(snapshot, kind)?;
     match kind {
         ExportKind::CorpusCsv => {
@@ -73,15 +81,26 @@ pub(crate) fn preview(snapshot: &ExportSnapshot, kind: ExportKind) -> AppResult<
                 row_count: rows.len(),
                 issues,
                 omitted,
+                required_font_packs: Vec::new(),
             })
         }
         ExportKind::Latex | ExportKind::Pdf => {
-            let issues = latex_issues(snapshot);
+            let required_ids = required_font_pack_ids(snapshot);
+            let required_font_packs = fonts
+                .map(|manager| {
+                    required_ids
+                        .iter()
+                        .filter_map(|id| manager.status_for(id).ok())
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            let issues = latex_issues(snapshot, &required_font_packs);
             Ok(ExportPreview {
                 snapshot_token: token,
                 row_count: snapshot.entries.len(),
                 issues,
                 omitted: OmittedExportData::default(),
+                required_font_packs,
             })
         }
     }
@@ -90,8 +109,9 @@ pub(crate) fn preview(snapshot: &ExportSnapshot, kind: ExportKind) -> AppResult<
 pub(crate) fn run(
     snapshot: &ExportSnapshot,
     request: ExportProjectRequest,
+    fonts: Option<&FontManager>,
 ) -> AppResult<ExportResult> {
-    let current = preview(snapshot, request.kind)?;
+    let current = preview(snapshot, request.kind, fonts)?;
     if current.snapshot_token != request.snapshot_token {
         return Err(AppError::new(
             "export_stale",
@@ -122,7 +142,13 @@ pub(crate) fn run(
             })
         }
         ExportKind::Latex | ExportKind::Pdf => {
-            export_latex_project(snapshot, request.kind, &request.destination)
+            let manager = fonts.ok_or_else(|| {
+                AppError::new(
+                    "export_validation",
+                    "Portable fonts were not validated for this export.",
+                )
+            })?;
+            export_latex_project(snapshot, request.kind, &request.destination, manager)
         }
     }
 }
@@ -136,8 +162,26 @@ pub(crate) fn detect_xelatex() -> TexEngineStatus {
     }
 }
 
-fn latex_issues(snapshot: &ExportSnapshot) -> Vec<ExportIssue> {
+fn latex_issues(
+    snapshot: &ExportSnapshot,
+    required_font_packs: &[crate::domain::FontPackStatus],
+) -> Vec<ExportIssue> {
     let mut issues = Vec::new();
+    for pack in required_font_packs {
+        let code = match pack.state {
+            crate::domain::FontPackState::Installed => continue,
+            crate::domain::FontPackState::Missing => "latex.font_pack_missing",
+            crate::domain::FontPackState::Invalid => "latex.font_pack_invalid",
+        };
+        issues.push(issue(
+            ExportIssueSeverity::Error,
+            code,
+            None,
+            None,
+            Some("fontPacks"),
+            Some(&pack.id),
+        ));
+    }
     let headword_id = snapshot.settings.latex.headword_writing_system_id.as_str();
     if !snapshot
         .writing_systems
@@ -152,7 +196,6 @@ fn latex_issues(snapshot: &ExportSnapshot) -> Vec<ExportIssue> {
             Some("headwordWritingSystemId"),
             None,
         ));
-        return issues;
     }
     for entry in &snapshot.entries {
         if form_text(entry, headword_id).is_none_or(|text| text.trim().is_empty()) {
@@ -183,6 +226,7 @@ fn export_latex_project(
     snapshot: &ExportSnapshot,
     kind: ExportKind,
     destination: &str,
+    fonts: &FontManager,
 ) -> AppResult<ExportResult> {
     let parent = PathBuf::from(destination);
     if !parent.is_dir() {
@@ -194,10 +238,15 @@ fn export_latex_project(
     let base_name = export_base_name(&snapshot.project.name);
     let project_dir = unique_export_path(&parent, &format!("{base_name}-latex"), "");
     fs::create_dir(&project_dir).map_err(|error| export_io(error, "create LaTeX project"))?;
-    let sources = render_latex_sources(snapshot)?;
+    let sources = render_latex_sources(snapshot, fonts)?;
     let source_result: AppResult<PathBuf> = (|| {
         for (name, contents) in &sources {
-            fs::write(project_dir.join(name), contents)
+            let path = project_dir.join(name);
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent)
+                    .map_err(|error| export_io(error, &format!("create directory for {name}")))?;
+            }
+            fs::write(path, contents)
                 .map_err(|error| export_io(error, &format!("write {name}")))?;
         }
         let zip_path = parent.join(format!(
@@ -251,7 +300,13 @@ fn compile_xelatex(
         .tempdir()
         .map_err(|error| export_io(error, "create isolated XeLaTeX build directory"))?;
     for (name, contents) in sources {
-        fs::write(build.path().join(name), contents)
+        let path = build.path().join(name);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|error| {
+                export_io(error, &format!("create staging directory for {name}"))
+            })?;
+        }
+        fs::write(path, contents)
             .map_err(|error| export_io(error, &format!("stage {name} for XeLaTeX")))?;
     }
     let diagnostic_path = project_dir.join("diagnostic.log");
@@ -413,8 +468,12 @@ pub(crate) fn with_test_xelatex<R>(
     operation()
 }
 
-fn render_latex_sources(snapshot: &ExportSnapshot) -> AppResult<Vec<(String, Vec<u8>)>> {
-    let font_definitions = font_definitions(snapshot);
+fn render_latex_sources(
+    snapshot: &ExportSnapshot,
+    fonts: &FontManager,
+) -> AppResult<Vec<(String, Vec<u8>)>> {
+    let required_ids = required_font_pack_ids(snapshot);
+    let font_definitions = font_definitions(snapshot, fonts)?;
     let mut main = include_str!("../templates/latex/main.tex").to_owned();
     main = main.replace("{{FONT_DEFINITIONS}}", &font_definitions);
     main = main.replace("{{TITLE}}", &tex_escape(&snapshot.settings.latex.title));
@@ -429,7 +488,7 @@ fn render_latex_sources(snapshot: &ExportSnapshot) -> AppResult<Vec<(String, Vec
     );
     let entries = render_entries(snapshot)?;
     let reverse = render_reverse_index(snapshot)?;
-    Ok(vec![
+    let mut sources = vec![
         ("main.tex".into(), main.into_bytes()),
         ("entries.tex".into(), entries.into_bytes()),
         ("reverse-index.tex".into(), reverse.into_bytes()),
@@ -441,7 +500,9 @@ fn render_latex_sources(snapshot: &ExportSnapshot) -> AppResult<Vec<(String, Vec
             "README.md".into(),
             include_str!("../templates/latex/README.md").as_bytes().to_vec(),
         ),
-    ])
+    ];
+    sources.extend(fonts.export_files(&required_ids)?);
+    Ok(sources)
 }
 
 fn render_entries(snapshot: &ExportSnapshot) -> AppResult<String> {
@@ -678,35 +739,57 @@ fn ws_display_text(snapshot: &ExportSnapshot, writing_system_id: &str, text: &st
     }
 }
 
-fn font_definitions(snapshot: &ExportSnapshot) -> String {
-    let mut definitions = vec![
-        "\\IfFontExistsTF{Noto Serif CJK TC}{\\newfontfamily\\bkuwanalysisfont{Noto Serif CJK TC}}{\\IfFontExistsTF{Source Han Serif TW}{\\newfontfamily\\bkuwanalysisfont{Source Han Serif TW}}{\\newcommand{\\bkuwanalysisfont}{}}}".to_owned(),
-    ];
-    definitions.extend(snapshot
-        .writing_systems
-        .iter()
-        .enumerate()
-        .map(|(index, system)| {
-            let preset = snapshot
-                .settings
-                .latex
-                .font_presets
-                .get(&system.id)
-                .unwrap_or(&crate::domain::FontPreset::Auto);
-            let font = portable_font_name(preset, system.script_code.as_deref());
-            let command = font_command_name(index);
-            if system.script_code.as_deref() == Some("Hant") {
-                format!(
-                    "\\IfFontExistsTF{{{font}}}{{\\newfontfamily\\{command}{{{font}}}}}{{\\IfFontExistsTF{{Source Han Serif TW}}{{\\newfontfamily\\{command}{{Source Han Serif TW}}}}{{\\newfontfamily\\{command}{{TeX Gyre Termes}}}}}}"
-                )
-            } else {
-                format!(
-                    "\\IfFontExistsTF{{{font}}}{{\\newfontfamily\\{command}{{{font}}}}}{{\\newfontfamily\\{command}{{TeX Gyre Termes}}}}"
-                )
-            }
-        })
-        .collect::<Vec<_>>());
-    definitions.join("\n")
+fn font_definitions(snapshot: &ExportSnapshot, fonts: &FontManager) -> AppResult<String> {
+    let mut definitions = vec![font_command("setmainfont", TERMES_PACK_ID, fonts)?];
+    let analysis_pack = if snapshot.project.analysis_language.as_deref() == Some("zh-TW") {
+        NOTO_CJK_TC_PACK_ID
+    } else {
+        TERMES_PACK_ID
+    };
+    definitions.push(font_command(
+        "newfontfamily\\bkuwanalysisfont",
+        analysis_pack,
+        fonts,
+    )?);
+    definitions.extend(
+        snapshot
+            .writing_systems
+            .iter()
+            .enumerate()
+            .map(|(index, system)| {
+                let preset = snapshot
+                    .settings
+                    .latex
+                    .font_presets
+                    .get(&system.id)
+                    .unwrap_or(&crate::domain::FontPreset::Auto);
+                let pack_id =
+                    portable_font_pack_id(preset, system.script_code.as_deref(), &system.kind);
+                let command = font_command_name(index);
+                font_command(&format!("newfontfamily\\{command}"), pack_id, fonts)
+            })
+            .collect::<AppResult<Vec<_>>>()?,
+    );
+    Ok(definitions.join("\n"))
+}
+
+fn font_command(command: &str, pack_id: &str, fonts: &FontManager) -> AppResult<String> {
+    let family = fonts.family(pack_id)?;
+    let mut options = vec![format!("Path=fonts/{pack_id}/")];
+    if let Some(file) = family.bold {
+        options.push(format!("BoldFont={file}"));
+    }
+    if let Some(file) = family.italic {
+        options.push(format!("ItalicFont={file}"));
+    }
+    if let Some(file) = family.bold_italic {
+        options.push(format!("BoldItalicFont={file}"));
+    }
+    Ok(format!(
+        "\\{command}[{}]{{{}}}",
+        options.join(","),
+        family.regular
+    ))
 }
 
 fn font_command_name(mut index: usize) -> String {
@@ -721,21 +804,47 @@ fn font_command_name(mut index: usize) -> String {
     format!("bkuwfont{suffix}")
 }
 
-fn portable_font_name(preset: &crate::domain::FontPreset, script: Option<&str>) -> &'static str {
+fn portable_font_pack_id(
+    preset: &crate::domain::FontPreset,
+    script: Option<&str>,
+    writing_system_kind: &str,
+) -> &'static str {
+    if matches!(writing_system_kind, "phonemic" | "phonetic") {
+        return CHARIS_PACK_ID;
+    }
     match preset {
-        crate::domain::FontPreset::CharisSil => "Charis SIL",
-        crate::domain::FontPreset::NotoSerif => "Noto Serif",
-        crate::domain::FontPreset::NotoSerifCjkTc => "Noto Serif CJK TC",
-        crate::domain::FontPreset::NotoSerifTibetan => "Noto Serif Tibetan",
-        crate::domain::FontPreset::NotoSerifThai => "Noto Serif Thai",
+        crate::domain::FontPreset::CharisSil => CHARIS_PACK_ID,
+        crate::domain::FontPreset::NotoSerif => NOTO_SERIF_PACK_ID,
+        crate::domain::FontPreset::NotoSerifCjkTc => NOTO_CJK_TC_PACK_ID,
+        crate::domain::FontPreset::NotoSerifTibetan => NOTO_TIBETAN_PACK_ID,
+        crate::domain::FontPreset::NotoSerifThai => NOTO_THAI_PACK_ID,
         crate::domain::FontPreset::Auto => match script {
-            Some("Hant") => "Noto Serif CJK TC",
-            Some("Tibt") => "Noto Serif Tibetan",
-            Some("Thai") => "Noto Serif Thai",
-            Some("Latn") => "Charis SIL",
-            _ => "Noto Serif",
+            Some("Hant") => NOTO_CJK_TC_PACK_ID,
+            Some("Tibt") => NOTO_TIBETAN_PACK_ID,
+            Some("Thai") => NOTO_THAI_PACK_ID,
+            Some("Latn") => CHARIS_PACK_ID,
+            _ => NOTO_SERIF_PACK_ID,
         },
     }
+}
+
+fn required_font_pack_ids(snapshot: &ExportSnapshot) -> Vec<String> {
+    let mut ids = BTreeSet::from([TERMES_PACK_ID.to_owned()]);
+    if snapshot.project.analysis_language.as_deref() == Some("zh-TW") {
+        ids.insert(NOTO_CJK_TC_PACK_ID.to_owned());
+    }
+    for system in &snapshot.writing_systems {
+        let preset = snapshot
+            .settings
+            .latex
+            .font_presets
+            .get(&system.id)
+            .unwrap_or(&crate::domain::FontPreset::Auto);
+        ids.insert(
+            portable_font_pack_id(preset, system.script_code.as_deref(), &system.kind).to_owned(),
+        );
+    }
+    ids.into_iter().collect()
 }
 
 fn tex_escape(value: &str) -> String {
@@ -1224,4 +1333,23 @@ fn export_io(error: std::io::Error, phase: &str) -> AppError {
         "The export file could not be written.",
         format!("{phase}: {error}"),
     )
+}
+
+#[cfg(test)]
+mod font_selection_tests {
+    use super::*;
+
+    #[test]
+    fn phonemic_and_phonetic_systems_always_use_charis_sil() {
+        for kind in ["phonemic", "phonetic"] {
+            assert_eq!(
+                portable_font_pack_id(
+                    &crate::domain::FontPreset::NotoSerifCjkTc,
+                    Some("Latn"),
+                    kind,
+                ),
+                CHARIS_PACK_ID,
+            );
+        }
+    }
 }

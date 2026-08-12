@@ -1,6 +1,6 @@
 [package]
 name = "bkuw"
-version = "0.2.2"
+version = "0.2.3"
 description = "A local-first lexical fieldwork database"
 authors = ["bkuw contributors"]
 edition = "2024"
@@ -32,6 +32,7 @@ hex = "0.4"
 icu_collator = "2.2"
 icu_locale = "2.2"
 rusqlite = { version = "0.37", features = ["backup", "bundled"] }
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "rustls", "system-proxy"] }
 sha2 = "0.10"
 thiserror = "2"
 unicode-segmentation = "1.12"

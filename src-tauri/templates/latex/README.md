@@ -14,3 +14,6 @@ This folder is an editable dictionary project generated locally by bkuw.
 3. 若未自動選取，請將 compiler 設為 XeLaTeX。
 
 No lexical data is uploaded by bkuw. / bkuw 不會自行上傳任何詞彙資料。
+
+Required fonts and their license notices are included under `fonts/`. The project does not rely on fonts installed in the operating system or Overleaf.
+所需字型與授權聲明均已放在 `fonts/`；本專案不依賴作業系統或 Overleaf 原本安裝的字型。

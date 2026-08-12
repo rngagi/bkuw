@@ -3,6 +3,7 @@ mod database;
 mod domain;
 mod error;
 mod export;
+mod font_manager;
 mod search;
 
 use commands::AppState;
@@ -36,6 +37,8 @@ pub fn run() {
             commands::preview_export,
             commands::export_project,
             commands::detect_xelatex,
+            commands::list_font_packs,
+            commands::install_font_pack,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

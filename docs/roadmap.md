@@ -12,6 +12,8 @@ rngagi-corpus v0.3 九欄 CSV、versioned export profile、可編輯 XeLaTeX pro
 
 v0.2.2 加入 tag-gated GitHub Release pipeline：全部 CI jobs 通過後自動建立含 Windows x64 NSIS、macOS Apple Silicon DMG、checksums 與 generated notes 的 unsigned Draft Release，再由 maintainer 發布。
 
+v0.2.3 加入 bkuw-managed portable font packs：固定官方來源與 SHA-256、app-private cache、匯出內含 fonts/licenses、TeX Gyre Termes fatal requirement，並將 IPA 固定為 Charis SIL。
+
 ## 後續候選
 
 - Audio import/playback 與 optional recording。
