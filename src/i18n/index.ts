@@ -79,6 +79,7 @@ const resources = {
         omitted: "Not represented: {{examples}} examples, {{exampleForms}} example forms, {{baseRelations}} base relations.",
         overwriteTitle: "Replace the existing file?", overwriteBody: "The selected CSV already exists. Replacing it cannot be undone.", overwrite: "Replace file",
         complete: "Export complete", exportedRows: "Exported {{count}} rows/entries.", missingResult: "XeLaTeX was not found; an Overleaf-ready ZIP was created, but no PDF was generated.",
+        diagnosticLogLocation: "Diagnostic log location", diagnosticLogHelp: "Copy this path and open the file in File Explorer to inspect the XeLaTeX output.",
         overleafSteps: "In Overleaf, upload the ZIP as a new project and choose XeLaTeX as the compiler. bkuw never uploads lexical data automatically.", openOverleaf: "Open Overleaf", compilerHelp: "XeLaTeX instructions",
         issue: {
           corpus: {
@@ -181,6 +182,7 @@ const resources = {
         omitted: "無法表示：{{examples}} 個例句、{{exampleForms}} 個例句表記、{{baseRelations}} 個詞基關係。",
         overwriteTitle: "要取代既有檔案嗎？", overwriteBody: "選擇的 CSV 已存在；取代後無法復原。", overwrite: "取代檔案",
         complete: "匯出完成", exportedRows: "已匯出 {{count}} 列／詞條。", missingResult: "找不到 XeLaTeX；已建立可上傳 Overleaf 的 ZIP，但未產生 PDF。",
+        diagnosticLogLocation: "診斷紀錄位置", diagnosticLogHelp: "複製此路徑，並在檔案總管開啟檔案，即可查看 XeLaTeX 輸出。",
         overleafSteps: "請在 Overleaf 將 ZIP 上傳為新專案，再將 compiler 選為 XeLaTeX。bkuw 不會自動上傳任何詞彙資料。", openOverleaf: "開啟 Overleaf", compilerHelp: "XeLaTeX 設定說明",
         issue: {
           corpus: {

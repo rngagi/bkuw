@@ -12,7 +12,7 @@ LaTeX 輸出資料夾包含 `main.tex`、`entries.tex`、`reverse-index.tex`、`
 
 找不到 XeLaTeX 時，來源與 ZIP 仍會正常建立。到 Overleaf 建立 Upload Project、上傳 ZIP，並將 compiler 設為 XeLaTeX。bkuw 不會自動上傳詞彙資料。預設 portable fonts 是 Charis SIL／Noto Serif、Noto Serif CJK TC、Noto Serif Tibetan 與 Noto Serif Thai；字型未安裝時可能出現 missing glyph，請安裝對應字型或在 export profile 更換 preset。
 
-編譯失敗或超過 120 秒時，來源專案與 `diagnostic.log` 會保留。錯誤畫面會區分 validation、stale preview、filesystem、compile 與 timeout；修正後重新 preview 再匯出。
+編譯失敗或超過 120 秒時，來源專案與 `diagnostic.log` 會保留。錯誤畫面會顯示完整的診斷紀錄位置；可複製該路徑，並在 Windows 檔案總管或 macOS Finder 前往該檔案。錯誤畫面也會區分 validation、stale preview、filesystem、compile 與 timeout；修正後重新 preview 再匯出。
 
 ## English
 
@@ -26,4 +26,4 @@ The LaTeX folder contains `main.tex`, `entries.tex`, `reverse-index.tex`, `.late
 
 If XeLaTeX is unavailable, source and ZIP generation still succeeds. In Overleaf, create an Upload Project, upload the ZIP, and select XeLaTeX. bkuw never uploads lexical data automatically. Default portable fonts are Charis SIL/Noto Serif, Noto Serif CJK TC, Noto Serif Tibetan, and Noto Serif Thai. Install the appropriate font or change the profile preset if glyphs are missing.
 
-On a compile failure or 120-second timeout, bkuw preserves the source project and `diagnostic.log`. Correct the reported problem, create a fresh preview, and export again.
+On a compile failure or 120-second timeout, bkuw preserves the source project and `diagnostic.log`. The error panel shows the full diagnostic-log path so it can be copied and opened from Windows File Explorer or macOS Finder. Correct the reported problem, create a fresh preview, and export again.

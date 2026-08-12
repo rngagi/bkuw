@@ -28,6 +28,11 @@ const corpusParts: CorpusPartOfSpeech[] = [
 ];
 const fontPresets = ["auto", "charisSil", "notoSerif", "notoSerifCjkTc", "notoSerifTibetan", "notoSerifThai"] as const;
 
+interface ExportError {
+  message: string;
+  diagnosticPath?: string;
+}
+
 function cloneSettings(settings: ExportSettings): ExportSettings {
   return JSON.parse(JSON.stringify(settings)) as ExportSettings;
 }
@@ -41,7 +46,7 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
   const [result, setResult] = useState<ExportResult | null>(null);
   const [engine, setEngine] = useState<TexEngineStatus | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<ExportError | null>(null);
   const [pendingDestination, setPendingDestination] = useState<string | null>(null);
 
   useEffect(() => {
@@ -50,7 +55,7 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
     setAnalysisLanguage(snapshot.project.analysisLanguage);
     setPreview(null);
     setResult(null);
-    setError("");
+    setError(null);
     setPendingDestination(null);
     void backend.detectXeLatex().then(setEngine).catch(() => setEngine(null));
   }, [open, snapshot]);
@@ -63,7 +68,7 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
 
   async function makePreview() {
     setBusy(true);
-    setError("");
+    setError(null);
     try {
       await onFlush();
       if (analysisLanguage !== snapshot.project.analysisLanguage) {
@@ -74,7 +79,7 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
       setPreview(await backend.previewExport(kind));
       setResult(null);
     } catch (value) {
-      setError(value instanceof CommandError ? t(`error.${value.code}`) : t("error.generic"));
+      setError({ message: value instanceof CommandError ? t(`error.${value.code}`) : t("error.generic") });
     } finally {
       setBusy(false);
     }
@@ -83,7 +88,7 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
   async function runExport(overwrite = false, destination?: string) {
     if (!preview) return;
     setBusy(true);
-    setError("");
+    setError(null);
     let selected = destination;
     try {
       if (!selected) {
@@ -104,7 +109,14 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
       if (value instanceof CommandError && value.code === "export_filesystem" && value.details === "destination_exists" && selected) {
         setPendingDestination(selected);
       } else {
-        setError(value instanceof CommandError ? t(`error.${value.code}`) : t("error.generic"));
+        setError({
+          message: value instanceof CommandError ? t(`error.${value.code}`) : t("error.generic"),
+          diagnosticPath: value instanceof CommandError
+            && (value.code === "latex_compile" || value.code === "latex_timeout")
+            && value.details
+            ? value.details
+            : undefined,
+        });
       }
     } finally {
       setBusy(false);
@@ -120,7 +132,14 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
         <Dialog.Overlay className="dialog-overlay" />
         <Dialog.Content className="dialog-content export-dialog">
           <div className="dialog-heading"><div><Dialog.Title>{t("export.title")}</Dialog.Title><Dialog.Description>{t("export.description")}</Dialog.Description></div><Dialog.Close asChild><Button size="icon" variant="ghost" aria-label={t("common.close")}><X size={17} /></Button></Dialog.Close></div>
-          {error && <p className="error-banner" role="alert">{error}</p>}
+          {error && <div className="error-banner export-error" role="alert">
+            <p>{error.message}</p>
+            {error.diagnosticPath && <div className="diagnostic-location">
+              <strong>{t("export.diagnosticLogLocation")}</strong>
+              <code>{error.diagnosticPath}</code>
+              <small>{t("export.diagnosticLogHelp")}</small>
+            </div>}
+          </div>}
 
           {!result && <div className="export-body">
             <fieldset className="format-picker"><legend>{t("export.format")}</legend>

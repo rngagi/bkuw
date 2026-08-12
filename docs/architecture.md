@@ -46,7 +46,9 @@ export_project(request) -> ExportResult
 detect_xelatex() -> TexEngineStatus
 ```
 
-Errors 使用 `{ code, message, details? }`，其中 export 另穩定區分 `export_validation`、`export_stale`、`export_filesystem`、`latex_compile`、`latex_timeout`。UI 顯示依 code 本地化的安全訊息；compile failure/timeout 的 detail 指向保留的 diagnostic log。
+Errors 使用 `{ code, message, details? }`，其中 export 另穩定區分 `export_validation`、`export_stale`、`export_filesystem`、`latex_compile`、`latex_timeout`。UI 顯示依 code 本地化的安全訊息；compile failure/timeout 的 detail 指向保留的 diagnostic log，frontend 只針對這兩個 code 將完整路徑顯示為可選取文字，不把其他內部 error details 外洩。
+
+Main window 的 close request 由 React 攔截，先 flush entry autosave、關閉 active project session，再呼叫 Tauri `destroy()` 完成真正關窗。Capability 僅對 `main` window 額外授權 `core:window:allow-destroy`；這是 `core:default` 未包含、Windows 會強制檢查的必要權限。
 
 `save_entry` 接收 forms、senses、examples、example forms 與 relations 的完整 aggregate，在單一 transaction 內以 replace-diff strategy 寫入。`revision` 使用 optimistic concurrency 防止較舊 autosave 覆蓋新資料。
 
@@ -130,4 +132,4 @@ React Hook Form 管理 entry aggregate draft，Zod 負責 frontend validation。
 - Rust integration tests 透過 project/database module interface 使用 temporary project 與真實 SQLite。
 - Vitest + React Testing Library 測互動、autosave、translations、validation 與 nested editors。
 - WebdriverIO Tauri service 執行主要 desktop workflow smoke test。
-- GitHub Actions 在 Windows x64 與 macOS Apple Silicon 執行 checks、tests、build，並上傳 unsigned installer/bundle artifacts；不建立 macOS Intel 產物。
+- GitHub Actions 在 Windows x64 與 macOS Apple Silicon 執行 checks、tests、build，並上傳 unsigned installer/bundle artifacts；不建立 macOS Intel 產物。`v*` tag 通過全部 jobs 後，受限 `contents: write` 的 final job 驗證四處 version、產生 SHA-256 checksums，並建立含 NSIS／DMG 與自動 changelog 的 Draft Release；發布前保留人工確認閘門。

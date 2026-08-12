@@ -10,6 +10,8 @@ rngagi-corpus v0.3 九欄 CSV、versioned export profile、可編輯 XeLaTeX pro
 
 目前 CSV 相容性由 bkuw 內的 golden fixture 與人工 contract review 保護；尚無跨 `bkuw`／`rngagi-corpus` repositories 的自動 contract test。
 
+v0.2.2 加入 tag-gated GitHub Release pipeline：全部 CI jobs 通過後自動建立含 Windows x64 NSIS、macOS Apple Silicon DMG、checksums 與 generated notes 的 unsigned Draft Release，再由 maintainer 發布。
+
 ## 後續候選
 
 - Audio import/playback 與 optional recording。
@@ -17,4 +19,4 @@ rngagi-corpus v0.3 九欄 CSV、versioned export profile、可編輯 XeLaTeX pro
 - Cross-repository contract fixture／CI；需兩個 repositories 共同確認後才建立。
 - 多 analysis-language translations、進階 FTS、example search、language-specific collation controls。
 - IPA helper、tags、filters、duplicate detection、backup manager。
-- Signing、notarization、auto-update 與正式公開 release。
+- Production signing、notarization 與 auto-update。

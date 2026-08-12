@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import mainWindowCapability from "../../src-tauri/capabilities/default.json";
 
 const { invokeMock, openUrlMock } = vi.hoisted(() => ({ invokeMock: vi.fn(), openUrlMock: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock }));
@@ -14,6 +15,11 @@ describe("Tauri adapter", () => {
     invokeMock.mockResolvedValue(null);
     await expect(backend.closeProject()).resolves.toBeUndefined();
     expect(invokeMock).toHaveBeenCalledWith("close_project", {});
+  });
+
+  it("allows the main window to force-close after flushing and closing the project", () => {
+    expect(mainWindowCapability.windows).toEqual(["main"]);
+    expect(mainWindowCapability.permissions).toContain("core:window:allow-destroy");
   });
 
   it("opens only the documented ISO 15924 registry URL", async () => {

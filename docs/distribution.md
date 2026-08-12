@@ -7,7 +7,17 @@
 - `bkuw-macos-apple-silicon`：Apple Silicon 的 `.app` 與 `.dmg`。
 - `bkuw-windows-x64`：Windows x64 的 NSIS installer。
 
-Artifacts 保存 14 天。這些檔案不會自動建立公開 GitHub Release，也不會自動簽章或上傳使用者資料。macOS Intel 不在支援與建置範圍內。
+Artifacts 保存 14 天。macOS Intel 不在支援與建置範圍內，也不會上傳任何使用者資料。
+
+推送與 app version 完全一致的 `v*` tag（例如 `v0.2.2`）時，同一 workflow 會在 portable-template、Windows x64 與 macOS Apple Silicon jobs 全數成功後：
+
+1. 驗證 tag、`package.json`、Cargo 與 Tauri version 一致。
+2. 收集一個 NSIS `.exe` 與一個 Apple Silicon `.dmg`。
+3. 產生 `SHA256SUMS.txt`。
+4. 建立 Draft GitHub Release、上傳三個 assets，並以 `.github/release.yml` 產生 categorized changelog。
+5. Draft 經人工確認 assets 與說明後才發布；任一必要 job 失敗都不會建立 Release。
+
+Release job 只取得 `contents: write`，一般 CI jobs 不取得發布權限。這個流程不會自動簽章。
 
 ## 目前的信任狀態
 
@@ -74,4 +84,4 @@ pnpm tauri build --target aarch64-apple-darwin --bundles app,dmg
 - 簽章只在受保護 branch 或 version tag 的 trusted workflow 啟用。
 - macOS 用 `codesign --verify`、`spctl` 與 notarization log 驗證。
 - Windows 用 `Get-AuthenticodeSignature` 或 SignTool 驗證 signer、timestamp 與 chain。
-- 先保留 unsigned CI artifacts 作內部測試；正式 release workflow 與公開發布另行審核。
+- Unsigned Release 必須清楚顯示 SmartScreen／Gatekeeper 警告、checksums 與 quarantine 安全說明；production signing 完成後再移除警告。

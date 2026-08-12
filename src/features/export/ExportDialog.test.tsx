@@ -17,9 +17,14 @@ const { backendMock } = vi.hoisted(() => ({
 }));
 vi.mock("../../lib/tauri", () => ({
   backend: backendMock,
-  CommandError: class CommandError extends Error { code = "export_filesystem"; },
+  CommandError: class CommandError extends Error {
+    constructor(public code: string, message: string, public details?: string) {
+      super(message);
+    }
+  },
 }));
 
+import { CommandError } from "../../lib/tauri";
 import { ExportDialog } from "./ExportDialog";
 
 const snapshot: ProjectSnapshot = {
@@ -67,5 +72,24 @@ describe("ExportDialog", () => {
     expect(await screen.findByText("找不到 XeLaTeX；已建立可上傳 Overleaf 的 ZIP，但未產生 PDF。")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "開啟 Overleaf" }));
     expect(backendMock.openOverleaf).toHaveBeenCalled();
+  });
+
+  it("shows the preserved XeLaTeX diagnostic log path after a Windows compile failure", async () => {
+    const diagnosticPath = "C:\\Users\\researcher\\Documents\\Test-latex\\diagnostic.log";
+    backendMock.chooseFolder.mockResolvedValue("C:\\Users\\researcher\\Documents");
+    backendMock.exportProject.mockRejectedValue(new CommandError(
+      "latex_compile",
+      "XeLaTeX exited with status 1",
+      diagnosticPath,
+    ));
+
+    render(<ExportDialog open snapshot={snapshot} onOpenChange={vi.fn()} onFlush={vi.fn(async () => undefined)} onSetAnalysisLanguage={vi.fn()} onNavigateEntry={vi.fn()} />);
+    fireEvent.click(screen.getByLabelText("PDF"));
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    await screen.findByText("1 rows ready");
+    fireEvent.click(screen.getByRole("button", { name: "Choose destination and export" }));
+
+    expect(await screen.findByText("Diagnostic log location")).toBeInTheDocument();
+    expect(screen.getByText(diagnosticPath)).toBeInTheDocument();
   });
 });

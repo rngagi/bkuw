@@ -139,3 +139,17 @@
   - 驗證：`EntryEditor` autosave focus regression test、App workflow tests、`pnpm check && pnpm test && pnpm test:rust`。
 - [x] package、Cargo、Cargo lock 與 Tauri app version 一致升為 `0.2.1`。
   - 驗證：版本搜尋與 Tauri build。
+
+## 11. v0.2.2 XeLaTeX diagnostic path hotfix
+
+- [x] XeLaTeX compile failure／timeout 後，在雙語錯誤區顯示保留的 `diagnostic.log` 完整路徑。
+  - 完成條件：僅 `latex_compile`／`latex_timeout` 顯示 backend detail；Windows 路徑可完整選取、複製，其他錯誤細節不外洩。
+  - 驗證：`ExportDialog` Windows diagnostic-path regression test、`pnpm check && pnpm test && pnpm test:rust`。
+- [x] 修正 Windows 關閉主視窗時被 Tauri capability 拒絕的問題。
+  - 完成條件：main window close request 仍先 flush autosave、close project，再以最小 `core:window:allow-destroy` 權限完成關窗；不授權其他視窗。
+  - 驗證：main-window capability regression test、Tauri capability schema/build validation。
+- [x] package、Cargo、Cargo lock 與 Tauri app version 一致升為 `0.2.2`。
+  - 驗證：版本搜尋與 Tauri build。
+- [x] 以 version tag 自動建立 Windows x64／macOS Apple Silicon Draft GitHub Release。
+  - 完成條件：全部 CI jobs 成功後才建立；四處 version 必須符合 tag；只上傳一個 NSIS、一個 DMG 與 `SHA256SUMS.txt`；release notes 含雙語 unsigned 安裝提醒並接續 GitHub generated notes。
+  - 驗證：workflow／release-note YAML parse、local version/installers collection shell checks，以及 `v0.2.2` tag 的 GitHub Actions／Draft Release assets。
