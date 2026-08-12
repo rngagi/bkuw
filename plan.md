@@ -168,5 +168,5 @@
 - [x] 完成雙語 font-pack status、下載與 retry 流程。
   - 完成條件：missing/installed/invalid/mandatory 狀態完整本地化；下載錯誤可重試；成功後自動重新 preview。
   - 驗證：English／zh-TW translations、ExportDialog download/retry test。
-- [ ] package、Cargo、Cargo lock 與 Tauri app version 一致升為 `0.2.3`，完成全部本機與遠端驗收。
-  - 驗證：`pnpm check && pnpm test && pnpm test:rust && pnpm test:e2e:build && pnpm test:e2e && pnpm tauri build --no-bundle`，Windows x64／macOS Apple Silicon CI、Draft Release assets 與 checksums。
+- [x] package、Cargo、Cargo lock 與 Tauri app version 一致升為 `0.2.3`，完成全部本機與遠端驗收。
+  - 驗證：`pnpm check && pnpm test && pnpm test:rust && pnpm test:e2e:build && pnpm test:e2e && pnpm tauri build --no-bundle`；GitHub Actions run `31614974863` 的 Portable XeLaTeX、Windows x64 與 macOS Apple Silicon 全部成功；公開 `v0.2.3` Release 含 NSIS、DMG 與 `SHA256SUMS.txt`。
