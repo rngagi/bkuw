@@ -11,6 +11,7 @@ const snapshot: ProjectSnapshot = {
     name: "Test",
     languageName: null,
     languageCode: null,
+    analysisLanguage: null,
     description: null,
     createdAt: "2026-01-01T00:00:00Z",
     updatedAt: "2026-01-01T00:00:00Z",
@@ -28,6 +29,10 @@ const snapshot: ProjectSnapshot = {
   }],
   partOfSpeechOptions: [],
   semanticDomainOptions: [],
+  exportSettings: {
+    version: 1, corpus: { partOfSpeechMappings: {} },
+    latex: { title: "Test", author: "", headwordWritingSystemId: "ws-1", pronunciationWritingSystemId: null, exampleWritingSystemId: "ws-1", collationLanguageTag: null, sectionMode: "auto", reverseIndex: "gloss", fontPresets: { "ws-1": "auto" } },
+  },
   entries: [],
 };
 

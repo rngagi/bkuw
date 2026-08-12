@@ -1,8 +1,8 @@
-# Milestone 1 執行清單
+# bkuw 執行清單
 
 規則：只有在該項完成條件成立且列出的驗證通過後才能勾選。若行為或架構改變，必須同步更新產品與架構文件。
 
-本機驗證狀態（2026-08-12）：Milestone 1 功能、tests、desktop E2E、release build 與 unsigned macOS app／DMG bundle 已通過。GitHub Actions workflow 已建立；Windows x64 與 macOS arm64/x64 的遠端執行結果須在 push 後確認，因此只保留該項未勾選。
+本機驗證狀態（2026-08-12）：Milestone 1 功能、tests、desktop E2E、release build 與 unsigned macOS app／DMG bundle 已通過。GitHub Actions workflow 已建立；Windows x64 與 macOS Apple Silicon 的遠端執行結果須在 push 後確認，因此只保留該項未勾選。macOS Intel 不在支援與建置範圍內。
 
 ## 0. 文件轉換
 
@@ -84,8 +84,8 @@
 - [x] 建立 Chinese、Tibetan、Latin-script fixtures 與可選 demo project generator。
   - 完成條件：一般新 project 保持空白；fixtures 覆蓋 dynamic writing systems 與 Unicode examples。
   - 驗證：fixture-driven integration tests。
-- [ ] 建立 Windows/macOS CI 與未簽名 bundle artifacts。
-  - 完成條件：Windows x64、macOS arm64/x64 執行 checks/tests/build；產出 installer/bundles，不發布 release。
+- [ ] 建立 Windows x64／macOS Apple Silicon CI 與未簽名 bundle artifacts。
+  - 完成條件：Windows x64、macOS Apple Silicon 執行 checks/tests/build；產出 installer/bundles，不發布 release、不建置 macOS Intel。
   - 驗證：GitHub Actions workflow 成功。
 - [x] 完成 Milestone 1 本機最終驗收。
   - 完成條件：依 `docs/product-spec.md` 完整走過 create→configure→edit forms/senses/examples/relations→search→autosave→reopen→locale switch。
@@ -104,3 +104,30 @@
 - [x] Entry transaction 成功後立即顯示已儲存，entry-list 背景 refresh 不阻塞狀態更新。
 - [x] 說明 root/base 未連結詞形用途，entry delete 加入二次確認並保留 Undo。
   - 驗證：component/adapter/input-policy tests、migration/backup/reopen tests、雙語 1280×720 browser walkthrough、desktop E2E 與 release build。
+
+## 9. v0.2 export milestone
+
+- [x] 以 migration 3 加入 nullable analysis language 與 versioned project export profile。
+  - 完成條件：舊 project 保持 null；profile 可保存、關閉、重開；migration 前仍建立一致性 backup。
+  - 驗證：migration/profile persistence 與完整 Rust suite。
+- [x] 實作 rngagi-corpus v0.3 九欄 CSV preview 與 export。
+  - 完成條件：一 sense 一列、UTF-8 無 BOM、RFC 4180/CRLF、ICU4X deterministic sort、blocking/warning diagnostics、stale token、temporary sibling atomic replacement。
+  - 驗證：exact golden CSV、Unicode quoting/newline/comma、loss diagnostics、soft-delete/stale/overwrite Rust tests。
+- [x] 實作可攜 XeLaTeX source project 與 Overleaf ZIP。
+  - 完成條件：五個 source files、完整 TeX escaping、grapheme sections、portable fonts、Rust reverse index；ZIP 不含 PDF/log/aux。
+  - 驗證：`exports_portable_xelatex_project_and_overleaf_zip` 與 ZIP member assertion。
+- [x] 實作 optional local PDF runner。
+  - 完成條件：偵測 PATH/macOS/Windows paths、隔離 build、兩次 `-no-shell-escape` XeLaTeX、120 秒 timeout、缺少引擎仍成功、失敗保留 diagnostics。
+  - 驗證：fake engine success/missing/failure/timeout test，以及 `cargo test ... portable_xelatex_template_compiles_with_the_real_engine -- --ignored`。
+- [x] 實作英文／台灣繁中 Export wizard 與 ISO 15924 help。
+  - 完成條件：format→profile→preview→destination→result；preview 前 flush；POS mapping、issue navigation、missing-XeLaTeX Overleaf flow、二次覆寫確認、精確 opener capabilities。
+  - 驗證：ExportDialog/settings tests 與 TypeScript check。
+- [x] 完成 v0.2 文件與相容性限制。
+  - 完成條件：更新 README/product/architecture/roadmap；新增 CSV contract 與 bilingual export guide；明載沒有跨 repository automated contract test。
+  - 驗證：人工文件 review 與 contract wording search。
+- [x] 擴充 desktop E2E 與 portable-template CI。
+  - 完成條件：desktop fixture 匯出 exact CSV、LaTeX/ZIP；有 XeLaTeX 的 CI job 編譯真實 template；人工 Overleaf upload walkthrough 記錄成功。
+  - 驗證：`pnpm test:e2e:build && pnpm test:e2e`、本機 real-XeLaTeX ignored test；portable-template GitHub Actions job 已建立，遠端結果待 push 後確認。Overleaf upload 屬人工驗收，依雙語指南執行且不得自動上傳資料。
+- [ ] 完成 v0.2 最終驗收並統一升版。
+  - 完成條件：package、Cargo、Tauri 都是 `0.2.0`；Windows x64、macOS Apple Silicon checks/build/bundle 成功。
+  - 驗證：`pnpm check && pnpm test && pnpm test:rust && pnpm test:e2e:build && pnpm test:e2e && pnpm tauri build --no-bundle`，加上 GitHub Actions。

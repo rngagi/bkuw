@@ -6,9 +6,15 @@
   "permissions": [
     "core:default",
     "dialog:allow-open",
+    "dialog:allow-save",
     {
       "identifier": "opener:allow-open-url",
-      "allow": [{ "url": "https://iso639-3.sil.org/code_tables/639/data" }]
+      "allow": [
+        { "url": "https://iso639-3.sil.org/code_tables/639/data" },
+        { "url": "https://www.unicode.org/iso15924/iso15924-codes.html" },
+        { "url": "https://www.overleaf.com/project" },
+        { "url": "https://www.overleaf.com/learn/how-to/Changing_compiler" }
+      ]
     }
   ]
 }

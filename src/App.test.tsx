@@ -16,6 +16,13 @@ const { backendMock } = vi.hoisted(() => ({
     saveEntry: vi.fn(),
     deleteEntry: vi.fn(),
     restoreEntry: vi.fn(),
+    saveExportSettings: vi.fn(),
+    previewExport: vi.fn(),
+    exportProject: vi.fn(),
+    detectXeLatex: vi.fn(),
+    chooseCsvDestination: vi.fn(),
+    openOverleaf: vi.fn(),
+    openOverleafCompilerHelp: vi.fn(),
   },
 }));
 
@@ -50,7 +57,7 @@ const snapshot: ProjectSnapshot = {
   rootPath: "/tmp/Test.bkuw",
   project: {
     id: "project-1", name: "Test", languageName: null, languageCode: null,
-    description: null, createdAt: entry.createdAt, updatedAt: entry.updatedAt,
+    analysisLanguage: "zh-TW", description: null, createdAt: entry.createdAt, updatedAt: entry.updatedAt,
   },
   writingSystems: [{
     id: "ws-1", name: "Primary orthography", type: "orthography", scriptCode: null,
@@ -58,6 +65,10 @@ const snapshot: ProjectSnapshot = {
   }],
   partOfSpeechOptions: ["Verb", "Noun"],
   semanticDomainOptions: ["Motion"],
+  exportSettings: {
+    version: 1, corpus: { partOfSpeechMappings: {} },
+    latex: { title: "Test", author: "", headwordWritingSystemId: "ws-1", pronunciationWritingSystemId: null, exampleWritingSystemId: "ws-1", collationLanguageTag: null, sectionMode: "auto", reverseIndex: "gloss", fontPresets: { "ws-1": "auto" } },
+  },
   entries: [],
 };
 

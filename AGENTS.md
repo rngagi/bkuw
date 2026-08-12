@@ -10,7 +10,7 @@
 - Examples belong to senses and may have multiple writing-system-specific forms.
 - Preserve user text in NFC. Derived search keys may fold case and diacritics but must never replace display text.
 - The UI must remain complete in both English (`en`) and Taiwan Traditional Chinese (`zh-TW`).
-- Milestone 1 excludes audio, exports, cloud services, authentication, collaboration, and mobile clients.
+- v0.2 includes corpus CSV and XeLaTeX/Overleaf/PDF export. Audio, cloud services, authentication, collaboration, mobile clients, production signing, notarization, and automatic upload remain excluded.
 
 ## Architecture and security
 
@@ -18,6 +18,9 @@
 - Expose typed Tauri commands through the single frontend adapter in `src/lib/tauri.ts`; do not scatter `invoke` calls through UI modules.
 - Save a lexical entry as one aggregate transaction, including forms, senses, examples, example forms, and relations.
 - Keep Tauri capabilities narrow. Do not add shell, HTTP, or broad filesystem access without a reviewed requirement.
+- Keep all export validation, sorting, escaping, filesystem writes, and XeLaTeX process execution behind the Rust export module. React may only call its four typed commands through `src/lib/tauri.ts`.
+- Treat the rngagi-corpus v0.3 nine-column order as a versioned external contract. This repository currently has no cross-repository automated contract test; corpus changes require manual revalidation and a golden-fixture update.
+- CI and packaging support Windows x64 and macOS Apple Silicon only. Do not add macOS Intel targets.
 - Prefer a small module interface with substantial behavior behind it. Avoid pass-through modules and speculative seams.
 
 ## Development workflow

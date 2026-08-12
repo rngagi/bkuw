@@ -1,0 +1,20 @@
+# bkuw roadmap
+
+## v0.1 / Milestone 1
+
+Local-first project lifecycle、dynamic writing systems、lexical aggregates、multi-writing-system examples、Unicode search、autosave、soft delete／Undo、英文與台灣繁中 UI。
+
+## v0.2 / Export milestone
+
+rngagi-corpus v0.3 九欄 CSV、versioned export profile、可編輯 XeLaTeX project、Overleaf-ready ZIP、optional local PDF、ICU4X sorting、reverse index 與 portable font presets。
+
+目前 CSV 相容性由 bkuw 內的 golden fixture 與人工 contract review 保護；尚無跨 `bkuw`／`rngagi-corpus` repositories 的自動 contract test。
+
+## 後續候選
+
+- Audio import/playback 與 optional recording。
+- CSV import 與經雙方版本化的 bkuw → rngagi-corpus upload workflow。
+- Cross-repository contract fixture／CI；需兩個 repositories 共同確認後才建立。
+- 多 analysis-language translations、進階 FTS、example search、language-specific collation controls。
+- IPA helper、tags、filters、duplicate detection、backup manager。
+- Signing、notarization、auto-update 與正式公開 release。

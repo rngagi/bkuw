@@ -1,12 +1,18 @@
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { z } from "zod";
 import {
   deletedEntrySchema,
   entrySummarySchema,
+  exportPreviewSchema,
+  exportResultSchema,
+  exportSettingsSchema,
   lexicalEntrySchema,
   projectSnapshotSchema,
+  texEngineStatusSchema,
+  type ExportKind,
+  type ExportSettings,
   type LexicalEntry,
   type ProjectSnapshot,
   type WritingSystem,
@@ -55,8 +61,28 @@ export const backend = {
     return openUrl("https://iso639-3.sil.org/code_tables/639/data");
   },
 
+  openScriptCodeRegistry(): Promise<void> {
+    return openUrl("https://www.unicode.org/iso15924/iso15924-codes.html");
+  },
+
+  openOverleaf(): Promise<void> {
+    return openUrl("https://www.overleaf.com/project");
+  },
+
+  openOverleafCompilerHelp(): Promise<void> {
+    return openUrl("https://www.overleaf.com/learn/how-to/Changing_compiler");
+  },
+
   async chooseFolder(): Promise<string | null> {
     const selected = await open({ directory: true, multiple: false });
+    return typeof selected === "string" ? selected : null;
+  },
+
+  async chooseCsvDestination(defaultPath: string): Promise<string | null> {
+    const selected = await save({
+      defaultPath,
+      filters: [{ name: "CSV", extensions: ["csv"] }],
+    });
     return typeof selected === "string" ? selected : null;
   },
 
@@ -81,12 +107,34 @@ export const backend = {
     name: string;
     languageName: string | null;
     languageCode: string | null;
+    analysisLanguage: "zh-TW" | "en" | null;
     description: string | null;
     writingSystems: WritingSystem[];
     partOfSpeechOptions: string[];
     semanticDomainOptions: string[];
   }): Promise<ProjectSnapshot> {
     return call("update_project_settings", { request }, projectSnapshotSchema);
+  },
+
+  saveExportSettings(settings: ExportSettings): Promise<ExportSettings> {
+    return call("save_export_settings", { settings }, exportSettingsSchema);
+  },
+
+  previewExport(kind: ExportKind) {
+    return call("preview_export", { kind }, exportPreviewSchema);
+  },
+
+  exportProject(request: {
+    kind: ExportKind;
+    destination: string;
+    snapshotToken: string;
+    overwrite: boolean;
+  }) {
+    return call("export_project", { request }, exportResultSchema);
+  },
+
+  detectXeLatex() {
+    return call("detect_xelatex", {}, texEngineStatusSchema);
   },
 
   queryEntries(query: string) {

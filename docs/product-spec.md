@@ -2,7 +2,7 @@
 
 ## 產品目標
 
-`bkuw` 是供單一語言學研究者離線蒐集與管理詞彙資料的桌面應用程式，優先服務 Windows 與 macOS。核心工作是大量、快速、可靠地輸入 dictionary-oriented lexical data，而不是進行完整 corpus annotation。
+`bkuw` 是供單一語言學研究者離線蒐集與管理詞彙資料的桌面應用程式，優先服務 Windows x64 與 macOS Apple Silicon；不支援 macOS Intel。核心工作是大量、快速、可靠地輸入 dictionary-oriented lexical data，而不是進行完整 corpus annotation。
 
 產品名稱在 UI、文件、視窗標題與產出檔案中一律寫作小寫 `bkuw`。
 
@@ -12,7 +12,7 @@
 - Lexical-entry centered：entry 是抽象詞彙項目，表記另依 writing system 保存。
 - Unicode-native：支援 IPA、combining marks、中文、泰文、藏文、台灣原住民族語言及其他 Unicode scripts。
 - Keyboard-efficient：建立、搜尋與儲存等高頻操作提供快捷鍵與可預測 tab order。
-- Export-friendly：內部模型不綁定輸出格式；CSV、LaTeX/PDF 屬後續里程碑。
+- Export-friendly：內部模型不綁定輸出格式；v0.2 提供 versioned corpus CSV 與通用 XeLaTeX/PDF 輸出。
 - Data integrity first：複合更新使用 transaction，schema 使用 migrations，升級前備份。
 
 ## Project 與 writing systems
@@ -22,6 +22,8 @@
 每個 project 必須指定一個 primary display writing system，可選擇一個不同的 secondary display writing system。列表不假設 native orthography 必然是 primary。
 
 Writing system 可設定名稱、類型、script code、language tag、順序與顯示字型。Milestone 1 類型包含 orthography、romanization、transliteration、phonemic、phonetic、other。
+
+Script code 明確採 ISO 15924 四字母 Title Case 代碼，UI 驗證格式並提供 Unicode 官方查詢頁的系統瀏覽器連結。Project 另可指定 `zh-TW` 或 `en` analysis language；舊專案保持未設定，直到使用者需要匯出。
 
 建立新 project 後立即開啟 writing-system onboarding：先說明 primary form 與實際例子；script code、BCP 47 language tag 與 font family 收在有逐欄說明的進階區域。Project 的 language code 明確採選填三字母 ISO 639-3，UI 提供官方 registry 的系統瀏覽器連結。已存在同名 `.bkuw` 路徑時必須以 modal 說明，不得覆寫。
 
@@ -83,12 +85,22 @@ App UI 必須完整支援 `en` 與 `zh-TW`。首次啟動依 OS locale 決定，
 
 所有 user-facing strings、validation、errors、empty states、confirmations 皆使用 translation keys。使用者輸入的 lexical data 與 examples 不做自動翻譯。
 
+## v0.2 匯出流程
+
+Header 的 Export wizard 依「格式、profile、validation preview、目的地、結果」操作。Preview 前必須 flush autosave；preview token 綁定當下 project snapshot，資料變動後不得以舊 token 匯出。Blocking error 會禁止輸出，warning 會說明無法表示或被省略的資料，並可導覽到相關 entry。
+
+Corpus CSV 固定輸出 rngagi-corpus v0.3 的九欄簡版，每個未刪除 entry 的每個 sense 一列；analysis language 必須是 `zh-TW`。`gloss_en` 在單一 analysis-language 模型下留空。完整映射與 known loss 見 `docs/corpus-csv-contract.md`。
+
+LaTeX 匯出包含可編輯來源資料夾與不含 PDF／aux／log 的 Overleaf-ready ZIP。通用 template 使用 `fontspec`、雙欄、懸掛縮排、頁眉、例句標記與 Rust 產生的 reverse index，不依賴日文專用套件或 makeindex。所有 user text 完整 TeX escape。
+
+PDF 只在本機偵測到 XeLaTeX 時產生。bkuw 在隔離 build directory 中以 `-no-shell-escape` 執行兩次並限制 120 秒；失敗保留來源與 diagnostic log。找不到引擎仍是成功的 LaTeX 匯出，UI 提供 Overleaf 上傳步驟，但不自動上傳 lexical data。
+
 ## 後續里程碑
 
-- Milestone 2：audio import/playback、optional recording。
-- Milestone 3：CSV、LaTeX project 與 LuaLaTeX PDF export。
-- Milestone 4：IPA helper、tags、filters、duplicate detection、backup manager、進階搜尋。
+- v0.2：rngagi-corpus v0.3 CSV、XeLaTeX project、Overleaf ZIP 與 optional local PDF。
+- 後續：audio import/playback、optional recording。
+- 後續：IPA helper、tags、filters、duplicate detection、backup manager、進階搜尋與多 analysis-language translations。
 
 ## 明確排除
 
-Milestone 1 不包含 accounts、authentication、cloud sync、team collaboration、permissions、server backend、audio、exports、mobile、AI transcription、ASR、ELAN-style timeline、waveform segmentation、Git syncing、code signing、notarization、auto-update 或公開 release。
+v0.2 不包含 accounts、authentication、cloud sync、team collaboration、permissions、server backend、audio、CSV import、mobile、AI transcription、ASR、ELAN-style timeline、waveform segmentation、Git syncing、code signing、notarization、auto-update、自動上傳或公開 release。

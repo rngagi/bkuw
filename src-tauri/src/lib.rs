@@ -2,6 +2,7 @@ mod commands;
 mod database;
 mod domain;
 mod error;
+mod export;
 mod search;
 
 use commands::AppState;
@@ -31,6 +32,10 @@ pub fn run() {
             commands::save_entry,
             commands::delete_entry,
             commands::restore_entry,
+            commands::save_export_settings,
+            commands::preview_export,
+            commands::export_project,
+            commands::detect_xelatex,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

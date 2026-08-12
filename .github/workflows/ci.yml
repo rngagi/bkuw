@@ -5,6 +5,22 @@ on:
   pull_request:
 
 jobs:
+  portable-xelatex-template:
+    name: Portable XeLaTeX template
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Tauri and XeLaTeX dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev librsvg2-dev patchelf texlive-xetex texlive-latex-extra fonts-noto-core fonts-noto-cjk fonts-sil-charis
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Compile generated portable template with real XeLaTeX
+        run: cargo test --manifest-path src-tauri/Cargo.toml portable_xelatex_template_compiles_with_the_real_engine -- --ignored
+
   verify-and-bundle:
     name: ${{ matrix.name }}
     strategy:
@@ -12,17 +28,15 @@ jobs:
       matrix:
         include:
           - name: macOS Apple Silicon
-            os: macos-14
+            os: macos-15
             target: aarch64-apple-darwin
             bundles: app,dmg
-          - name: macOS Intel
-            os: macos-13
-            target: x86_64-apple-darwin
-            bundles: app,dmg
+            artifact_name: bkuw-macos-apple-silicon
           - name: Windows x64
             os: windows-latest
             target: x86_64-pc-windows-msvc
             bundles: nsis
+            artifact_name: bkuw-windows-x64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -49,6 +63,7 @@ jobs:
       - run: pnpm tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
       - uses: actions/upload-artifact@v4
         with:
-          name: bkuw-${{ matrix.target }}
+          name: ${{ matrix.artifact_name }}
           path: src-tauri/target/${{ matrix.target }}/release/bundle/**/*
           if-no-files-found: error
+          retention-days: 14

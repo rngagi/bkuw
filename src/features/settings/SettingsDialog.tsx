@@ -10,6 +10,7 @@ interface SettingsRequest {
   name: string;
   languageName: string | null;
   languageCode: string | null;
+  analysisLanguage: "zh-TW" | "en" | null;
   description: string | null;
   writingSystems: WritingSystem[];
   partOfSpeechOptions: string[];
@@ -60,6 +61,7 @@ export function SettingsDialog({ open, onboarding = false, snapshot, onOpenChang
   const [name, setName] = useState("");
   const [languageName, setLanguageName] = useState("");
   const [languageCode, setLanguageCode] = useState("");
+  const [analysisLanguage, setAnalysisLanguage] = useState<"zh-TW" | "en" | "">("");
   const [description, setDescription] = useState("");
   const [systems, setSystems] = useState<WritingSystem[]>([]);
   const [partOfSpeechOptions, setPartOfSpeechOptions] = useState<string[]>([]);
@@ -72,6 +74,7 @@ export function SettingsDialog({ open, onboarding = false, snapshot, onOpenChang
     setName(snapshot.project.name);
     setLanguageName(snapshot.project.languageName ?? "");
     setLanguageCode(snapshot.project.languageCode ?? "");
+    setAnalysisLanguage(snapshot.project.analysisLanguage ?? "");
     setDescription(snapshot.project.description ?? "");
     setSystems(snapshot.writingSystems);
     setPartOfSpeechOptions(snapshot.partOfSpeechOptions);
@@ -102,7 +105,7 @@ export function SettingsDialog({ open, onboarding = false, snapshot, onOpenChang
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (!name.trim() || systems.some((item) => !item.name.trim()) || systems.filter((item) => item.displayRole === "primary").length !== 1) {
+    if (!name.trim() || systems.some((item) => !item.name.trim() || (item.scriptCode !== null && !/^[A-Z][a-z]{3}$/.test(item.scriptCode))) || systems.filter((item) => item.displayRole === "primary").length !== 1) {
       setError(t("error.validation"));
       return;
     }
@@ -111,7 +114,8 @@ export function SettingsDialog({ open, onboarding = false, snapshot, onOpenChang
     try {
       await onSave({
         name: name.trim(), languageName: languageName.trim() || null,
-        languageCode: languageCode.trim() || null, description: description.trim() || null,
+        languageCode: languageCode.trim() || null, analysisLanguage: analysisLanguage || null,
+        description: description.trim() || null,
         writingSystems: systems.map((item, index) => ({ ...item, name: item.name.trim(), sortOrder: index })),
         partOfSpeechOptions,
         semanticDomainOptions,
@@ -136,6 +140,7 @@ export function SettingsDialog({ open, onboarding = false, snapshot, onOpenChang
               <label className="field"><span>{t("start.projectName")}</span><input value={name} onChange={(event) => setName(event.target.value)} required /></label>
               <label className="field"><span>{t("start.languageName")}</span><input value={languageName} onChange={(event) => setLanguageName(event.target.value)} /></label>
               <label className="field"><span>{t("start.languageCode")}</span><input value={languageCode} maxLength={3} pattern="[a-z]{3}" placeholder="yue" onChange={(event) => setLanguageCode(event.target.value.toLowerCase().replace(/[^a-z]/g, ""))} /><small>{t("start.languageCodeHelp")} <button className="inline-link" type="button" onClick={() => void backend.openLanguageCodeRegistry()}>{t("start.lookupLanguageCode")}</button></small></label>
+              <label className="field"><span>{t("settings.analysisLanguage")}</span><select aria-label={t("settings.analysisLanguage")} value={analysisLanguage} onChange={(event) => setAnalysisLanguage(event.target.value as "zh-TW" | "en" | "")}><option value="">{t("common.none")}</option><option value="zh-TW">{t("locale.zhTW")}</option><option value="en">{t("locale.en")}</option></select><small>{t("settings.analysisLanguageHelp")}</small></label>
               <label className="field full"><span>{t("settings.description")}</span><textarea value={description} onChange={(event) => setDescription(event.target.value)} /></label>
             </div>
 
@@ -150,7 +155,7 @@ export function SettingsDialog({ open, onboarding = false, snapshot, onOpenChang
                       <label className="field"><span>{t("settings.role")}</span><select aria-label={t("settings.role")} value={system.displayRole ?? ""} onChange={(event) => setRole(index, (event.target.value || null) as WritingSystem["displayRole"])}><option value="">{t("common.none")}</option><option value="primary">{t("settings.primary")}</option><option value="secondary">{t("settings.secondary")}</option></select></label>
                     </div>
                     <details className="writing-system-advanced"><summary>{t("settings.advancedFields")}</summary><div className="settings-grid">
-                      <label className="field"><span>{t("settings.scriptCode")}</span><input aria-label={t("settings.scriptCode")} value={system.scriptCode ?? ""} onChange={(event) => patch(index, { scriptCode: event.target.value || null })} /><small>{t("settings.scriptCodeHelp")}</small></label>
+                      <label className="field"><span>{t("settings.scriptCode")}</span><input aria-label={t("settings.scriptCode")} value={system.scriptCode ?? ""} maxLength={4} pattern="[A-Z][a-z]{3}" placeholder="Hant" onChange={(event) => { const letters = event.target.value.replace(/[^A-Za-z]/g, "").slice(0, 4); patch(index, { scriptCode: letters ? `${letters[0].toUpperCase()}${letters.slice(1).toLowerCase()}` : null }); }} /><small>{t("settings.scriptCodeHelp")} <button className="inline-link" type="button" onClick={() => void backend.openScriptCodeRegistry()}>{t("settings.lookupScriptCode")}</button></small></label>
                       <label className="field"><span>{t("settings.languageTag")}</span><input aria-label={t("settings.languageTag")} value={system.languageTag ?? ""} onChange={(event) => patch(index, { languageTag: event.target.value || null })} /><small>{t("settings.languageTagHelp")}</small></label>
                       <label className="field"><span>{t("settings.fontFamily")}</span><input aria-label={t("settings.fontFamily")} value={system.fontFamily ?? ""} onChange={(event) => patch(index, { fontFamily: event.target.value || null })} /><small>{t("settings.fontFamilyHelp")}</small></label>
                     </div></details>

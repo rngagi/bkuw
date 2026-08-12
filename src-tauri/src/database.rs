@@ -11,9 +11,10 @@ use uuid::Uuid;
 
 use crate::{
     domain::{
-        CreateProjectRequest, DeleteEntryRequest, DeletedEntry, EntryForm, EntryRelation,
-        EntrySummary, Example, ExampleForm, LexicalEntry, Project, ProjectSnapshot,
-        SaveEntryRequest, Sense, UpdateProjectSettingsRequest, WritingSystem,
+        CorpusExportSettings, CreateProjectRequest, DeleteEntryRequest, DeletedEntry, EntryForm,
+        EntryRelation, EntrySummary, Example, ExampleForm, ExportSettingsV1, FontPreset,
+        LatexExportSettings, LexicalEntry, Project, ProjectSnapshot, ReverseIndexMode,
+        SaveEntryRequest, SectionMode, Sense, UpdateProjectSettingsRequest, WritingSystem,
     },
     error::{AppError, AppResult},
     search::{normalize_text, search_key},
@@ -21,7 +22,8 @@ use crate::{
 
 const INITIAL_MIGRATION: &str = include_str!("../migrations/001_initial.sql");
 const METADATA_OPTIONS_MIGRATION: &str = include_str!("../migrations/002_metadata_options.sql");
-const LATEST_SCHEMA_VERSION: i64 = 2;
+const EXPORT_SETTINGS_MIGRATION: &str = include_str!("../migrations/003_export_settings.sql");
+const LATEST_SCHEMA_VERSION: i64 = 3;
 
 pub struct ProjectSession {
     root: PathBuf,
@@ -70,8 +72,8 @@ impl ProjectSession {
             let transaction = connection.transaction()?;
             transaction.execute(
                 "INSERT INTO projects
-                 (id, name, language_name, language_code, description, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, NULL, ?5, ?5)",
+                 (id, name, language_name, language_code, analysis_language, description, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, NULL, NULL, ?5, ?5)",
                 params![
                     project_id,
                     normalize_text(request.name.trim()),
@@ -154,10 +156,13 @@ impl ProjectSession {
     }
 
     pub fn snapshot(&self) -> AppResult<ProjectSnapshot> {
+        let project = load_project(&self.connection)?;
+        let writing_systems = load_writing_systems(&self.connection)?;
         Ok(ProjectSnapshot {
             root_path: self.root.to_string_lossy().into_owned(),
-            project: load_project(&self.connection)?,
-            writing_systems: load_writing_systems(&self.connection)?,
+            export_settings: load_export_settings(&self.connection, &project, &writing_systems)?,
+            project,
+            writing_systems,
             part_of_speech_options: load_metadata_options(&self.connection, "part_of_speech")?,
             semantic_domain_options: load_metadata_options(&self.connection, "semantic_domain")?,
             entries: query_summaries(&self.connection, "")?,
@@ -171,6 +176,7 @@ impl ProjectSession {
         validate_writing_systems(&request.writing_systems)?;
         validate_metadata_options(&request.part_of_speech_options)?;
         validate_metadata_options(&request.semantic_domain_options)?;
+        validate_analysis_language(request.analysis_language.as_deref())?;
         if request.name.trim().is_empty() {
             return Err(AppError::new("validation", "Project name is required."));
         }
@@ -179,12 +185,13 @@ impl ProjectSession {
         transaction.execute(
             "UPDATE projects
              SET name = ?1, language_name = ?2, language_code = ?3,
-                 description = ?4, updated_at = ?5
-             WHERE id = ?6",
+                 analysis_language = ?4, description = ?5, updated_at = ?6
+             WHERE id = ?7",
             params![
                 normalize_text(request.name.trim()),
                 normalize_optional(request.language_name),
                 normalize_optional(request.language_code),
+                request.analysis_language,
                 normalize_optional(request.description),
                 now(),
                 project_id
@@ -260,6 +267,33 @@ impl ProjectSession {
         )?;
         transaction.commit()?;
         self.snapshot()
+    }
+
+    pub fn save_export_settings(
+        &mut self,
+        mut settings: ExportSettingsV1,
+    ) -> AppResult<ExportSettingsV1> {
+        validate_export_settings(&settings, &load_writing_systems(&self.connection)?)?;
+        settings.latex.title = normalize_text(settings.latex.title.trim());
+        settings.latex.author = normalize_text(settings.latex.author.trim());
+        let project_id = project_id(&self.connection)?;
+        let encoded = serde_json::to_string(&settings).map_err(|error| {
+            AppError::with_details(
+                "internal",
+                "Export settings could not be encoded.",
+                error.to_string(),
+            )
+        })?;
+        self.connection.execute(
+            "INSERT INTO export_settings(project_id, version, settings_json, updated_at)
+             VALUES (?1, 1, ?2, ?3)
+             ON CONFLICT(project_id) DO UPDATE SET
+               version = excluded.version,
+               settings_json = excluded.settings_json,
+               updated_at = excluded.updated_at",
+            params![project_id, encoded, now()],
+        )?;
+        Ok(settings)
     }
 
     pub fn query_entries(&self, query: &str) -> AppResult<Vec<EntrySummary>> {
@@ -349,6 +383,40 @@ impl ProjectSession {
         }
         load_entry(&self.connection, id, false)
     }
+
+    pub fn preview_export(
+        &self,
+        kind: crate::domain::ExportKind,
+    ) -> AppResult<crate::domain::ExportPreview> {
+        crate::export::preview(&self.export_snapshot()?, kind)
+    }
+
+    pub fn export_project(
+        &self,
+        request: crate::domain::ExportProjectRequest,
+    ) -> AppResult<crate::domain::ExportResult> {
+        crate::export::run(&self.export_snapshot()?, request)
+    }
+
+    fn export_snapshot(&self) -> AppResult<crate::export::ExportSnapshot> {
+        let snapshot = self.snapshot()?;
+        let mut statement = self.connection.prepare(
+            "SELECT id FROM lexical_entries WHERE deleted_at IS NULL ORDER BY created_at, id",
+        )?;
+        let ids = statement
+            .query_map([], |row| row.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        let entries = ids
+            .iter()
+            .map(|id| load_entry(&self.connection, id, false))
+            .collect::<AppResult<Vec<_>>>()?;
+        Ok(crate::export::ExportSnapshot {
+            project: snapshot.project,
+            writing_systems: snapshot.writing_systems,
+            settings: snapshot.export_settings,
+            entries,
+        })
+    }
 }
 
 fn connect(database_path: &Path) -> AppResult<Connection> {
@@ -423,6 +491,13 @@ fn migrate(connection: &mut Connection, root: &Path) -> AppResult<()> {
             params![now()],
         )?;
     }
+    if current < 3 {
+        transaction.execute_batch(EXPORT_SETTINGS_MIGRATION)?;
+        transaction.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (3, ?1)",
+            params![now()],
+        )?;
+    }
     transaction.commit()?;
     Ok(())
 }
@@ -462,7 +537,7 @@ fn acquire_lock(root: &Path) -> AppResult<File> {
 fn load_project(connection: &Connection) -> AppResult<Project> {
     connection
         .query_row(
-            "SELECT id, name, language_name, language_code, description, created_at, updated_at
+            "SELECT id, name, language_name, language_code, analysis_language, description, created_at, updated_at
              FROM projects LIMIT 1",
             [],
             |row| {
@@ -471,13 +546,156 @@ fn load_project(connection: &Connection) -> AppResult<Project> {
                     name: row.get(1)?,
                     language_name: row.get(2)?,
                     language_code: row.get(3)?,
-                    description: row.get(4)?,
-                    created_at: row.get(5)?,
-                    updated_at: row.get(6)?,
+                    analysis_language: row.get(4)?,
+                    description: row.get(5)?,
+                    created_at: row.get(6)?,
+                    updated_at: row.get(7)?,
                 })
             },
         )
         .map_err(Into::into)
+}
+
+fn default_export_settings(project: &Project, systems: &[WritingSystem]) -> ExportSettingsV1 {
+    let primary = systems
+        .iter()
+        .find(|system| system.display_role.as_deref() == Some("primary"))
+        .or_else(|| systems.first());
+    let primary_id = primary.map(|system| system.id.clone()).unwrap_or_default();
+    let pronunciation = systems
+        .iter()
+        .find(|system| system.kind == "phonetic")
+        .or_else(|| systems.iter().find(|system| system.kind == "phonemic"))
+        .map(|system| system.id.clone());
+    let language_tag = primary.and_then(|system| system.language_tag.clone());
+    ExportSettingsV1 {
+        version: 1,
+        corpus: CorpusExportSettings {
+            part_of_speech_mappings: Default::default(),
+        },
+        latex: LatexExportSettings {
+            title: project.name.clone(),
+            author: String::new(),
+            headword_writing_system_id: primary_id.clone(),
+            pronunciation_writing_system_id: pronunciation,
+            example_writing_system_id: primary_id,
+            collation_language_tag: language_tag,
+            section_mode: SectionMode::Auto,
+            reverse_index: ReverseIndexMode::Gloss,
+            font_presets: systems
+                .iter()
+                .map(|system| (system.id.clone(), FontPreset::Auto))
+                .collect(),
+        },
+    }
+}
+
+fn load_export_settings(
+    connection: &Connection,
+    project: &Project,
+    systems: &[WritingSystem],
+) -> AppResult<ExportSettingsV1> {
+    let encoded = connection
+        .query_row(
+            "SELECT settings_json FROM export_settings WHERE project_id = ?1",
+            params![project.id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?;
+    match encoded {
+        Some(value) => serde_json::from_str(&value)
+            .map(|settings| normalize_export_settings(settings, project, systems))
+            .map_err(|error| {
+                AppError::with_details(
+                    "database",
+                    "Export settings are invalid.",
+                    error.to_string(),
+                )
+            }),
+        None => Ok(default_export_settings(project, systems)),
+    }
+}
+
+fn normalize_export_settings(
+    mut settings: ExportSettingsV1,
+    project: &Project,
+    systems: &[WritingSystem],
+) -> ExportSettingsV1 {
+    let defaults = default_export_settings(project, systems);
+    let ids = systems
+        .iter()
+        .map(|system| system.id.as_str())
+        .collect::<std::collections::HashSet<_>>();
+    if !ids.contains(settings.latex.headword_writing_system_id.as_str()) {
+        settings.latex.headword_writing_system_id =
+            defaults.latex.headword_writing_system_id.clone();
+    }
+    if !ids.contains(settings.latex.example_writing_system_id.as_str()) {
+        settings.latex.example_writing_system_id = defaults.latex.example_writing_system_id;
+    }
+    if settings
+        .latex
+        .pronunciation_writing_system_id
+        .as_deref()
+        .is_some_and(|id| !ids.contains(id))
+    {
+        settings.latex.pronunciation_writing_system_id =
+            defaults.latex.pronunciation_writing_system_id;
+    }
+    settings
+        .latex
+        .font_presets
+        .retain(|id, _| ids.contains(id.as_str()));
+    for system in systems {
+        settings
+            .latex
+            .font_presets
+            .entry(system.id.clone())
+            .or_insert(FontPreset::Auto);
+    }
+    settings
+}
+
+fn validate_analysis_language(value: Option<&str>) -> AppResult<()> {
+    if value.is_some_and(|language| !matches!(language, "zh-TW" | "en")) {
+        return Err(AppError::new(
+            "validation",
+            "Analysis language must be zh-TW or en.",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_export_settings(
+    settings: &ExportSettingsV1,
+    systems: &[WritingSystem],
+) -> AppResult<()> {
+    if settings.version != 1 {
+        return Err(AppError::new(
+            "validation",
+            "Unsupported export settings version.",
+        ));
+    }
+    let ids = systems
+        .iter()
+        .map(|system| system.id.as_str())
+        .collect::<Vec<_>>();
+    for id in [
+        Some(settings.latex.headword_writing_system_id.as_str()),
+        settings.latex.pronunciation_writing_system_id.as_deref(),
+        Some(settings.latex.example_writing_system_id.as_str()),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if !ids.contains(&id) {
+            return Err(AppError::new(
+                "validation",
+                "Export settings reference a missing writing system.",
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn load_writing_systems(connection: &Connection) -> AppResult<Vec<WritingSystem>> {
@@ -902,6 +1120,12 @@ fn validate_writing_systems(writing_systems: &[WritingSystem]) -> AppResult<()> 
     }
     if writing_systems.iter().any(|item| {
         item.name.trim().is_empty()
+            || item.script_code.as_deref().is_some_and(|code| {
+                let bytes = code.as_bytes();
+                bytes.len() != 4
+                    || !bytes[0].is_ascii_uppercase()
+                    || !bytes[1..].iter().all(u8::is_ascii_lowercase)
+            })
             || !matches!(
                 item.kind.as_str(),
                 "orthography"
@@ -1018,8 +1242,9 @@ mod tests {
 
     use super::ProjectSession;
     use crate::domain::{
-        CreateProjectRequest, DeleteEntryRequest, EntryForm, EntryRelation, Example, ExampleForm,
-        SaveEntryRequest, Sense, UpdateProjectSettingsRequest, WritingSystem,
+        CorpusPartOfSpeech, CreateProjectRequest, DeleteEntryRequest, EntryForm, EntryRelation,
+        Example, ExampleForm, ExportKind, ExportProjectRequest, SaveEntryRequest, Sense,
+        UpdateProjectSettingsRequest, WritingSystem,
     };
 
     fn create_session() -> (tempfile::TempDir, ProjectSession) {
@@ -1046,6 +1271,7 @@ mod tests {
                 name: snapshot.project.name.clone(),
                 language_name: Some("Traditional Chinese".into()),
                 language_code: Some("zh-Hant".into()),
+                analysis_language: None,
                 description: None,
                 writing_systems: vec![
                     snapshot.writing_systems[0].clone(),
@@ -1287,8 +1513,10 @@ mod tests {
         let connection = rusqlite::Connection::open(root.join("project.sqlite")).expect("open");
         connection
             .execute_batch(
-                "DROP TABLE metadata_options;
-                 DELETE FROM schema_migrations WHERE version = 2;",
+                "DROP TABLE export_settings;
+                 ALTER TABLE projects DROP COLUMN analysis_language;
+                 DROP TABLE metadata_options;
+                 DELETE FROM schema_migrations WHERE version >= 2;",
             )
             .expect("simulate version one");
         drop(connection);
@@ -1316,6 +1544,667 @@ mod tests {
     }
 
     #[test]
+    fn migration_three_persists_analysis_language_and_export_settings() {
+        let (_directory, mut session) = create_session();
+        let snapshot = session.snapshot().expect("snapshot");
+        assert_eq!(snapshot.project.analysis_language, None);
+        assert_eq!(snapshot.export_settings.version, 1);
+
+        let mut settings = snapshot.export_settings.clone();
+        settings.latex.title = "Field dictionary".into();
+        session
+            .save_export_settings(settings.clone())
+            .expect("save export settings");
+        session
+            .update_settings(UpdateProjectSettingsRequest {
+                name: snapshot.project.name,
+                language_name: snapshot.project.language_name,
+                language_code: snapshot.project.language_code,
+                analysis_language: Some("zh-TW".into()),
+                description: snapshot.project.description,
+                writing_systems: snapshot.writing_systems,
+                part_of_speech_options: snapshot.part_of_speech_options,
+                semantic_domain_options: snapshot.semantic_domain_options,
+            })
+            .expect("save analysis language");
+
+        let persisted = session.snapshot().expect("persisted snapshot");
+        assert_eq!(
+            persisted.project.analysis_language.as_deref(),
+            Some("zh-TW")
+        );
+        assert_eq!(persisted.export_settings, settings);
+        let root = persisted.root_path;
+        session.close().expect("close");
+        let reopened = ProjectSession::open(root).expect("reopen");
+        let reopened_snapshot = reopened.snapshot().expect("reopened snapshot");
+        assert_eq!(
+            reopened_snapshot.project.analysis_language.as_deref(),
+            Some("zh-TW")
+        );
+        assert_eq!(reopened_snapshot.export_settings, settings);
+    }
+
+    #[test]
+    fn exports_exact_rngagi_corpus_v03_csv_from_senses() {
+        let (directory, mut session) = create_session();
+        let snapshot = session.snapshot().expect("snapshot");
+        let primary_id = snapshot.writing_systems[0].id.clone();
+        let ipa_id = super::new_id();
+        session
+            .update_settings(UpdateProjectSettingsRequest {
+                name: snapshot.project.name,
+                language_name: Some("Test Language".into()),
+                language_code: Some("und".into()),
+                analysis_language: Some("zh-TW".into()),
+                description: None,
+                writing_systems: vec![
+                    WritingSystem {
+                        script_code: Some("Hant".into()),
+                        language_tag: Some("zh-Hant".into()),
+                        ..snapshot.writing_systems[0].clone()
+                    },
+                    WritingSystem {
+                        id: ipa_id.clone(),
+                        name: "IPA".into(),
+                        kind: "phonetic".into(),
+                        script_code: Some("Latn".into()),
+                        language_tag: None,
+                        display_role: None,
+                        sort_order: 1,
+                        font_family: None,
+                        notes: None,
+                    },
+                ],
+                part_of_speech_options: vec!["動詞".into()],
+                semantic_domain_options: vec!["移動".into()],
+            })
+            .expect("settings");
+        let mut export_settings = session.snapshot().expect("snapshot").export_settings;
+        export_settings.latex.pronunciation_writing_system_id = Some(ipa_id.clone());
+        export_settings
+            .corpus
+            .part_of_speech_mappings
+            .insert("動詞".into(), CorpusPartOfSpeech::Verb);
+        session
+            .save_export_settings(export_settings)
+            .expect("export settings");
+
+        let mut entry = session.create_entry().expect("entry");
+        entry.notes = Some("field note".into());
+        entry.forms = vec![
+            EntryForm {
+                id: super::new_id(),
+                writing_system_id: primary_id.clone(),
+                text: "過".into(),
+                variant_label: None,
+                dialect: None,
+                status: None,
+                notes: None,
+                sort_order: 0,
+            },
+            EntryForm {
+                id: super::new_id(),
+                writing_system_id: ipa_id,
+                text: "kuo˥˩".into(),
+                variant_label: None,
+                dialect: None,
+                status: None,
+                notes: None,
+                sort_order: 1,
+            },
+        ];
+        entry.relations.push(EntryRelation {
+            id: super::new_id(),
+            target_entry_id: None,
+            relation_type: "root".into(),
+            fallback_text: Some("guo".into()),
+            notes: None,
+            sort_order: 0,
+        });
+        entry.senses = vec![
+            Sense {
+                id: super::new_id(),
+                gloss: Some("通過".into()),
+                definition: Some("從一側到另一側".into()),
+                part_of_speech: Some("動詞".into()),
+                semantic_domain: Some("移動".into()),
+                sort_order: 0,
+                examples: vec![Example {
+                    id: super::new_id(),
+                    translation: Some("他過河了。".into()),
+                    notes: Some("elicited".into()),
+                    sort_order: 0,
+                    forms: vec![ExampleForm {
+                        id: super::new_id(),
+                        writing_system_id: primary_id.clone(),
+                        text: "他過河了。".into(),
+                        sort_order: 0,
+                    }],
+                }],
+            },
+            Sense {
+                id: super::new_id(),
+                gloss: Some("經歷".into()),
+                definition: None,
+                part_of_speech: Some("動詞".into()),
+                semantic_domain: None,
+                sort_order: 1,
+                examples: vec![],
+            },
+        ];
+        session
+            .save_entry(SaveEntryRequest {
+                expected_revision: 0,
+                entry,
+            })
+            .expect("save");
+
+        let preview = session
+            .preview_export(ExportKind::CorpusCsv)
+            .expect("preview");
+        assert_eq!(preview.row_count, 2);
+        assert!(!preview.has_errors(), "{:#?}", preview.issues);
+        let output = directory.path().join("corpus.csv");
+        let result = session
+            .export_project(ExportProjectRequest {
+                kind: ExportKind::CorpusCsv,
+                destination: output.to_string_lossy().into_owned(),
+                snapshot_token: preview.snapshot_token,
+                overwrite: false,
+            })
+            .expect("export");
+        assert_eq!(result.row_count, 2);
+        assert_eq!(
+            std::fs::read_to_string(output).expect("CSV"),
+            concat!(
+                "form,gloss_zh,word_root,example,example_translation_zh,ipa,part_of_speech,gloss_en,notes\r\n",
+                "過,通過,guo,他過河了。,他過河了。,kuo˥˩,verb,,entry_notes: field note\\nsense_definition: 從一側到另一側\\nsemantic_domain: 移動\\nexample_notes: elicited\r\n",
+                "過,經歷,guo,,,kuo˥˩,verb,,entry_notes: field note\r\n",
+            )
+        );
+    }
+
+    #[test]
+    fn corpus_preview_reports_loss_and_rejects_stale_or_invalid_exports() {
+        let (directory, mut session) = create_session();
+        let snapshot = session.snapshot().expect("snapshot");
+        let primary_id = snapshot.writing_systems[0].id.clone();
+        let mut entry = session.create_entry().expect("entry");
+        entry.forms.push(EntryForm {
+            id: super::new_id(),
+            writing_system_id: primary_id.clone(),
+            text: "a,\"b\nc".into(),
+            variant_label: None,
+            dialect: None,
+            status: None,
+            notes: None,
+            sort_order: 0,
+        });
+        entry.relations.push(EntryRelation {
+            id: super::new_id(),
+            target_entry_id: None,
+            relation_type: "base".into(),
+            fallback_text: Some("base".into()),
+            notes: None,
+            sort_order: 0,
+        });
+        entry.senses.push(Sense {
+            id: super::new_id(),
+            gloss: Some("有,引號\"".into()),
+            definition: None,
+            part_of_speech: Some("動詞".into()),
+            semantic_domain: None,
+            sort_order: 0,
+            examples: vec![Example {
+                id: super::new_id(),
+                translation: None,
+                notes: None,
+                sort_order: 0,
+                forms: vec![ExampleForm {
+                    id: super::new_id(),
+                    writing_system_id: primary_id,
+                    text: "不完整".into(),
+                    sort_order: 0,
+                }],
+            }],
+        });
+        let saved = session
+            .save_entry(SaveEntryRequest {
+                expected_revision: 0,
+                entry,
+            })
+            .expect("save");
+
+        let invalid = session
+            .preview_export(ExportKind::CorpusCsv)
+            .expect("preview");
+        assert!(
+            invalid
+                .issues
+                .iter()
+                .any(|item| item.code == "corpus.analysis_language_required")
+        );
+        let error = session
+            .export_project(ExportProjectRequest {
+                kind: ExportKind::CorpusCsv,
+                destination: directory
+                    .path()
+                    .join("invalid.csv")
+                    .to_string_lossy()
+                    .into_owned(),
+                snapshot_token: invalid.snapshot_token,
+                overwrite: false,
+            })
+            .expect_err("invalid export");
+        assert_eq!(error.code, "export_validation");
+
+        let current = session.snapshot().expect("snapshot");
+        let current_primary_id = current.writing_systems[0].id.clone();
+        session
+            .update_settings(UpdateProjectSettingsRequest {
+                name: current.project.name,
+                language_name: current.project.language_name,
+                language_code: current.project.language_code,
+                analysis_language: Some("zh-TW".into()),
+                description: current.project.description,
+                writing_systems: current.writing_systems,
+                part_of_speech_options: vec!["動詞".into()],
+                semantic_domain_options: current.semantic_domain_options,
+            })
+            .expect("analysis language");
+        let mut deleted = session.create_entry().expect("deleted entry");
+        deleted.forms.push(EntryForm {
+            id: super::new_id(),
+            writing_system_id: current_primary_id,
+            text: "deleted".into(),
+            variant_label: None,
+            dialect: None,
+            status: None,
+            notes: None,
+            sort_order: 0,
+        });
+        deleted.senses.push(Sense {
+            id: super::new_id(),
+            gloss: Some("已刪除".into()),
+            definition: None,
+            part_of_speech: None,
+            semantic_domain: None,
+            sort_order: 0,
+            examples: vec![],
+        });
+        let deleted = session
+            .save_entry(SaveEntryRequest {
+                expected_revision: 0,
+                entry: deleted,
+            })
+            .expect("save deleted candidate");
+        session
+            .delete_entry(DeleteEntryRequest {
+                id: deleted.id,
+                expected_revision: deleted.revision,
+            })
+            .expect("soft delete");
+        let preview = session
+            .preview_export(ExportKind::CorpusCsv)
+            .expect("valid preview");
+        assert_eq!(
+            preview.row_count, 1,
+            "soft-deleted entries must be excluded"
+        );
+        assert!(!preview.has_errors());
+        assert!(
+            preview
+                .issues
+                .iter()
+                .any(|item| item.code == "corpus.part_of_speech_unmapped")
+        );
+        assert!(
+            preview
+                .issues
+                .iter()
+                .any(|item| item.code == "corpus.examples_omitted")
+        );
+        assert!(
+            preview
+                .issues
+                .iter()
+                .any(|item| item.code == "corpus.base_relations_omitted")
+        );
+
+        let mut changed = session.load_entry(&saved.id).expect("entry");
+        changed.notes = Some("changed after preview".into());
+        session
+            .save_entry(SaveEntryRequest {
+                expected_revision: changed.revision,
+                entry: changed,
+            })
+            .expect("change");
+        let output = directory.path().join("quoted.csv");
+        let stale = session
+            .export_project(ExportProjectRequest {
+                kind: ExportKind::CorpusCsv,
+                destination: output.to_string_lossy().into_owned(),
+                snapshot_token: preview.snapshot_token,
+                overwrite: false,
+            })
+            .expect_err("stale preview");
+        assert_eq!(stale.code, "export_stale");
+
+        let fresh = session
+            .preview_export(ExportKind::CorpusCsv)
+            .expect("fresh preview");
+        session
+            .export_project(ExportProjectRequest {
+                kind: ExportKind::CorpusCsv,
+                destination: output.to_string_lossy().into_owned(),
+                snapshot_token: fresh.snapshot_token.clone(),
+                overwrite: false,
+            })
+            .expect("export");
+        let exists = session
+            .export_project(ExportProjectRequest {
+                kind: ExportKind::CorpusCsv,
+                destination: output.to_string_lossy().into_owned(),
+                snapshot_token: fresh.snapshot_token.clone(),
+                overwrite: false,
+            })
+            .expect_err("existing destination needs confirmation");
+        assert_eq!(exists.code, "export_filesystem");
+        assert_eq!(exists.details.as_deref(), Some("destination_exists"));
+        session
+            .export_project(ExportProjectRequest {
+                kind: ExportKind::CorpusCsv,
+                destination: output.to_string_lossy().into_owned(),
+                snapshot_token: fresh.snapshot_token,
+                overwrite: true,
+            })
+            .expect("confirmed atomic replacement");
+        let bytes = std::fs::read(output).expect("CSV");
+        assert!(!bytes.starts_with(&[0xef, 0xbb, 0xbf]));
+        assert!(bytes.windows(2).any(|window| window == b"\r\n"));
+        let mut reader = csv::Reader::from_reader(bytes.as_slice());
+        let record = reader.records().next().expect("row").expect("valid CSV");
+        assert_eq!(&record[0], "a,\"b\nc");
+        assert_eq!(&record[1], "有,引號\"");
+    }
+
+    #[test]
+    fn exports_portable_xelatex_project_and_overleaf_zip() {
+        let (directory, mut session) = create_session();
+        let mut snapshot = session.snapshot().expect("snapshot");
+        snapshot.writing_systems[0].script_code = Some("Hant".into());
+        session
+            .update_settings(UpdateProjectSettingsRequest {
+                name: snapshot.project.name.clone(),
+                language_name: snapshot.project.language_name.clone(),
+                language_code: snapshot.project.language_code.clone(),
+                analysis_language: Some("zh-TW".into()),
+                description: snapshot.project.description.clone(),
+                writing_systems: snapshot.writing_systems.clone(),
+                part_of_speech_options: vec!["verb".into()],
+                semantic_domain_options: vec![],
+            })
+            .expect("Hant settings");
+        let writing_system_id = snapshot.writing_systems[0].id.clone();
+        let mut settings = snapshot.export_settings;
+        settings.latex.title = "Field #1 & notes".into();
+        settings.latex.author = "A_B".into();
+        session.save_export_settings(settings).expect("settings");
+        let mut entry = session.create_entry().expect("entry");
+        entry.forms.push(EntryForm {
+            id: super::new_id(),
+            writing_system_id: writing_system_id.clone(),
+            text: "過_#%".into(),
+            variant_label: None,
+            dialect: None,
+            status: None,
+            notes: None,
+            sort_order: 0,
+        });
+        entry.senses.push(Sense {
+            id: super::new_id(),
+            gloss: Some("通過 & 經歷".into()),
+            definition: Some("\\test {value}".into()),
+            part_of_speech: Some("verb".into()),
+            semantic_domain: None,
+            sort_order: 0,
+            examples: vec![Example {
+                id: super::new_id(),
+                translation: Some("他過河了。".into()),
+                notes: None,
+                sort_order: 0,
+                forms: vec![ExampleForm {
+                    id: super::new_id(),
+                    writing_system_id,
+                    text: "他過河了。".into(),
+                    sort_order: 0,
+                }],
+            }],
+        });
+        session
+            .save_entry(SaveEntryRequest {
+                expected_revision: 0,
+                entry,
+            })
+            .expect("save");
+
+        let preview = session.preview_export(ExportKind::Latex).expect("preview");
+        let result = session
+            .export_project(ExportProjectRequest {
+                kind: ExportKind::Latex,
+                destination: directory.path().to_string_lossy().into_owned(),
+                snapshot_token: preview.snapshot_token,
+                overwrite: false,
+            })
+            .expect("LaTeX export");
+        let project = std::path::PathBuf::from(result.latex_directory.expect("project path"));
+        for name in [
+            "main.tex",
+            "entries.tex",
+            "reverse-index.tex",
+            "README.md",
+            ".latexmkrc",
+        ] {
+            assert!(project.join(name).is_file(), "missing {name}");
+        }
+        let main = std::fs::read_to_string(project.join("main.tex")).expect("main.tex");
+        assert!(main.contains("Field \\#1 \\& notes"));
+        assert!(main.contains("A\\_B"));
+        assert!(!main.contains("zxjatype"));
+        let entries = std::fs::read_to_string(project.join("entries.tex")).expect("entries.tex");
+        assert!(entries.contains("過\\_\\#\\%"));
+        assert!(entries.contains("\\textbackslash{}test \\{value\\}"));
+        let reverse = std::fs::read_to_string(project.join("reverse-index.tex")).expect("index");
+        assert!(reverse.contains("\\pageref{entry:"));
+
+        let zip_path = result.zip_path.expect("zip path");
+        let file = std::fs::File::open(zip_path).expect("zip");
+        let mut archive = zip::ZipArchive::new(file).expect("archive");
+        let mut names = (0..archive.len())
+            .map(|index| archive.by_index(index).expect("member").name().to_owned())
+            .collect::<Vec<_>>();
+        names.sort();
+        assert_eq!(
+            names,
+            [
+                ".latexmkrc",
+                "README.md",
+                "entries.tex",
+                "main.tex",
+                "reverse-index.tex"
+            ]
+        );
+        assert_eq!(result.pdf_status, crate::domain::PdfStatus::NotRequested);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn pdf_export_reports_created_missing_compile_failure_and_timeout() {
+        use std::{os::unix::fs::PermissionsExt, time::Duration};
+
+        let (directory, mut session) = create_session();
+        let snapshot = session.snapshot().expect("snapshot");
+        let writing_system_id = snapshot.writing_systems[0].id.clone();
+        let mut entry = session.create_entry().expect("entry");
+        entry.forms.push(EntryForm {
+            id: super::new_id(),
+            writing_system_id,
+            text: "word".into(),
+            variant_label: None,
+            dialect: None,
+            status: None,
+            notes: None,
+            sort_order: 0,
+        });
+        entry.senses.push(Sense {
+            id: super::new_id(),
+            gloss: Some("詞".into()),
+            definition: None,
+            part_of_speech: None,
+            semantic_domain: None,
+            sort_order: 0,
+            examples: vec![],
+        });
+        session
+            .save_entry(SaveEntryRequest {
+                expected_revision: 0,
+                entry,
+            })
+            .expect("save");
+        let preview = session.preview_export(ExportKind::Pdf).expect("preview");
+        let export = |session: &ProjectSession| {
+            session.export_project(ExportProjectRequest {
+                kind: ExportKind::Pdf,
+                destination: directory.path().to_string_lossy().into_owned(),
+                snapshot_token: preview.snapshot_token.clone(),
+                overwrite: false,
+            })
+        };
+
+        crate::export::with_test_xelatex(None, Duration::from_secs(1), || {
+            let result = export(&session).expect("source export succeeds without XeLaTeX");
+            assert_eq!(result.pdf_status, crate::domain::PdfStatus::XeLatexMissing);
+            assert!(result.pdf_path.is_none());
+        });
+
+        let success = directory.path().join("xelatex-success");
+        std::fs::write(&success, "#!/bin/sh\ntouch main.pdf\n").expect("success script");
+        std::fs::set_permissions(&success, std::fs::Permissions::from_mode(0o755))
+            .expect("executable");
+        crate::export::with_test_xelatex(Some(success), Duration::from_secs(1), || {
+            let result = export(&session).expect("PDF export");
+            assert_eq!(result.pdf_status, crate::domain::PdfStatus::Created);
+            assert!(
+                result
+                    .pdf_path
+                    .as_ref()
+                    .is_some_and(|path| std::path::Path::new(path).is_file())
+            );
+        });
+
+        let failure = directory.path().join("xelatex-failure");
+        std::fs::write(&failure, "#!/bin/sh\necho compile-failed >&2\nexit 7\n")
+            .expect("failure script");
+        std::fs::set_permissions(&failure, std::fs::Permissions::from_mode(0o755))
+            .expect("executable");
+        crate::export::with_test_xelatex(Some(failure), Duration::from_secs(1), || {
+            let error = export(&session).expect_err("compile failure");
+            assert_eq!(error.code, "latex_compile");
+            let diagnostic = error.details.expect("diagnostic path");
+            assert!(std::path::Path::new(&diagnostic).is_file());
+            assert!(
+                std::fs::read_to_string(diagnostic)
+                    .expect("diagnostic")
+                    .contains("compile-failed")
+            );
+        });
+
+        let timeout = directory.path().join("xelatex-timeout");
+        std::fs::write(&timeout, "#!/bin/sh\nsleep 2\n").expect("timeout script");
+        std::fs::set_permissions(&timeout, std::fs::Permissions::from_mode(0o755))
+            .expect("executable");
+        crate::export::with_test_xelatex(Some(timeout), Duration::from_millis(25), || {
+            let error = export(&session).expect_err("compile timeout");
+            assert_eq!(error.code, "latex_timeout");
+            assert!(std::path::Path::new(&error.details.expect("diagnostic path")).is_file());
+        });
+    }
+
+    #[test]
+    #[ignore = "requires a local XeLaTeX installation; run in the portable-template CI job"]
+    fn portable_xelatex_template_compiles_with_the_real_engine() {
+        if !crate::export::detect_xelatex().available {
+            return;
+        }
+        let (directory, mut session) = create_session();
+        let mut snapshot = session.snapshot().expect("snapshot");
+        snapshot.writing_systems[0].script_code = Some("Hant".into());
+        session
+            .update_settings(UpdateProjectSettingsRequest {
+                name: snapshot.project.name.clone(),
+                language_name: snapshot.project.language_name.clone(),
+                language_code: snapshot.project.language_code.clone(),
+                analysis_language: Some("zh-TW".into()),
+                description: snapshot.project.description.clone(),
+                writing_systems: snapshot.writing_systems.clone(),
+                part_of_speech_options: vec!["verb".into()],
+                semantic_domain_options: vec![],
+            })
+            .expect("Hant settings");
+        let writing_system_id = snapshot.writing_systems[0].id.clone();
+        let mut entry = session.create_entry().expect("entry");
+        entry.forms.push(EntryForm {
+            id: super::new_id(),
+            writing_system_id,
+            text: "過".into(),
+            variant_label: None,
+            dialect: None,
+            status: None,
+            notes: None,
+            sort_order: 0,
+        });
+        entry.senses.push(Sense {
+            id: super::new_id(),
+            gloss: Some("通過".into()),
+            definition: Some("cross".into()),
+            part_of_speech: Some("verb".into()),
+            semantic_domain: None,
+            sort_order: 0,
+            examples: vec![],
+        });
+        session
+            .save_entry(SaveEntryRequest {
+                expected_revision: 0,
+                entry,
+            })
+            .expect("save");
+        let preview = session.preview_export(ExportKind::Pdf).expect("preview");
+        let destination = std::env::var("BKUW_LATEX_SMOKE_DESTINATION")
+            .unwrap_or_else(|_| directory.path().to_string_lossy().into_owned());
+        let result = session
+            .export_project(ExportProjectRequest {
+                kind: ExportKind::Pdf,
+                destination,
+                snapshot_token: preview.snapshot_token,
+                overwrite: false,
+            })
+            .unwrap_or_else(|error| {
+                let diagnostic = error
+                    .details
+                    .as_deref()
+                    .and_then(|path| std::fs::read_to_string(path).ok());
+                panic!("real XeLaTeX export failed: {error:?}\n{diagnostic:?}");
+            });
+        assert_eq!(result.pdf_status, crate::domain::PdfStatus::Created);
+        assert!(
+            result
+                .pdf_path
+                .is_some_and(|path| std::path::Path::new(&path).is_file())
+        );
+    }
+
+    #[test]
     fn a_project_lock_rejects_a_second_writer() {
         let (_directory, session) = create_session();
         let root = session.snapshot().expect("snapshot").root_path;
@@ -1337,6 +2226,7 @@ mod tests {
                 name: snapshot.project.name,
                 language_name: None,
                 language_code: None,
+                analysis_language: None,
                 description: None,
                 writing_systems: vec![unranked],
                 part_of_speech_options: vec![],
@@ -1419,6 +2309,7 @@ mod tests {
                 name: snapshot.project.name.clone(),
                 language_name: None,
                 language_code: None,
+                analysis_language: None,
                 description: None,
                 writing_systems: vec![original_unranked, replacement.clone()],
                 part_of_speech_options: vec![],
@@ -1447,6 +2338,7 @@ mod tests {
                 name: snapshot.project.name,
                 language_name: None,
                 language_code: None,
+                analysis_language: None,
                 description: None,
                 writing_systems: vec![replacement],
                 part_of_speech_options: vec![],

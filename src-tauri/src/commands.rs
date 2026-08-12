@@ -5,8 +5,9 @@ use tauri::State;
 use crate::{
     database::ProjectSession,
     domain::{
-        CreateProjectRequest, DeleteEntryRequest, DeletedEntry, EntrySummary, LexicalEntry,
-        ProjectSnapshot, SaveEntryRequest, UpdateProjectSettingsRequest,
+        CreateProjectRequest, DeleteEntryRequest, DeletedEntry, EntrySummary, ExportKind,
+        ExportPreview, ExportProjectRequest, ExportResult, ExportSettingsV1, LexicalEntry,
+        ProjectSnapshot, SaveEntryRequest, TexEngineStatus, UpdateProjectSettingsRequest,
     },
     error::{AppError, AppResult},
 };
@@ -159,4 +160,43 @@ pub fn restore_entry(state: State<'_, AppState>, id: String) -> AppResult<Lexica
         .as_mut()
         .ok_or_else(|| AppError::new("no_project", "No project is currently open."))?
         .restore_entry(&id)
+}
+
+#[tauri::command]
+pub fn save_export_settings(
+    state: State<'_, AppState>,
+    settings: ExportSettingsV1,
+) -> AppResult<ExportSettingsV1> {
+    let mut guard = active_session(&state)?;
+    guard
+        .as_mut()
+        .ok_or_else(|| AppError::new("no_project", "No project is currently open."))?
+        .save_export_settings(settings.clone())?;
+    Ok(settings)
+}
+
+#[tauri::command]
+pub fn preview_export(state: State<'_, AppState>, kind: ExportKind) -> AppResult<ExportPreview> {
+    let guard = active_session(&state)?;
+    guard
+        .as_ref()
+        .ok_or_else(|| AppError::new("no_project", "No project is currently open."))?
+        .preview_export(kind)
+}
+
+#[tauri::command]
+pub fn export_project(
+    state: State<'_, AppState>,
+    request: ExportProjectRequest,
+) -> AppResult<ExportResult> {
+    let guard = active_session(&state)?;
+    guard
+        .as_ref()
+        .ok_or_else(|| AppError::new("no_project", "No project is currently open."))?
+        .export_project(request)
+}
+
+#[tauri::command]
+pub fn detect_xelatex() -> TexEngineStatus {
+    crate::export::detect_xelatex()
 }

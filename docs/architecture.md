@@ -14,7 +14,7 @@ Project/database module
 SQLite + project filesystem
 ```
 
-Frontend 不可直接執行 SQL。所有 `invoke` 集中在 `src/lib/tauri.ts`，讓 command 名稱、DTO shape 與 error mapping 只有一個 seam。Project/database module 的外部 interface 提供 create/open/close project、settings、entry query/load/create/save/delete/restore 與 relation autocomplete；連線、SQL、normalization、backup 和 transaction 都留在 implementation 內。
+Frontend 不可直接執行 SQL。所有 `invoke` 集中在 `src/lib/tauri.ts`，讓 command 名稱、DTO shape 與 error mapping 只有一個 seam。Project/database module 的外部 interface 提供 create/open/close project、settings、entry query/load/create/save/delete/restore 與 export snapshot；連線、SQL、normalization、backup 和 transaction 都留在 implementation 內。Export module 是 deep module：公開 preview/run/detect 行為，內部封裝 corpus flattening、ICU4X sorting、TeX rendering/escaping、ZIP、atomic write 與 XeLaTeX process。
 
 ## Project lifecycle
 
@@ -23,7 +23,7 @@ Frontend 不可直接執行 SQL。所有 `invoke` 集中在 `src/lib/tauri.ts`�
 - 開啟時 canonicalize 路徑、驗證目錄與 database identity/schema，再取得 exclusive project lock。
 - migration 前以 SQLite-consistent 方法建立 timestamped backup；migration 失敗時保留原資料並回報 stable error code。
 - 關閉 project 時先 flush pending save，再關閉 connection 與釋放 lock。
-- Tauri main window 僅有 dialog、必要 core capability，以及 scope 嚴格限定為官方 ISO 639-3 registry URL 的 opener permission；不開放 shell、HTTP 或 broad filesystem plugin。Rust filesystem 操作限制在 active project canonical path。
+- Tauri main window 僅有 open/save dialog、必要 core capability，以及 scope 嚴格限定為官方 ISO 639-3、Unicode ISO 15924、Overleaf project／compiler help URL 的 opener permission；不開放 shell、HTTP 或 broad filesystem plugin。Project database 操作限制在 active canonical project；export 只操作使用者經 dialog 選定的目的地。
 
 ## Command interface
 
@@ -40,9 +40,13 @@ create_entry() -> LexicalEntry
 save_entry(aggregate, expectedRevision) -> LexicalEntry
 delete_entry(id, expectedRevision) -> DeletedEntry
 restore_entry(id) -> LexicalEntry
+save_export_settings(settings) -> ExportSettingsV1
+preview_export(kind) -> ExportPreview
+export_project(request) -> ExportResult
+detect_xelatex() -> TexEngineStatus
 ```
 
-Errors 使用 `{ code, message, details? }`，其中 code 至少區分 invalid_project、project_locked、unsupported_schema、validation、not_found、revision_conflict、database、filesystem。UI 只顯示依 code 本地化的安全訊息；debug detail 保留給 log。
+Errors 使用 `{ code, message, details? }`，其中 export 另穩定區分 `export_validation`、`export_stale`、`export_filesystem`、`latex_compile`、`latex_timeout`。UI 顯示依 code 本地化的安全訊息；compile failure/timeout 的 detail 指向保留的 diagnostic log。
 
 `save_entry` 接收 forms、senses、examples、example forms 與 relations 的完整 aggregate，在單一 transaction 內以 replace-diff strategy 寫入。`revision` 使用 optimistic concurrency 防止較舊 autosave 覆蓋新資料。
 
@@ -53,6 +57,8 @@ Errors 使用 `{ code, message, details? }`，其中 code 至少區分 invalid_p
 核心 tables：
 
 - `projects`：identity、name、ISO 639-3 language metadata、timestamps。
+- `projects.analysis_language`：nullable `zh-TW`／`en`；舊專案 migration 後仍為 null。
+- `export_settings`：project-owned versioned JSON profile；v0.2 固定 version 1。
 - `writing_systems`：project、name、type、script/language tags、display role、sort order、font。
 - `metadata_options`：project-owned POS／semantic-domain reusable values 與 sort order。
 - `lexical_entries`：project、notes、revision、timestamps、soft-delete timestamp。
@@ -87,7 +93,19 @@ Frontend adapter 對 Rust unit response 接受 Tauri JSON `null`，再映射為 
 
 Entry forms 在 frontend 依 writing-system settings 自動補齊並固定排序；example 先建立 primary form，再允許加入尚未使用的 writing system。Phonemic／phonetic delimiter 是 presentation concern，不寫回 lexical text。Document-level input policy 透過既有及動態 controls 統一關閉 autocorrect、autocapitalize、autocomplete 與 spellcheck。
 
-Migration 2 新增 `metadata_options`。舊 schema 開啟時仍遵守先建立一致性 SQLite backup、再於 transaction 套用 migration 的規則。
+Migration 2 新增 `metadata_options`。Migration 3 新增 `projects.analysis_language` 與 `export_settings`。舊 schema 開啟時仍遵守先建立一致性 SQLite backup、再於 transaction 套用 migration 的規則。
+
+## Export architecture
+
+`ProjectSession` 建立只含 live entries 的完整 `ExportSnapshot`。Preview 以 snapshot + format 的 SHA-256 token 綁定資料；真正匯出前重新建立 snapshot，token 不同即回傳 `export_stale`。React 不讀 SQL 或 filesystem，所有 DTO 由 `src/types/domain.ts` 的 Zod schema 驗證。
+
+CSV renderer 固定 rngagi-corpus v0.3 九欄。ICU4X 依 profile language tag 排 primary form，entry UUID 與 sense order 是 deterministic tie-breakers。Writer 使用 UTF-8、無 BOM、CRLF 及 RFC 4180 quoting。輸出先寫同層 temporary sibling；Unix 使用 replace rename，Windows 使用 `MoveFileExW` 的 replace/write-through flags，避免留下半成品。
+
+LaTeX renderer 從零建立通用 XeLaTeX source，不複製 `docs/main.tex` 的授權巨集。所有 user text 經集中 escaping；writing-system font macros 使用純字母 control sequence，Hant analysis text 有 Noto/Source Han fallback。Reverse index 由 Rust 排序並直接產生 `hyperlink`／`pageref`，不使用 makeindex。
+
+ZIP 僅打包 `main.tex`、`entries.tex`、`reverse-index.tex`、`.latexmkrc` 與 bilingual `README.md`。PDF runner 從 PATH、macOS TeX path 與 Windows 常見路徑找 XeLaTeX，把 sources 複製到 temporary build directory，兩次執行 `-no-shell-escape -interaction=nonstopmode -halt-on-error -file-line-error`，每次最多 120 秒。成功只複製 PDF；失敗/timeout 保留 source project 與 `diagnostic.log`。
+
+CSV 的外部相容契約見 `docs/corpus-csv-contract.md`。目前沒有跨 repository 自動 contract test；`rngagi-corpus` 版本變更必須人工重驗與更新 golden fixture。
 
 ## Frontend structure
 
@@ -98,6 +116,7 @@ src/
 ├── features/projects/
 ├── features/settings/
 ├── features/entries/
+├── features/export/
 ├── i18n/
 ├── lib/
 └── types/
@@ -110,4 +129,4 @@ React Hook Form 管理 entry aggregate draft，Zod 負責 frontend validation。
 - Rust integration tests 透過 project/database module interface 使用 temporary project 與真實 SQLite。
 - Vitest + React Testing Library 測互動、autosave、translations、validation 與 nested editors。
 - WebdriverIO Tauri service 執行主要 desktop workflow smoke test。
-- GitHub Actions 在 Windows x64、macOS arm64/x64 執行 checks、tests、build 與 unsigned bundle artifacts。
+- GitHub Actions 在 Windows x64 與 macOS Apple Silicon 執行 checks、tests、build，並上傳 unsigned installer/bundle artifacts；不建立 macOS Intel 產物。

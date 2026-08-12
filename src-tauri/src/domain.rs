@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -7,9 +9,166 @@ pub struct Project {
     pub name: String,
     pub language_name: Option<String>,
     pub language_code: Option<String>,
+    pub analysis_language: Option<String>,
     pub description: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum CorpusPartOfSpeech {
+    Noun,
+    Verb,
+    Adjective,
+    Adverb,
+    Pronoun,
+    Particle,
+    Other,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CorpusExportSettings {
+    pub part_of_speech_mappings: BTreeMap<String, CorpusPartOfSpeech>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum SectionMode {
+    Auto,
+    FirstGrapheme,
+    None,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum ReverseIndexMode {
+    Gloss,
+    None,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum FontPreset {
+    Auto,
+    CharisSil,
+    NotoSerif,
+    NotoSerifCjkTc,
+    NotoSerifTibetan,
+    NotoSerifThai,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct LatexExportSettings {
+    pub title: String,
+    pub author: String,
+    pub headword_writing_system_id: String,
+    pub pronunciation_writing_system_id: Option<String>,
+    pub example_writing_system_id: String,
+    pub collation_language_tag: Option<String>,
+    pub section_mode: SectionMode,
+    pub reverse_index: ReverseIndexMode,
+    pub font_presets: BTreeMap<String, FontPreset>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportSettingsV1 {
+    pub version: u8,
+    pub corpus: CorpusExportSettings,
+    pub latex: LatexExportSettings,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum ExportKind {
+    CorpusCsv,
+    Latex,
+    Pdf,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum ExportIssueSeverity {
+    Error,
+    Warning,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportIssue {
+    pub severity: ExportIssueSeverity,
+    pub code: String,
+    pub entry_id: Option<String>,
+    pub sense_id: Option<String>,
+    pub field: Option<String>,
+    pub details: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct OmittedExportData {
+    pub examples: usize,
+    pub example_forms: usize,
+    pub base_relations: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportPreview {
+    pub snapshot_token: String,
+    pub row_count: usize,
+    pub issues: Vec<ExportIssue>,
+    pub omitted: OmittedExportData,
+}
+
+impl ExportPreview {
+    #[must_use]
+    pub fn has_errors(&self) -> bool {
+        self.issues
+            .iter()
+            .any(|issue| issue.severity == ExportIssueSeverity::Error)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportProjectRequest {
+    pub kind: ExportKind,
+    pub destination: String,
+    pub snapshot_token: String,
+    pub overwrite: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum PdfStatus {
+    NotRequested,
+    Created,
+    XeLatexMissing,
+    Failed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportResult {
+    pub csv_path: Option<String>,
+    pub latex_directory: Option<String>,
+    pub zip_path: Option<String>,
+    pub pdf_path: Option<String>,
+    pub pdf_status: PdfStatus,
+    pub row_count: usize,
+    pub issues: Vec<ExportIssue>,
+    pub diagnostic_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct TexEngineStatus {
+    pub available: bool,
+    pub path: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -113,6 +272,7 @@ pub struct ProjectSnapshot {
     pub writing_systems: Vec<WritingSystem>,
     pub part_of_speech_options: Vec<String>,
     pub semantic_domain_options: Vec<String>,
+    pub export_settings: ExportSettingsV1,
     pub entries: Vec<EntrySummary>,
 }
 
@@ -131,6 +291,7 @@ pub struct UpdateProjectSettingsRequest {
     pub name: String,
     pub language_name: Option<String>,
     pub language_code: Option<String>,
+    pub analysis_language: Option<String>,
     pub description: Option<String>,
     pub writing_systems: Vec<WritingSystem>,
     pub part_of_speech_options: Vec<String>,

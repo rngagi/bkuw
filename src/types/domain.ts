@@ -85,11 +85,72 @@ export const entrySummarySchema = z.object({
   revision: z.number(),
 });
 
+export const corpusPartOfSpeechSchema = z.enum([
+  "noun", "verb", "adjective", "adverb", "pronoun", "particle", "other",
+]);
+
+export const fontPresetSchema = z.enum([
+  "auto", "charisSil", "notoSerif", "notoSerifCjkTc", "notoSerifTibetan", "notoSerifThai",
+]);
+
+export const exportSettingsSchema = z.object({
+  version: z.literal(1),
+  corpus: z.object({
+    partOfSpeechMappings: z.record(z.string(), corpusPartOfSpeechSchema),
+  }),
+  latex: z.object({
+    title: z.string(),
+    author: z.string(),
+    headwordWritingSystemId: z.string(),
+    pronunciationWritingSystemId: nullableText,
+    exampleWritingSystemId: z.string(),
+    collationLanguageTag: nullableText,
+    sectionMode: z.enum(["auto", "firstGrapheme", "none"]),
+    reverseIndex: z.enum(["gloss", "none"]),
+    fontPresets: z.record(z.string(), fontPresetSchema),
+  }),
+});
+
+export const exportKindSchema = z.enum(["corpusCsv", "latex", "pdf"]);
+export const exportIssueSchema = z.object({
+  severity: z.enum(["error", "warning"]),
+  code: z.string(),
+  entryId: nullableText,
+  senseId: nullableText,
+  field: nullableText,
+  details: nullableText,
+});
+export const exportPreviewSchema = z.object({
+  snapshotToken: z.string(),
+  rowCount: z.number(),
+  issues: z.array(exportIssueSchema),
+  omitted: z.object({
+    examples: z.number(),
+    exampleForms: z.number(),
+    baseRelations: z.number(),
+  }),
+});
+export const exportResultSchema = z.object({
+  csvPath: nullableText,
+  latexDirectory: nullableText,
+  zipPath: nullableText,
+  pdfPath: nullableText,
+  pdfStatus: z.enum(["notRequested", "created", "xeLatexMissing", "failed"]),
+  rowCount: z.number(),
+  issues: z.array(exportIssueSchema),
+  diagnosticPath: nullableText,
+});
+export const texEngineStatusSchema = z.object({
+  available: z.boolean(),
+  path: nullableText,
+});
+
 export const projectSchema = z.object({
   id: z.string(),
   name: z.string(),
   languageName: nullableText,
   languageCode: nullableText,
+  analysisLanguage: z.enum(["zh-TW", "en"]).nullable(),
   description: nullableText,
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -101,6 +162,7 @@ export const projectSnapshotSchema = z.object({
   writingSystems: z.array(writingSystemSchema),
   partOfSpeechOptions: z.array(z.string()),
   semanticDomainOptions: z.array(z.string()),
+  exportSettings: exportSettingsSchema,
   entries: z.array(entrySummarySchema),
 });
 
@@ -119,6 +181,13 @@ export type LexicalEntry = z.infer<typeof lexicalEntrySchema>;
 export type EntrySummary = z.infer<typeof entrySummarySchema>;
 export type Project = z.infer<typeof projectSchema>;
 export type ProjectSnapshot = z.infer<typeof projectSnapshotSchema>;
+export type CorpusPartOfSpeech = z.infer<typeof corpusPartOfSpeechSchema>;
+export type ExportSettings = z.infer<typeof exportSettingsSchema>;
+export type ExportKind = z.infer<typeof exportKindSchema>;
+export type ExportIssue = z.infer<typeof exportIssueSchema>;
+export type ExportPreview = z.infer<typeof exportPreviewSchema>;
+export type ExportResult = z.infer<typeof exportResultSchema>;
+export type TexEngineStatus = z.infer<typeof texEngineStatusSchema>;
 
 export function createId(): string {
   return crypto.randomUUID();
