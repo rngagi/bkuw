@@ -6,6 +6,7 @@ export const config: Options.Testrunner = {
   maxInstances: 1,
   capabilities: [{
     browserName: "tauri",
+    timeouts: { script: 300_000 },
     "tauri:options": {
       application: "./src-tauri/target/debug/bkuw",
     },
