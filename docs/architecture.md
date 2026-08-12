@@ -85,6 +85,7 @@ Owned children 使用 `ON DELETE CASCADE`。Relation target 被永久移除時�
 
 - 有效 draft 變更經 debounce 後保存；同一 entry 的 saves 排序執行。
 - DOM composition events 是 autosave boundary：`compositionstart` 清除 debounce timer，active composition 期間不得送出 save 或用 backend snapshot reset form，`compositionend` 後才重新排程。
+- Autosave success 不以 `reset(savedAggregate)` reconcile。Editor 只原地同步 Rust 管理的 `revision`／`updatedAt` 並更新 committed snapshot，避免 `useFieldArray` 重新產生 keys、重建巢狀 controls 與移走 focus／selection；真正切換或重新載入 entry 時才 reset aggregate。
 - `Ctrl/Cmd+S`、entry/project 切換與 window close 會先 flush。
 - Entry aggregate transaction 回傳成功時立即更新 inline live status，不等待非關鍵的 entry-list refresh；list refresh 在背景執行。Failure 保留 draft 與 dirty state，顯示 retryable localized error 與可展開 backend detail。
 - Entry delete 先經 confirmation，之後設定 `deleted_at` 並從一般 query 排除；UI 提供 immediate Undo。完整 Trash manager 後續再做。

@@ -84,7 +84,7 @@
 - [x] 建立 Chinese、Tibetan、Latin-script fixtures 與可選 demo project generator。
   - 完成條件：一般新 project 保持空白；fixtures 覆蓋 dynamic writing systems 與 Unicode examples。
   - 驗證：fixture-driven integration tests。
-- [ ] 建立 Windows x64／macOS Apple Silicon CI 與未簽名 bundle artifacts。
+- [x] 建立 Windows x64／macOS Apple Silicon CI 與未簽名 bundle artifacts。
   - 完成條件：Windows x64、macOS Apple Silicon 執行 checks/tests/build；產出 installer/bundles，不發布 release、不建置 macOS Intel。
   - 驗證：GitHub Actions workflow 成功。
 - [x] 完成 Milestone 1 本機最終驗收。
@@ -128,6 +128,14 @@
 - [x] 擴充 desktop E2E 與 portable-template CI。
   - 完成條件：desktop fixture 匯出 exact CSV、LaTeX/ZIP；有 XeLaTeX 的 CI job 編譯真實 template；人工 Overleaf upload walkthrough 記錄成功。
   - 驗證：`pnpm test:e2e:build && pnpm test:e2e`、本機 real-XeLaTeX ignored test；portable-template GitHub Actions job 已建立，遠端結果待 push 後確認。Overleaf upload 屬人工驗收，依雙語指南執行且不得自動上傳資料。
-- [ ] 完成 v0.2 最終驗收並統一升版。
+- [x] 完成 v0.2 最終驗收並統一升版。
   - 完成條件：package、Cargo、Tauri 都是 `0.2.0`；Windows x64、macOS Apple Silicon checks/build/bundle 成功。
   - 驗證：`pnpm check && pnpm test && pnpm test:rust && pnpm test:e2e:build && pnpm test:e2e && pnpm tauri build --no-bundle`，加上 GitHub Actions。
+
+## 10. v0.2.1 autosave focus hotfix
+
+- [x] Autosave 完成後維持目前巢狀輸入欄位、focus、selection 與游標位置。
+  - 完成條件：autosave success 不 reset entry aggregate；只同步 revision/timestamp，背景 entry-list refresh 不把 saved entry prop 灌回 editor。
+  - 驗證：`EntryEditor` autosave focus regression test、App workflow tests、`pnpm check && pnpm test && pnpm test:rust`。
+- [x] package、Cargo、Cargo lock 與 Tauri app version 一致升為 `0.2.1`。
+  - 驗證：版本搜尋與 Tauri build。

@@ -104,7 +104,6 @@ function App() {
 
   async function saveEntry(draft: LexicalEntry) {
     const saved = await backend.saveEntry(draft);
-    setEntry(saved);
     void refreshEntries(search);
     return saved;
   }

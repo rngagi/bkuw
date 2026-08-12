@@ -58,7 +58,7 @@ Phonemic text 儲存時不包含 delimiter、顯示時加 `/…/`；phonetic tex
 
 所有 text inputs 與 textareas 關閉作業系統 autocorrect、autocapitalize 與 spellcheck，避免 macOS 等平台改寫語料。新增 entry 後 focus primary form；新增 example 後立即出現 primary form。
 
-有效變更 debounce 後自動保存，toolbar 以 inline `尚未儲存 → 儲存中 → 已儲存` 呈現，不使用成功彈窗。中文、日文等 IME 正在組字時必須暫停 debounce save 與任何會 reset 表單的同步，等 `compositionend` 後再保存，避免注音候選字或輸入焦點跳開。Entry transaction 成功後立即顯示已儲存；背景更新 entry list 不得延遲狀態。失敗時保留 dirty draft，顯示本地化 error code 的具體階段，並可展開 backend detail。切換 entry、關閉 project 或關閉 window 前必須等待 pending save 完成。
+有效變更 debounce 後自動保存，toolbar 以 inline `尚未儲存 → 儲存中 → 已儲存` 呈現，不使用成功彈窗。中文、日文等 IME 正在組字時必須暫停 debounce save 與任何會 reset 表單的同步，等 `compositionend` 後再保存。Autosave 成功後不得 reset 或重建 entry form aggregate；使用者必須留在同一個 input／textarea，維持 focus、selection 與游標位置，才能不間斷繼續輸入。Entry transaction 成功後立即顯示已儲存；背景更新 entry list 不得延遲狀態。失敗時保留 dirty draft，顯示本地化 error code 的具體階段，並可展開 backend detail。切換 entry、關閉 project 或關閉 window 前必須等待 pending save 完成。
 
 刪除 entry 前顯示二次確認；確認後 soft delete 並提供 immediate Undo。
 

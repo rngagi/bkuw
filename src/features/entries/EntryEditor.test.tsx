@@ -115,6 +115,46 @@ describe("EntryEditor", () => {
     }
   });
 
+  it("keeps the same field focused with its cursor after autosave completes", async () => {
+    vi.useFakeTimers();
+    try {
+      const entry = emptyEntry();
+      entry.senses = [{
+        id: "sense-1",
+        gloss: "",
+        definition: null,
+        partOfSpeech: null,
+        semanticDomain: null,
+        sortOrder: 0,
+        examples: [],
+      }];
+      const onSave = vi.fn(async (draft: LexicalEntry) => ({
+        ...draft,
+        revision: draft.revision + 1,
+        updatedAt: "2026-01-01T00:00:01Z",
+      }));
+      render(<EntryEditor {...metadataProps} entry={entry} writingSystems={writingSystems} entryOptions={[]} onSave={onSave} onDelete={vi.fn()} onNavigate={vi.fn()} />);
+      const gloss = screen.getByLabelText("Gloss") as HTMLInputElement;
+      gloss.focus();
+      fireEvent.change(gloss, { target: { value: "cross river" } });
+      gloss.setSelectionRange(5, 5);
+
+      await act(async () => {
+        vi.advanceTimersByTime(701);
+        await Promise.resolve();
+      });
+
+      expect(onSave).toHaveBeenCalledTimes(1);
+      expect(screen.getByLabelText("Gloss")).toBe(gloss);
+      expect(gloss).toHaveFocus();
+      expect(gloss.selectionStart).toBe(5);
+      expect(gloss.selectionEnd).toBe(5);
+      expect(screen.getByRole("status")).toHaveTextContent("Saved");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("creates an example with the primary form and limits forms to configured systems", () => {
     render(<EntryEditor {...metadataProps} entry={emptyEntry()} writingSystems={writingSystems} entryOptions={[]} onSave={vi.fn()} onDelete={vi.fn()} onNavigate={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "Add sense" }));

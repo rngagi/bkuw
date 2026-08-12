@@ -141,7 +141,7 @@ function RelationEditor({ control, register, setValue, index, entryId, entryOpti
 
 export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEditor({ entry, writingSystems, partOfSpeechOptions, semanticDomainOptions, entryOptions, onSave, onDelete, onNavigate }, ref) {
   const { t } = useTranslation();
-  const { control, register, reset, getValues, setValue, watch, formState } = useForm<LexicalEntry>({ defaultValues: entry });
+  const { control, register, reset, getValues, setValue, watch } = useForm<LexicalEntry>({ defaultValues: entry });
   const senses = useFieldArray({ control, name: "senses" });
   const relations = useFieldArray({ control, name: "relations" });
   const watchedForms = useWatch({ control, name: "forms" }) ?? [];
@@ -179,7 +179,7 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
       if (propagateError) return (await saveNowRef.current(true)) ?? saved;
       return saved;
     }
-    if (!dirty.current && !formState.isDirty && status !== "error") return latestCommitted.current;
+    if (!dirty.current && status !== "error") return latestCommitted.current;
 
     const operation = (async (): Promise<LexicalEntry | undefined> => {
       setStatus("saving");
@@ -193,7 +193,8 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
         const current = getValues();
         if (JSON.stringify(normalizeAggregateOrder(current)) === serialized && !composing.current) {
           applyingSavedValue.current = true;
-          reset(saved);
+          setValue("revision", saved.revision, { shouldDirty: false });
+          setValue("updatedAt", saved.updatedAt, { shouldDirty: false });
           applyingSavedValue.current = false;
           dirty.current = false;
           setStatus("saved");
@@ -224,7 +225,7 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
     })();
     inFlight.current = operation;
     return operation;
-  }, [formState.isDirty, getValues, onSave, reset, setValue, status]);
+  }, [getValues, onSave, setValue, status]);
 
   useEffect(() => { saveNowRef.current = saveNow; }, [saveNow]);
   useEffect(() => {
