@@ -338,7 +338,7 @@ fn compile_xelatex(
 }
 
 fn xelatex_configuration() -> (Option<PathBuf>, Duration) {
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     if let Some(configuration) = TEST_XELATEX_OVERRIDE
         .lock()
         .expect("test XeLaTeX override")
@@ -378,21 +378,21 @@ fn find_xelatex() -> Option<PathBuf> {
     candidates.into_iter().find(|candidate| candidate.is_file())
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[derive(Clone)]
 struct TestXeLatexConfiguration {
     path: Option<PathBuf>,
     timeout: Duration,
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 static TEST_XELATEX_OVERRIDE: std::sync::Mutex<Option<TestXeLatexConfiguration>> =
     std::sync::Mutex::new(None);
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 static TEST_XELATEX_SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub(crate) fn with_test_xelatex<R>(
     path: Option<PathBuf>,
     timeout: Duration,

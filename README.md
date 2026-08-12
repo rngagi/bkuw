@@ -2,7 +2,7 @@
 
 `bkuw` 是一套為語言田野工作設計的 local-first 詞彙資料庫。它以 lexical entry 為核心，支援動態 writing systems、多義項、多表記例句、root/base 關係、Unicode/IPA 搜尋，以及 corpus CSV、XeLaTeX、Overleaf ZIP 與 PDF 匯出。
 
-v0.2 export milestone 已完成本機 Rust／frontend 與真實 XeLaTeX 驗證；Windows x64 與 macOS Apple Silicon 的 GitHub Actions 結果仍須在 push 後確認。介面支援英文與台灣繁中。macOS Intel 不在支援與建置範圍內。
+v0.2 export milestone 已完成本機 Rust／frontend 與真實 XeLaTeX 驗證。GitHub Actions 以 Windows x64 與 macOS Apple Silicon 建置安裝包；介面支援英文與台灣繁中。macOS Intel 不在支援與建置範圍內。
 
 ## 技術組成
 

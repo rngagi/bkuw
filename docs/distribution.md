@@ -15,6 +15,39 @@ Artifacts 保存 14 天。這些檔案不會自動建立公開 GitHub Release，
 
 ## macOS Apple Silicon
 
+### DMG 輸出
+
+可以直接輸出 DMG。Tauri 在 macOS runner 執行下列命令時會同時建立 `.app` 與 `.dmg`：
+
+```bash
+pnpm tauri build --target aarch64-apple-darwin --bundles app,dmg
+```
+
+目前 GitHub Actions 已使用這個設定，成功後會將 DMG 放進 `bkuw-macos-apple-silicon` artifact。只需要 DMG 時也可執行 `pnpm tauri build --bundles dmg`。詳細格式與視窗自訂方式見 [Tauri DMG 官方文件](https://v2.tauri.app/distribute/dmg/)。
+
+### Unsigned build 顯示「已損毀」
+
+正式解法仍是 Developer ID signing、notarization 與 stapling。對尚未簽章、但已確認下載自本 repository Actions artifact 且未遭竄改的測試版，可依序處理：
+
+1. 先嘗試開啟一次，再到「系統設定 → 隱私權與安全性」使用「仍要打開／Open Anyway」。這是 [Apple 建議的 per-app override](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac)。
+2. 若仍顯示 `bkuw.app is damaged and can't be opened`，先確認 quarantine attribute：
+
+   ```bash
+   xattr -l /Applications/bkuw.app
+   ```
+
+3. 只有在確認來源可信時，才針對這個 app 移除 `com.apple.quarantine`：
+
+   ```bash
+   sudo xattr -dr com.apple.quarantine /Applications/bkuw.app
+   ```
+
+   `-d` 會刪除指定 attribute，`-r` 會處理整個 app bundle。Apple Developer Forums 也記錄了同一種 [`xattr -r -d com.apple.quarantine` 用法](https://developer.apple.com/forums/thread/727651)。若檔案不在 `/Applications`，必須改成實際的 `.app` 路徑。
+
+不要使用 `spctl --master-disable` 全域關閉 Gatekeeper。若來源不明、簽章檢查異常，或重新下載後仍失敗，應刪除該檔案，而不是移除 quarantine；Apple 說明這類訊息也可能代表 app 確實遭修改或損壞：[Safely open apps on your Mac](https://support.apple.com/102445)。
+
+### 正式簽章
+
 正式站外散布建議使用 Apple Developer Program 的 **Developer ID Application** certificate，並完成 notarization：
 
 1. 從 Keychain 匯出含 private key 的 `.p12`，以 base64 保存為 `APPLE_CERTIFICATE` secret。
