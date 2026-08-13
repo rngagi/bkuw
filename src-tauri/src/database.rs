@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     fs::{self, File, OpenOptions},
     path::{Path, PathBuf},
     time::Duration,
@@ -465,6 +466,7 @@ impl ProjectSession {
         crate::export::preview(&self.export_snapshot()?, kind, None)
     }
 
+    #[cfg(test)]
     pub fn preview_export_with_fonts(
         &self,
         kind: crate::domain::ExportKind,
@@ -481,6 +483,7 @@ impl ProjectSession {
         crate::export::run(&self.export_snapshot()?, request, None)
     }
 
+    #[cfg(test)]
     pub fn export_project_with_fonts(
         &self,
         request: crate::domain::ExportProjectRequest,
@@ -489,17 +492,25 @@ impl ProjectSession {
         crate::export::run(&self.export_snapshot()?, request, Some(fonts))
     }
 
-    fn export_snapshot(&self) -> AppResult<crate::export::ExportSnapshot> {
+    pub(crate) fn export_snapshot(&self) -> AppResult<crate::export::ExportSnapshot> {
         let snapshot = self.snapshot()?;
         let sections = snapshot
             .entries
             .iter()
             .map(|entry| (entry.id.clone(), entry.section_label.clone()))
             .collect();
+        let mut live_entries = load_live_entries(&self.connection)?;
         let entries = snapshot
             .entries
             .iter()
-            .map(|entry| load_entry(&self.connection, &entry.id, false))
+            .map(|entry| {
+                live_entries.remove(&entry.id).ok_or_else(|| {
+                    AppError::new(
+                        "database",
+                        "An entry disappeared while preparing the export.",
+                    )
+                })
+            })
             .collect::<AppResult<Vec<_>>>()?;
         Ok(crate::export::ExportSnapshot {
             project: snapshot.project,
@@ -509,6 +520,199 @@ impl ProjectSession {
             entries,
         })
     }
+}
+
+fn load_live_entries(connection: &Connection) -> AppResult<HashMap<String, LexicalEntry>> {
+    let mut forms_by_entry: HashMap<String, Vec<EntryForm>> = HashMap::new();
+    let mut statement = connection.prepare(
+        "SELECT f.entry_id, f.id, f.writing_system_id, f.text, f.variant_label,
+                f.dialect, f.status, f.notes, f.sort_order
+         FROM entry_forms f
+         JOIN lexical_entries e ON e.id = f.entry_id
+         WHERE e.deleted_at IS NULL
+         ORDER BY f.entry_id, f.sort_order, f.id",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            EntryForm {
+                id: row.get(1)?,
+                writing_system_id: row.get(2)?,
+                text: row.get(3)?,
+                variant_label: row.get(4)?,
+                dialect: row.get(5)?,
+                status: row.get(6)?,
+                notes: row.get(7)?,
+                sort_order: row.get(8)?,
+            },
+        ))
+    })?;
+    for row in rows {
+        let (entry_id, form) = row?;
+        forms_by_entry.entry(entry_id).or_default().push(form);
+    }
+    drop(statement);
+
+    let mut forms_by_example: HashMap<String, Vec<ExampleForm>> = HashMap::new();
+    let mut statement = connection.prepare(
+        "SELECT f.example_id, f.id, f.writing_system_id, f.text, f.sort_order
+         FROM example_forms f
+         JOIN examples x ON x.id = f.example_id
+         JOIN senses s ON s.id = x.sense_id
+         JOIN lexical_entries e ON e.id = s.entry_id
+         WHERE e.deleted_at IS NULL
+         ORDER BY f.example_id, f.sort_order, f.id",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            ExampleForm {
+                id: row.get(1)?,
+                writing_system_id: row.get(2)?,
+                text: row.get(3)?,
+                sort_order: row.get(4)?,
+            },
+        ))
+    })?;
+    for row in rows {
+        let (example_id, form) = row?;
+        forms_by_example.entry(example_id).or_default().push(form);
+    }
+    drop(statement);
+
+    let mut examples_by_sense: HashMap<String, Vec<Example>> = HashMap::new();
+    let mut statement = connection.prepare(
+        "SELECT x.sense_id, x.id, x.translation, x.notes, x.sort_order
+         FROM examples x
+         JOIN senses s ON s.id = x.sense_id
+         JOIN lexical_entries e ON e.id = s.entry_id
+         WHERE e.deleted_at IS NULL
+         ORDER BY x.sense_id, x.sort_order, x.id",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, Option<String>>(2)?,
+            row.get::<_, Option<String>>(3)?,
+            row.get::<_, i64>(4)?,
+        ))
+    })?;
+    for row in rows {
+        let (sense_id, id, translation, notes, sort_order) = row?;
+        let forms = forms_by_example.remove(&id).unwrap_or_default();
+        examples_by_sense
+            .entry(sense_id)
+            .or_default()
+            .push(Example {
+                id,
+                translation,
+                notes,
+                sort_order,
+                forms,
+            });
+    }
+    drop(statement);
+
+    let mut senses_by_entry: HashMap<String, Vec<Sense>> = HashMap::new();
+    let mut statement = connection.prepare(
+        "SELECT s.entry_id, s.id, s.gloss, s.definition, s.part_of_speech,
+                s.semantic_domain, s.sort_order
+         FROM senses s
+         JOIN lexical_entries e ON e.id = s.entry_id
+         WHERE e.deleted_at IS NULL
+         ORDER BY s.entry_id, s.sort_order, s.id",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, Option<String>>(2)?,
+            row.get::<_, Option<String>>(3)?,
+            row.get::<_, Option<String>>(4)?,
+            row.get::<_, Option<String>>(5)?,
+            row.get::<_, i64>(6)?,
+        ))
+    })?;
+    for row in rows {
+        let (entry_id, id, gloss, definition, part_of_speech, semantic_domain, sort_order) = row?;
+        let examples = examples_by_sense.remove(&id).unwrap_or_default();
+        senses_by_entry.entry(entry_id).or_default().push(Sense {
+            id,
+            gloss,
+            definition,
+            part_of_speech,
+            semantic_domain,
+            sort_order,
+            examples,
+        });
+    }
+    drop(statement);
+
+    let mut relations_by_entry: HashMap<String, Vec<EntryRelation>> = HashMap::new();
+    let mut statement = connection.prepare(
+        "SELECT r.source_entry_id, r.id, r.target_entry_id, r.relation_type,
+                r.fallback_text, r.notes, r.sort_order
+         FROM entry_relations r
+         JOIN lexical_entries e ON e.id = r.source_entry_id
+         WHERE e.deleted_at IS NULL
+         ORDER BY r.source_entry_id, r.sort_order, r.id",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            EntryRelation {
+                id: row.get(1)?,
+                target_entry_id: row.get(2)?,
+                relation_type: row.get(3)?,
+                fallback_text: row.get(4)?,
+                notes: row.get(5)?,
+                sort_order: row.get(6)?,
+            },
+        ))
+    })?;
+    for row in rows {
+        let (entry_id, relation) = row?;
+        relations_by_entry
+            .entry(entry_id)
+            .or_default()
+            .push(relation);
+    }
+    drop(statement);
+
+    let mut entries = HashMap::new();
+    let mut statement = connection.prepare(
+        "SELECT id, notes, section_override, revision, created_at, updated_at
+         FROM lexical_entries WHERE deleted_at IS NULL",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, Option<String>>(1)?,
+            row.get::<_, Option<String>>(2)?,
+            row.get::<_, i64>(3)?,
+            row.get::<_, String>(4)?,
+            row.get::<_, String>(5)?,
+        ))
+    })?;
+    for row in rows {
+        let (id, notes, section_override, revision, created_at, updated_at) = row?;
+        entries.insert(
+            id.clone(),
+            LexicalEntry {
+                forms: forms_by_entry.remove(&id).unwrap_or_default(),
+                senses: senses_by_entry.remove(&id).unwrap_or_default(),
+                relations: relations_by_entry.remove(&id).unwrap_or_default(),
+                id,
+                notes,
+                section_override,
+                revision,
+                created_at,
+                updated_at,
+            },
+        );
+    }
+    Ok(entries)
 }
 
 fn connect(database_path: &Path) -> AppResult<Connection> {
@@ -665,7 +869,8 @@ fn default_export_settings(project: &Project, systems: &[WritingSystem]) -> Expo
         .iter()
         .find(|system| system.kind == "phonetic")
         .or_else(|| systems.iter().find(|system| system.kind == "phonemic"))
-        .map(|system| system.id.clone());
+        .map(|system| system.id.clone())
+        .filter(|id| id != &primary_id);
     let language_tag = primary.and_then(|system| system.language_tag.clone());
     ExportSettingsV1 {
         version: 1,
@@ -740,7 +945,15 @@ fn normalize_export_settings(
         .is_some_and(|id| !ids.contains(id))
     {
         settings.latex.pronunciation_writing_system_id =
-            defaults.latex.pronunciation_writing_system_id;
+            defaults.latex.pronunciation_writing_system_id.clone();
+    }
+    if settings.latex.pronunciation_writing_system_id.as_deref()
+        == Some(settings.latex.headword_writing_system_id.as_str())
+    {
+        settings.latex.pronunciation_writing_system_id = defaults
+            .latex
+            .pronunciation_writing_system_id
+            .filter(|id| id != &settings.latex.headword_writing_system_id);
     }
     settings
         .latex
@@ -794,6 +1007,14 @@ fn validate_export_settings(
                 "Export settings reference a missing writing system.",
             ));
         }
+    }
+    if settings.latex.pronunciation_writing_system_id.as_deref()
+        == Some(settings.latex.headword_writing_system_id.as_str())
+    {
+        return Err(AppError::new(
+            "validation",
+            "Headword and pronunciation must use different writing systems.",
+        ));
     }
     Ok(())
 }
@@ -1459,6 +1680,25 @@ mod tests {
     }
 
     #[test]
+    fn manual_sort_items_use_the_frontend_camel_case_contract() {
+        let item = ManualSortItem::Entry {
+            entry_id: "entry-1".into(),
+        };
+        let encoded = serde_json::to_value(&item).expect("serialize item");
+        assert_eq!(encoded["kind"], "entry");
+        assert_eq!(encoded["entryId"], "entry-1");
+        assert!(encoded.get("entry_id").is_none());
+        assert_eq!(
+            serde_json::from_value::<ManualSortItem>(serde_json::json!({
+                "kind": "entry",
+                "entryId": "entry-1",
+            }))
+            .expect("frontend payload"),
+            item,
+        );
+    }
+
+    #[test]
     fn custom_alphabet_sorts_multigraphs_and_supplies_section_labels() {
         let (_directory, mut session) = create_session();
         let snapshot = session.snapshot().expect("snapshot");
@@ -1841,6 +2081,8 @@ mod tests {
         assert_eq!(loaded.forms[0].text, "過");
         assert_eq!(loaded.forms[1].text, "guò");
         assert_eq!(loaded.senses[0].examples[0].forms[0].text, "他過河了。");
+        let export_snapshot = reopened.export_snapshot().expect("bulk export snapshot");
+        assert_eq!(export_snapshot.entries, vec![loaded]);
         let reopened_snapshot = reopened.snapshot().expect("reopened snapshot");
         assert_eq!(
             reopened_snapshot.part_of_speech_options,
@@ -2082,6 +2324,41 @@ mod tests {
                 .latex
                 .related_entries,
             RelatedEntriesMode::None,
+        );
+    }
+
+    #[test]
+    fn export_profile_keeps_headword_and_pronunciation_systems_distinct() {
+        let (_directory, mut session) = create_session();
+        let snapshot = session.snapshot().expect("snapshot");
+        let mut settings = snapshot.export_settings.clone();
+        settings.latex.pronunciation_writing_system_id =
+            Some(settings.latex.headword_writing_system_id.clone());
+        let error = session
+            .save_export_settings(settings.clone())
+            .expect_err("duplicate writing-system selection");
+        assert_eq!(error.code, "validation");
+
+        session
+            .connection
+            .execute(
+                "INSERT INTO export_settings(project_id, version, settings_json, updated_at)
+                 VALUES (?1, 1, ?2, ?3)",
+                rusqlite::params![
+                    snapshot.project.id,
+                    serde_json::to_string(&settings).expect("settings json"),
+                    super::now(),
+                ],
+            )
+            .expect("legacy duplicate profile");
+        assert_eq!(
+            session
+                .snapshot()
+                .expect("normalized profile")
+                .export_settings
+                .latex
+                .pronunciation_writing_system_id,
+            None,
         );
     }
 
@@ -2434,6 +2711,19 @@ mod tests {
         let (directory, mut session) = create_session();
         let mut snapshot = session.snapshot().expect("snapshot");
         snapshot.writing_systems[0].script_code = Some("Hant".into());
+        let ipa_id = super::new_id();
+        let mut writing_systems = snapshot.writing_systems.clone();
+        writing_systems.push(WritingSystem {
+            id: ipa_id.clone(),
+            name: "IPA".into(),
+            kind: "phonetic".into(),
+            script_code: Some("Latn".into()),
+            language_tag: None,
+            display_role: None,
+            sort_order: 1,
+            font_family: None,
+            notes: None,
+        });
         session
             .update_settings(UpdateProjectSettingsRequest {
                 name: snapshot.project.name.clone(),
@@ -2441,17 +2731,22 @@ mod tests {
                 language_code: snapshot.project.language_code.clone(),
                 analysis_language: Some("zh-TW".into()),
                 description: snapshot.project.description.clone(),
-                writing_systems: snapshot.writing_systems.clone(),
+                writing_systems,
                 part_of_speech_options: vec!["verb".into()],
                 semantic_domain_options: vec![],
             })
             .expect("Hant settings");
         let writing_system_id = snapshot.writing_systems[0].id.clone();
-        let mut settings = snapshot.export_settings;
+        let mut settings = session
+            .snapshot()
+            .expect("updated snapshot")
+            .export_settings;
         settings.latex.title = "Field #1 & notes".into();
         settings.latex.author = "A_B".into();
+        settings.latex.pronunciation_writing_system_id = Some(ipa_id.clone());
         session.save_export_settings(settings).expect("settings");
         let mut entry = session.create_entry().expect("entry");
+        entry.notes = Some("詞條備註".into());
         entry.forms.push(EntryForm {
             id: super::new_id(),
             writing_system_id: writing_system_id.clone(),
@@ -2461,6 +2756,16 @@ mod tests {
             status: None,
             notes: None,
             sort_order: 0,
+        });
+        entry.forms.push(EntryForm {
+            id: super::new_id(),
+            writing_system_id: ipa_id,
+            text: "kuo˥˩".into(),
+            variant_label: None,
+            dialect: None,
+            status: None,
+            notes: None,
+            sort_order: 1,
         });
         entry.senses.push(Sense {
             id: super::new_id(),
@@ -2491,7 +2796,7 @@ mod tests {
 
         let fonts = FontManager::seeded_for_tests(
             directory.path().join("font-cache"),
-            &["tex-gyre-termes", "noto-serif-cjk-tc"],
+            &["tex-gyre-termes", "noto-serif-cjk-tc", "charis-sil"],
         );
         let preview = session
             .preview_export_with_fonts(ExportKind::Latex, &fonts)
@@ -2525,6 +2830,14 @@ mod tests {
         let entries = std::fs::read_to_string(project.join("entries.tex")).expect("entries.tex");
         assert!(entries.contains("過\\_\\#\\%"));
         assert!(entries.contains("\\textbackslash{}test \\{value\\}"));
+        assert!(entries.contains("\\BkuwMeta{[註] 詞條備註}"));
+        assert!(entries.contains("kuo˥˩"));
+        assert!(!entries.contains("IPA:"));
+        assert!(!entries.contains("(他過河了。)"));
+        let entry_position = entries.find("\\BkuwEntry").expect("entry heading");
+        let note_position = entries.find("[註] 詞條備註").expect("entry note");
+        let sense_position = entries.find("\\BkuwSense").expect("sense");
+        assert!(entry_position < note_position && note_position < sense_position);
         let reverse = std::fs::read_to_string(project.join("reverse-index.tex")).expect("index");
         assert!(reverse.contains("\\pageref{entry:"));
 
@@ -2617,6 +2930,16 @@ mod tests {
                 notes: None,
                 sort_order: 0,
             });
+            if form == "mhako" {
+                entry.relations.push(EntryRelation {
+                    id: super::new_id(),
+                    target_entry_id: Some(root_id.clone()),
+                    relation_type: "base".into(),
+                    fallback_text: None,
+                    notes: None,
+                    sort_order: 1,
+                });
+            }
             session
                 .save_entry(SaveEntryRequest {
                     expected_revision: 0,
@@ -2668,6 +2991,7 @@ mod tests {
         assert!(related.contains("搭橋"));
         assert!(!related.contains("bahako"));
         assert!(entries.contains("詞根：hako"));
+        assert!(entries.contains("詞根：hako；詞基：hako"));
 
         let mut settings = session.snapshot().expect("snapshot").export_settings;
         settings.latex.related_entries = RelatedEntriesMode::Both;
@@ -2855,6 +3179,19 @@ mod tests {
         let (directory, mut session) = create_session();
         let mut snapshot = session.snapshot().expect("snapshot");
         snapshot.writing_systems[0].script_code = Some("Hant".into());
+        let ipa_id = super::new_id();
+        let mut writing_systems = snapshot.writing_systems.clone();
+        writing_systems.push(WritingSystem {
+            id: ipa_id.clone(),
+            name: "IPA".into(),
+            kind: "phonetic".into(),
+            script_code: Some("Latn".into()),
+            language_tag: None,
+            display_role: None,
+            sort_order: 1,
+            font_family: None,
+            notes: None,
+        });
         session
             .update_settings(UpdateProjectSettingsRequest {
                 name: snapshot.project.name.clone(),
@@ -2862,7 +3199,7 @@ mod tests {
                 language_code: snapshot.project.language_code.clone(),
                 analysis_language: Some("zh-TW".into()),
                 description: snapshot.project.description.clone(),
-                writing_systems: snapshot.writing_systems.clone(),
+                writing_systems,
                 part_of_speech_options: vec!["verb".into()],
                 semantic_domain_options: vec![],
             })
@@ -2870,6 +3207,7 @@ mod tests {
         let writing_system_id = snapshot.writing_systems[0].id.clone();
         let mut entry = session.create_entry().expect("entry");
         let root_id = entry.id.clone();
+        entry.notes = Some("詞條註解".into());
         entry.forms.push(EntryForm {
             id: super::new_id(),
             writing_system_id: writing_system_id.clone(),
@@ -2879,6 +3217,16 @@ mod tests {
             status: None,
             notes: None,
             sort_order: 0,
+        });
+        entry.forms.push(EntryForm {
+            id: super::new_id(),
+            writing_system_id: ipa_id.clone(),
+            text: "kuo˥˩".into(),
+            variant_label: None,
+            dialect: None,
+            status: None,
+            notes: None,
+            sort_order: 1,
         });
         entry.senses.push(Sense {
             id: super::new_id(),
@@ -2942,6 +3290,7 @@ mod tests {
             .expect("save related entry");
         let mut export_settings = session.snapshot().expect("snapshot").export_settings;
         export_settings.latex.related_entries = RelatedEntriesMode::Root;
+        export_settings.latex.pronunciation_writing_system_id = Some(ipa_id);
         session
             .save_export_settings(export_settings)
             .expect("related entries setting");
@@ -2952,6 +3301,7 @@ mod tests {
         fonts
             .install("noto-serif-cjk-tc")
             .expect("install Noto Serif CJK TC");
+        fonts.install("charis-sil").expect("install Charis SIL");
         let preview = session
             .preview_export_with_fonts(ExportKind::Pdf, &fonts)
             .expect("preview");

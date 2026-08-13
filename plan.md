@@ -187,9 +187,15 @@
   - 驗證：Rust regroup test 與 EntryEditor confirmation test。
 - [x] 建立 opt-in 完全自訂拖拉排序。
   - 完成條件：headings／entries 可拖拉及鍵盤上移下移；可匯入 headings 或不建立 headings；新 entries 標示 pending；切回 auto 保留 layout。
-  - 驗證：manual layout Rust test、SortOrderDialog component test、migration/backup tests。
+  - 驗證：manual layout Rust test、camelCase Tauri contract test、SortOrderDialog／missing-layout recovery component tests、`test.bkuw` 副本的移動→儲存→重開 desktop walkthrough，以及 migration/backup tests。
 - [x] 重整 XeLaTeX template 並加入 optional direct root/base related entries。
   - 完成條件：與 workspace 共用排序／小標；相關詞只顯示一層 incoming live relations；可選 none/root/base/both；改善行距、例句標記、section 與 related block。
   - 驗證：renderer／舊 profile 相容性 tests、real XeLaTeX compile、兩頁 PDF visual QA，以及 `pnpm check && pnpm test && pnpm test:rust && pnpm tauri build --no-bundle`。
+- [x] 改善 export snapshot 與長時間匯出的回應性。
+  - 完成條件：aggregate 使用固定組數 bulk queries；preview/export/font/XeLaTeX blocking 工作在背景執行；取得一致 snapshot 後釋放 project lock；CSV 不預先掃描 fonts/XeLaTeX；等待期間顯示雙語階段進度。
+  - 驗證：bulk nested aggregate regression、ExportDialog lazy-check/progress tests、`pnpm check && pnpm test && pnpm test:rust && pnpm tauri build --no-bundle`。
+- [x] 讓 LaTeX pronunciation 只顯示於主要詞頭右側。
+  - 完成條件：pronunciation form 不再重複出現在其他表記 metadata；headword／pronunciation 不可選用相同 writing system；舊重複 profile 可安全 normalize。
+  - 驗證：Rust renderer／settings contract tests、ExportDialog 重複選項測試與真實 XeLaTeX compile。
 - [ ] 人工檢查排序與 LaTeX 結果後，將四處版本一致升為 `0.3.0`。
   - 完成條件：使用者確認後才 bump、commit、push 及建立 release。

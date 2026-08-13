@@ -1,6 +1,6 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Group, Panel, Separator } from "react-resizable-panels";
-import { FileOutput, FolderX, Plus, Search, Settings } from "lucide-react";
+import { FileOutput, FolderX, ListOrdered, Plus, Search, Settings } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "./components/ui/Button";
@@ -216,7 +216,7 @@ function App() {
     <main className="app-shell">
       <header className="app-header">
         <div className="project-title"><strong>bkuw</strong><span aria-hidden="true">/</span><span>{snapshot.project.name}</span></div>
-        <div className="header-actions"><LocaleSelect /><Button size="small" onClick={() => setExportOpen(true)}><FileOutput size={15} />{t("export.title")}</Button><Button size="small" onClick={() => { setOnboarding(false); setSettingsOpen(true); }}><Settings size={15} />{t("common.settings")}</Button><Button size="small" variant="ghost" onClick={() => void closeProject()}><FolderX size={15} />{t("workspace.closeProject")}</Button></div>
+        <div className="header-actions"><LocaleSelect />{snapshot.entrySortSettings.mode === "manual" && <Button size="small" onClick={() => setSortOrderOpen(true)}><ListOrdered size={15} />{t("sorting.manageManual")}</Button>}<Button size="small" onClick={() => setExportOpen(true)}><FileOutput size={15} />{t("export.title")}</Button><Button size="small" onClick={() => { setOnboarding(false); setSettingsOpen(true); }}><Settings size={15} />{t("common.settings")}</Button><Button size="small" variant="ghost" onClick={() => void closeProject()}><FolderX size={15} />{t("workspace.closeProject")}</Button></div>
       </header>
       {error && <ErrorBanner error={error} onClose={() => setError(null)} />}
       <Group orientation="horizontal" className="workspace">

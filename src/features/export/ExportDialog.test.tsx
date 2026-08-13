@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "../../i18n";
 import type { ProjectSnapshot } from "../../types/domain";
@@ -68,6 +68,36 @@ describe("ExportDialog", () => {
     expect(await screen.findByText("Export complete")).toBeInTheDocument();
   });
 
+  it("shows meaningful progress while PDF generation runs in the background", async () => {
+    let finishExport!: (value: unknown) => void;
+    backendMock.chooseFolder.mockResolvedValue("/tmp");
+    backendMock.exportProject.mockReturnValue(new Promise((resolve) => { finishExport = resolve; }));
+    render(<ExportDialog open snapshot={snapshot} onOpenChange={vi.fn()} onFlush={vi.fn(async () => undefined)} onSetAnalysisLanguage={vi.fn()} onNavigateEntry={vi.fn()} />);
+    fireEvent.click(screen.getByLabelText("PDF"));
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    await screen.findByText("1 rows ready");
+    fireEvent.click(screen.getByRole("button", { name: "Choose destination and export" }));
+
+    expect(await screen.findByRole("progressbar", { name: "Generating sources and compiling the PDF…" })).toBeInTheDocument();
+    expect(screen.getByText("XeLaTeX runs in the background and may take up to two minutes.")).toBeInTheDocument();
+
+    finishExport({ csvPath: null, latexDirectory: "/tmp/Test-latex", zipPath: "/tmp/Test.zip", pdfPath: "/tmp/Test.pdf", pdfStatus: "created", rowCount: 1, issues: [], diagnosticPath: null });
+    expect(await screen.findByText("Export complete")).toBeInTheDocument();
+  });
+
+  it("defers font and XeLaTeX checks until a TeX format is selected", async () => {
+    render(<ExportDialog open snapshot={snapshot} onOpenChange={vi.fn()} onFlush={vi.fn(async () => undefined)} onSetAnalysisLanguage={vi.fn()} onNavigateEntry={vi.fn()} />);
+    expect(backendMock.listFontPacks).not.toHaveBeenCalled();
+    expect(backendMock.detectXeLatex).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByLabelText("LaTeX"));
+    await waitFor(() => expect(backendMock.listFontPacks).toHaveBeenCalledTimes(1));
+    expect(backendMock.detectXeLatex).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByLabelText("PDF"));
+    await waitFor(() => expect(backendMock.detectXeLatex).toHaveBeenCalledTimes(1));
+  });
+
   it("renders the missing-XeLaTeX Overleaf flow in Taiwan Traditional Chinese", async () => {
     await i18n.changeLanguage("zh-TW");
     backendMock.previewExport.mockResolvedValue({ snapshotToken: "pdf-token", rowCount: 1, issues: [], omitted: { examples: 0, exampleForms: 0, baseRelations: 0 }, requiredFontPacks: [] });
@@ -89,6 +119,38 @@ describe("ExportDialog", () => {
     fireEvent.change(screen.getByLabelText("Related entries"), { target: { value: "both" } });
     fireEvent.click(screen.getByRole("button", { name: "Preview" }));
     await waitFor(() => expect(backendMock.saveExportSettings).toHaveBeenCalledWith(expect.objectContaining({ latex: expect.objectContaining({ relatedEntries: "both" }) })));
+  });
+
+  it("prevents the headword writing system from being selected again as pronunciation", async () => {
+    const ipaSnapshot: ProjectSnapshot = {
+      ...snapshot,
+      writingSystems: [
+        snapshot.writingSystems[0],
+        { id: "ws2", name: "IPA", type: "phonetic", scriptCode: "Latn", languageTag: null, displayRole: null, sortOrder: 1, fontFamily: null, notes: null },
+      ],
+      exportSettings: {
+        ...snapshot.exportSettings,
+        latex: {
+          ...snapshot.exportSettings.latex,
+          pronunciationWritingSystemId: "ws2",
+          fontPresets: { ws1: "auto", ws2: "charisSil" },
+        },
+      },
+    };
+    render(<ExportDialog open snapshot={ipaSnapshot} onOpenChange={vi.fn()} onFlush={vi.fn(async () => undefined)} onSetAnalysisLanguage={vi.fn()} onNavigateEntry={vi.fn()} />);
+    fireEvent.click(screen.getByLabelText("LaTeX"));
+
+    const pronunciation = screen.getByLabelText("Pronunciation writing system");
+    expect(within(pronunciation).queryByRole("option", { name: "Traditional Chinese" })).not.toBeInTheDocument();
+    expect(within(pronunciation).getByRole("option", { name: "IPA" })).toBeInTheDocument();
+    expect(screen.getByText("Shown beside the headword and cannot use the same writing system.")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Headword writing system"), { target: { value: "ws2" } });
+    expect(screen.getByLabelText("Pronunciation writing system")).toHaveValue("");
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    await waitFor(() => expect(backendMock.saveExportSettings).toHaveBeenCalledWith(expect.objectContaining({
+      latex: expect.objectContaining({ headwordWritingSystemId: "ws2", pronunciationWritingSystemId: null }),
+    })));
   });
 
   it("shows the preserved XeLaTeX diagnostic log path after a Windows compile failure", async () => {

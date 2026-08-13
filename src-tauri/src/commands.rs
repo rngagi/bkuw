@@ -52,6 +52,22 @@ fn active_session<'a>(
     Ok(guard)
 }
 
+async fn run_blocking<T, F>(task: F) -> AppResult<T>
+where
+    T: Send + 'static,
+    F: FnOnce() -> AppResult<T> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(task)
+        .await
+        .map_err(|error| {
+            AppError::with_details(
+                "internal",
+                "The background task could not complete.",
+                error.to_string(),
+            )
+        })?
+}
+
 #[tauri::command]
 pub fn create_project(
     state: State<'_, AppState>,
@@ -218,41 +234,50 @@ pub fn save_manual_sort_layout(
 }
 
 #[tauri::command]
-pub fn preview_export(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    kind: ExportKind,
-) -> AppResult<ExportPreview> {
-    let fonts = font_manager(&app)?;
-    let guard = active_session(&state)?;
-    guard
-        .as_ref()
-        .ok_or_else(|| AppError::new("no_project", "No project is currently open."))?
-        .preview_export_with_fonts(kind, &fonts)
+pub async fn preview_export(app: AppHandle, kind: ExportKind) -> AppResult<ExportPreview> {
+    run_blocking(move || {
+        let snapshot = {
+            let state = app.state::<AppState>();
+            let guard = active_session(&state)?;
+            guard
+                .as_ref()
+                .ok_or_else(|| AppError::new("no_project", "No project is currently open."))?
+                .export_snapshot()?
+        };
+        let fonts = font_manager(&app)?;
+        crate::export::preview(&snapshot, kind, Some(&fonts))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn export_project(
+pub async fn export_project(
     app: AppHandle,
-    state: State<'_, AppState>,
     request: ExportProjectRequest,
 ) -> AppResult<ExportResult> {
-    let fonts = font_manager(&app)?;
-    let guard = active_session(&state)?;
-    guard
-        .as_ref()
-        .ok_or_else(|| AppError::new("no_project", "No project is currently open."))?
-        .export_project_with_fonts(request, &fonts)
+    run_blocking(move || {
+        let snapshot = {
+            let state = app.state::<AppState>();
+            let guard = active_session(&state)?;
+            guard
+                .as_ref()
+                .ok_or_else(|| AppError::new("no_project", "No project is currently open."))?
+                .export_snapshot()?
+        };
+        let fonts = font_manager(&app)?;
+        crate::export::run(&snapshot, request, Some(&fonts))
+    })
+    .await
 }
 
 #[tauri::command]
-pub fn detect_xelatex() -> TexEngineStatus {
-    crate::export::detect_xelatex()
+pub async fn detect_xelatex() -> AppResult<TexEngineStatus> {
+    run_blocking(|| Ok(crate::export::detect_xelatex())).await
 }
 
 #[tauri::command]
-pub fn list_font_packs(app: AppHandle) -> AppResult<Vec<FontPackStatus>> {
-    Ok(font_manager(&app)?.statuses())
+pub async fn list_font_packs(app: AppHandle) -> AppResult<Vec<FontPackStatus>> {
+    run_blocking(move || Ok(font_manager(&app)?.statuses())).await
 }
 
 #[tauri::command]

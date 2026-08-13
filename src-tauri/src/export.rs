@@ -536,10 +536,17 @@ fn render_entries(snapshot: &ExportSnapshot) -> AppResult<String> {
             "\\BkuwEntry{{entry:{}}}{{{}}}{{{}}}\n",
             entry.id, headword_tex, pronunciation_tex
         ));
+        if let Some(notes) = &entry.notes {
+            output.push_str(&format!("\\BkuwMeta{{[註] {}}}\n", tex_escape(notes)));
+        }
         let other_forms = entry
             .forms
             .iter()
-            .filter(|form| !form.text.trim().is_empty() && form.writing_system_id != headword_id)
+            .filter(|form| {
+                !form.text.trim().is_empty()
+                    && form.writing_system_id != headword_id
+                    && pronunciation_id != Some(form.writing_system_id.as_str())
+            })
             .map(|form| {
                 let name = systems
                     .get(form.writing_system_id.as_str())
@@ -553,7 +560,7 @@ fn render_entries(snapshot: &ExportSnapshot) -> AppResult<String> {
             })
             .collect::<Vec<_>>();
         if !other_forms.is_empty() {
-            output.push_str(&format!("\\BkuwMeta{{{}}}\n", other_forms.join("; ")));
+            output.push_str(&format!("\\BkuwMeta{{{}}}\n", other_forms.join("；")));
         }
         for (index, sense) in entry.senses.iter().enumerate() {
             output.push_str(&format!(
@@ -587,7 +594,7 @@ fn render_entries(snapshot: &ExportSnapshot) -> AppResult<String> {
                 let notes = tex_escape(example.notes.as_deref().unwrap_or_default());
                 let mut parts = vec![rendered];
                 if !translation.is_empty() {
-                    parts.push(format!("({translation})"));
+                    parts.push(translation);
                 }
                 if !notes.is_empty() {
                     parts.push(format!("— {notes}"));
@@ -610,10 +617,7 @@ fn render_entries(snapshot: &ExportSnapshot) -> AppResult<String> {
             })
             .collect::<Vec<_>>();
         if !relation_text.is_empty() {
-            output.push_str(&format!("\\BkuwMeta{{{}}}\n", relation_text.join("; ")));
-        }
-        if let Some(notes) = &entry.notes {
-            output.push_str(&format!("\\BkuwMeta{{Notes: {}}}\n", tex_escape(notes)));
+            output.push_str(&format!("\\BkuwMeta{{{}}}\n", relation_text.join("；")));
         }
         render_related_entries(snapshot, entry, &mut output);
     }

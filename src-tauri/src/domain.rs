@@ -313,7 +313,11 @@ pub struct EntrySortSettingsV1 {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(tag = "kind", rename_all = "camelCase")]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum ManualSortItem {
     Heading { id: String, label: String },
     Entry { entry_id: String },

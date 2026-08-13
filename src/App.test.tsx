@@ -16,6 +16,8 @@ const { backendMock } = vi.hoisted(() => ({
     saveEntry: vi.fn(),
     deleteEntry: vi.fn(),
     restoreEntry: vi.fn(),
+    saveEntrySortSettings: vi.fn(),
+    saveManualSortLayout: vi.fn(),
     saveExportSettings: vi.fn(),
     previewExport: vi.fn(),
     exportProject: vi.fn(),
@@ -150,5 +152,38 @@ describe("App keyboard and delete workflow", () => {
 
     await waitFor(() => expect(backendMock.saveEntry).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByText("Saved")).toBeInTheDocument(), { timeout: 500 });
+  });
+
+  it("recovers a manual-mode project whose layout was never initialized", async () => {
+    const manualSnapshot: ProjectSnapshot = {
+      ...snapshot,
+      entrySortSettings: { version: 1, mode: "manual", writingSystemId: "ws-1", alphabet: ["a", "ng"] },
+      entries: [{ id: "entry-1", primaryForm: "ngayan", secondaryForm: null, partsOfSpeech: [], revision: 1, sectionLabel: "NG", manualOrderPending: true }],
+    };
+    backendMock.createProject.mockResolvedValue(manualSnapshot);
+    backendMock.saveManualSortLayout.mockImplementation(async (layout: ProjectSnapshot["manualSortLayout"]) => ({
+      ...manualSnapshot,
+      manualSortLayout: layout,
+      entries: manualSnapshot.entries.map((item) => ({ ...item, manualOrderPending: false })),
+    }));
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Create project" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
+    await waitFor(() => expect(screen.getByDisplayValue("/tmp")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("Project name"), { target: { value: "Test" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    const onboardingDialog = await screen.findByRole("dialog", { name: "Set up this project's writing systems" });
+    fireEvent.click(within(onboardingDialog).getByRole("button", { name: "Cancel" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Arrange manual order" }));
+    const sortDialog = await screen.findByRole("dialog", { name: "Arrange entries and headings" });
+    expect(within(sortDialog).getByText("ngayan")).toBeInTheDocument();
+    expect(within(sortDialog).getByText(/No manual layout has been saved yet/)).toBeInTheDocument();
+    fireEvent.click(within(sortDialog).getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(backendMock.saveManualSortLayout).toHaveBeenCalledWith({
+      version: 1,
+      items: [{ kind: "entry", entryId: "entry-1" }],
+    }));
   });
 });

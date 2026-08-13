@@ -76,6 +76,8 @@ Project 可指定排序使用的 writing system，並以一行一個元素定義
 
 使用者明確確認後才可啟用完全自訂排序。專用介面可拖拉 entries 與 headings、建立或移除 headings，也可從目前自動排序匯入 headings 或從無 headings 開始。新 entry 暫時放在自動對應的小標末端並標示「尚未確認」，直到 layout 再次儲存。切回自動排序需確認；既有手動 layout 保留但不生效。完全自訂模式啟用時，entry-level 小標覆寫停用。
 
+啟用完全自訂排序後，主工作區 header 持續提供「排列自訂順序」入口，不必先重新進入 Settings。若專案已是 manual mode 但尚未保存 layout，管理介面載入所有 live entries、說明尚未啟用的狀態，並允許使用者排列後首次保存完成復原。
+
 ## UX 與視覺
 
 - 主 workspace 使用穩定、可調整寬度的 two-pane layout：左側搜尋與 entry list，右側 entry editor。
@@ -97,9 +99,11 @@ App UI 必須完整支援 `en` 與 `zh-TW`。首次啟動依 OS locale 決定，
 
 Header 的 Export wizard 依「格式、profile、validation preview、目的地、結果」操作。Preview 前必須 flush autosave；preview token 綁定當下 project snapshot，資料變動後不得以舊 token 匯出。Blocking error 會禁止輸出，warning 會說明無法表示或被省略的資料，並可導覽到相關 entry。
 
+Preview、LaTeX/ZIP 產生與 XeLaTeX 編譯不得凍結 webview。等待期間顯示目前階段的本地化 indeterminate progress；PDF 明確說明 XeLaTeX 在背景執行且最長可能接近 120 秒。只有選擇 LaTeX／PDF 時才檢查 portable fonts，只有選擇 PDF 時才偵測 XeLaTeX，避免開啟一般 CSV wizard 時進行無關 I/O。
+
 Corpus CSV 固定輸出 rngagi-corpus v0.3 的九欄簡版，每個未刪除 entry 的每個 sense 一列；analysis language 必須是 `zh-TW`。`gloss_en` 在單一 analysis-language 模型下留空。完整映射與 known loss 見 `docs/corpus-csv-contract.md`。
 
-LaTeX 匯出包含可編輯來源資料夾與不含 PDF／aux／log 的 Overleaf-ready ZIP。辭典詞條順序與小標直接使用 project ordering；不另設會互相矛盾的 export collation。通用 template 使用 `fontspec`、雙欄、1.34 倍行距、懸掛縮排、頁眉、橢圓例句標記、欄內小標與 Rust 產生的 reverse index，不依賴日文專用套件或 makeindex。所有 user text 完整 TeX escape。
+LaTeX 匯出包含可編輯來源資料夾與不含 PDF／aux／log 的 Overleaf-ready ZIP。辭典詞條順序與小標直接使用 project ordering；不另設會互相矛盾的 export collation。通用 template 使用 `fontspec`、雙欄、1.34 倍行距、懸掛縮排、頁眉、橢圓例句標記、欄內小標與 Rust 產生的 reverse index，不依賴日文專用套件或 makeindex。詞條 notes 以 `[註]` 標示並緊接詞頭下方、義項之前；例句原文後以空格直接接續翻譯，不加括號；同一 metadata 行內的多項內容以全型 `；` 分隔。Profile 選定的 pronunciation（包含 IPA）只顯示在主要詞頭右側，不再以 `IPA: …` 或其他表記重複列出；headword 與 pronunciation 不得選用同一 writing system。所有 user text 完整 TeX escape。
 
 LaTeX profile 可選擇不顯示關聯詞，或顯示 root、base、兩者。對每個 target entry 只收集直接指向它的 incoming live relations，最多一層、不遞迴，同一 source entry 去重；摘要顯示 headword、optional pronunciation 與第一個 sense gloss，並連回完整詞條。
 

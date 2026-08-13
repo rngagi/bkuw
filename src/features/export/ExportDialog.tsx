@@ -34,6 +34,8 @@ interface ExportError {
   diagnosticPath?: string;
 }
 
+type BusyTask = "preview" | "destination" | "export";
+
 function cloneSettings(settings: ExportSettings): ExportSettings {
   return JSON.parse(JSON.stringify(settings)) as ExportSettings;
 }
@@ -48,7 +50,7 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
   const [engine, setEngine] = useState<TexEngineStatus | null>(null);
   const [fontPacks, setFontPacks] = useState<FontPackStatus[]>([]);
   const [installingPack, setInstallingPack] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busyTask, setBusyTask] = useState<BusyTask | null>(null);
   const [error, setError] = useState<ExportError | null>(null);
   const [pendingDestination, setPendingDestination] = useState<string | null>(null);
 
@@ -60,9 +62,28 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
     setResult(null);
     setError(null);
     setPendingDestination(null);
-    void backend.detectXeLatex().then(setEngine).catch(() => setEngine(null));
-    void backend.listFontPacks().then(setFontPacks).catch(() => setFontPacks([]));
-  }, [open, snapshot]);
+    setEngine(null);
+    setFontPacks([]);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || kind === "corpusCsv") return;
+    let active = true;
+    void backend.listFontPacks().then((packs) => {
+      if (active) setFontPacks(packs);
+    }).catch(() => {
+      if (active) setFontPacks([]);
+    });
+    if (kind === "pdf") {
+      setEngine(null);
+      void backend.detectXeLatex().then((status) => {
+        if (active) setEngine(status);
+      }).catch(() => {
+        if (active) setEngine(null);
+      });
+    }
+    return () => { active = false; };
+  }, [kind, open]);
 
   function patchLatex(value: Partial<ExportSettings["latex"]>) {
     setSettings((current) => ({ ...current, latex: { ...current.latex, ...value } }));
@@ -70,8 +91,23 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
     setResult(null);
   }
 
+  function changeHeadwordSystem(value: string) {
+    setSettings((current) => ({
+      ...current,
+      latex: {
+        ...current.latex,
+        headwordWritingSystemId: value,
+        pronunciationWritingSystemId: current.latex.pronunciationWritingSystemId === value
+          ? null
+          : current.latex.pronunciationWritingSystemId,
+      },
+    }));
+    setPreview(null);
+    setResult(null);
+  }
+
   async function makePreview() {
-    setBusy(true);
+    setBusyTask("preview");
     setError(null);
     try {
       await onFlush();
@@ -89,7 +125,7 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
     } catch (value) {
       setError({ message: value instanceof CommandError ? t(`error.${value.code}`) : t("error.generic") });
     } finally {
-      setBusy(false);
+      setBusyTask(null);
     }
   }
 
@@ -113,7 +149,7 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
 
   async function runExport(overwrite = false, destination?: string) {
     if (!preview) return;
-    setBusy(true);
+    setBusyTask("destination");
     setError(null);
     let selected = destination;
     try {
@@ -123,6 +159,7 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
           : await backend.chooseFolder() ?? undefined;
       }
       if (!selected) return;
+      setBusyTask("export");
       const exported = await backend.exportProject({
         kind,
         destination: selected,
@@ -145,12 +182,15 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
         });
       }
     } finally {
-      setBusy(false);
+      setBusyTask(null);
     }
   }
 
   const blockers = preview?.issues.filter((issue) => issue.severity === "error") ?? [];
   const warnings = preview?.issues.filter((issue) => issue.severity === "warning") ?? [];
+  const pronunciationSystems = snapshot.writingSystems.filter(
+    (system) => system.id !== settings.latex.headwordWritingSystemId,
+  );
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -181,14 +221,14 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
               </div> : <div className="export-latex-grid">
                 <label className="field"><span>{t("export.latexTitle")}</span><input value={settings.latex.title} onChange={(event) => patchLatex({ title: event.target.value })} /></label>
                 <label className="field"><span>{t("export.author")}</span><input value={settings.latex.author} onChange={(event) => patchLatex({ author: event.target.value })} /></label>
-                <WritingSystemSelect label={t("export.headwordSystem")} value={settings.latex.headwordWritingSystemId} systems={snapshot.writingSystems} onChange={(value) => patchLatex({ headwordWritingSystemId: value })} />
-                <WritingSystemSelect label={t("export.pronunciationSystem")} optional value={settings.latex.pronunciationWritingSystemId ?? ""} systems={snapshot.writingSystems} onChange={(value) => patchLatex({ pronunciationWritingSystemId: value || null })} />
+                <WritingSystemSelect label={t("export.headwordSystem")} value={settings.latex.headwordWritingSystemId} systems={snapshot.writingSystems} onChange={changeHeadwordSystem} />
+                <WritingSystemSelect label={t("export.pronunciationSystem")} help={t("export.pronunciationSystemHelp")} optional value={settings.latex.pronunciationWritingSystemId ?? ""} systems={pronunciationSystems} onChange={(value) => patchLatex({ pronunciationWritingSystemId: value || null })} />
                 <WritingSystemSelect label={t("export.exampleSystem")} value={settings.latex.exampleWritingSystemId} systems={snapshot.writingSystems} onChange={(value) => patchLatex({ exampleWritingSystemId: value })} />
                 <div className="field"><span>{t("export.dictionaryOrder")}</span><output>{t("export.dictionaryOrderHelp")}</output></div>
                 <label className="field"><span>{t("export.reverseIndex")}</span><select value={settings.latex.reverseIndex} onChange={(event) => patchLatex({ reverseIndex: event.target.value as ExportSettings["latex"]["reverseIndex"] })}><option value="gloss">{t("export.gloss")}</option><option value="none">{t("common.none")}</option></select></label>
                 <label className="field"><span>{t("export.relatedEntries")}</span><select aria-label={t("export.relatedEntries")} value={settings.latex.relatedEntries} onChange={(event) => patchLatex({ relatedEntries: event.target.value as ExportSettings["latex"]["relatedEntries"] })}><option value="none">{t("common.none")}</option><option value="root">{t("export.relatedRoot")}</option><option value="base">{t("export.relatedBase")}</option><option value="both">{t("export.relatedBoth")}</option></select><small>{t("export.relatedEntriesHelp")}</small></label>
                 {snapshot.writingSystems.map((system) => <label className="field" key={system.id}><span>{t("export.fontFor", { name: system.name })}</span>{system.type === "phonemic" || system.type === "phonetic" ? <output>{t("export.ipaFixedFont")}</output> : <select value={settings.latex.fontPresets[system.id] ?? "auto"} onChange={(event) => patchLatex({ fontPresets: { ...settings.latex.fontPresets, [system.id]: event.target.value as typeof fontPresets[number] } })}>{fontPresets.map((preset) => <option value={preset} key={preset}>{t(`export.font.${preset}`)}</option>)}</select>}</label>)}
-                {kind === "pdf" && <p className="engine-status">{engine?.available ? t("export.xelatexFound", { path: engine.path }) : t("export.xelatexMissing")}</p>}
+                {kind === "pdf" && <p className="engine-status">{engine === null ? t("export.xelatexChecking") : engine.available ? t("export.xelatexFound", { path: engine.path }) : t("export.xelatexMissing")}</p>}
               </div>}
             </section>
 
@@ -200,7 +240,8 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
             </section>}
 
             {pendingDestination && <div className="overwrite-confirm" role="alertdialog" aria-label={t("export.overwriteTitle")}><strong>{t("export.overwriteTitle")}</strong><p>{t("export.overwriteBody")}</p><div className="dialog-actions"><Button onClick={() => setPendingDestination(null)}>{t("common.cancel")}</Button><Button variant="danger" onClick={() => void runExport(true, pendingDestination)}>{t("export.overwrite")}</Button></div></div>}
-            <div className="dialog-actions"><Button onClick={() => onOpenChange(false)}>{t("common.cancel")}</Button>{!preview ? <Button variant="primary" disabled={busy} onClick={() => void makePreview()}>{busy ? t("common.loading") : t("export.preview")}</Button> : <Button variant="primary" disabled={busy || blockers.length > 0} onClick={() => void runExport()}>{busy ? t("common.loading") : t("export.chooseAndExport")}</Button>}</div>
+            {(busyTask === "preview" || busyTask === "export") && <ExportProgress task={busyTask} kind={kind} />}
+            <div className="dialog-actions"><Button onClick={() => onOpenChange(false)}>{t("common.cancel")}</Button>{!preview ? <Button variant="primary" disabled={busyTask !== null} onClick={() => void makePreview()}>{busyTask ? t("common.loading") : t("export.preview")}</Button> : <Button variant="primary" disabled={busyTask !== null || blockers.length > 0} onClick={() => void runExport()}>{busyTask ? t("common.loading") : t("export.chooseAndExport")}</Button>}</div>
           </div>}
 
           {result && <section className="export-result"><h3>{t("export.complete")}</h3><p>{t("export.exportedRows", { count: result.rowCount })}</p>{result.csvPath && <code>{result.csvPath}</code>}{result.latexDirectory && <code>{result.latexDirectory}</code>}{result.zipPath && <code>{result.zipPath}</code>}{result.pdfPath && <code>{result.pdfPath}</code>}{result.pdfStatus === "xeLatexMissing" && <><p>{t("export.missingResult")}</p><p>{t("export.overleafSteps")}</p><div className="inline-field"><Button onClick={() => void backend.openOverleaf()}><ExternalLink size={15} />{t("export.openOverleaf")}</Button><Button variant="ghost" onClick={() => void backend.openOverleafCompilerHelp()}>{t("export.compilerHelp")}</Button></div></>}<div className="dialog-actions"><Button variant="primary" onClick={() => onOpenChange(false)}>{t("common.close")}</Button></div></section>}
@@ -210,13 +251,24 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
   );
 }
 
+function ExportProgress({ task, kind }: { task: Exclude<BusyTask, "destination">; kind: ExportKind }) {
+  const { t } = useTranslation();
+  const label = task === "preview"
+    ? t("export.progress.preview")
+    : t(`export.progress.${kind}`);
+  return <div className="export-progress" role="status" aria-live="polite">
+    <div><strong>{label}</strong>{kind === "pdf" && task === "export" && <small>{t("export.progress.pdfHelp")}</small>}</div>
+    <progress aria-label={label} />
+  </div>;
+}
+
 function mergeFontPacks(current: FontPackStatus[], updates: FontPackStatus[]) {
   const merged = new Map(current.map((pack) => [pack.id, pack]));
   for (const pack of updates) merged.set(pack.id, pack);
   return Array.from(merged.values());
 }
 
-function WritingSystemSelect({ label, value, systems, optional = false, onChange }: { label: string; value: string; systems: ProjectSnapshot["writingSystems"]; optional?: boolean; onChange(value: string): void }) {
+function WritingSystemSelect({ label, help, value, systems, optional = false, onChange }: { label: string; help?: string; value: string; systems: ProjectSnapshot["writingSystems"]; optional?: boolean; onChange(value: string): void }) {
   const { t } = useTranslation();
-  return <label className="field"><span>{label}</span><select value={value} onChange={(event) => onChange(event.target.value)}>{optional && <option value="">{t("common.none")}</option>}{systems.map((system) => <option key={system.id} value={system.id}>{system.name}</option>)}</select></label>;
+  return <label className="field"><span>{label}</span><select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)}>{optional && <option value="">{t("common.none")}</option>}{systems.map((system) => <option key={system.id} value={system.id}>{system.name}</option>)}</select>{help && <small>{help}</small>}</label>;
 }
