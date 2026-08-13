@@ -161,6 +161,7 @@ describe("App keyboard and delete workflow", () => {
       entries: [{ id: "entry-1", primaryForm: "ngayan", secondaryForm: null, partsOfSpeech: [], revision: 1, sectionLabel: "NG", manualOrderPending: true }],
     };
     backendMock.createProject.mockResolvedValue(manualSnapshot);
+    backendMock.queryEntries.mockResolvedValue(manualSnapshot.entries);
     backendMock.saveManualSortLayout.mockImplementation(async (layout: ProjectSnapshot["manualSortLayout"]) => ({
       ...manualSnapshot,
       manualSortLayout: layout,
@@ -174,6 +175,7 @@ describe("App keyboard and delete workflow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
     const onboardingDialog = await screen.findByRole("dialog", { name: "Set up this project's writing systems" });
     fireEvent.click(within(onboardingDialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(backendMock.queryEntries).toHaveBeenCalled());
 
     fireEvent.click(await screen.findByRole("button", { name: "Arrange manual order" }));
     const sortDialog = await screen.findByRole("dialog", { name: "Arrange entries and headings" });
