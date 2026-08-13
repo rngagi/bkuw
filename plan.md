@@ -212,6 +212,6 @@
 - [x] 改善 virtualized entry list 的 IPA 與簡釋 read model。
   - 完成條件：pronunciation 與 primary 同行且不重複；每個 sense 依序顯示自己的 POS＋gloss，缺其中一項仍安全顯示；row height 隨內容調整。
   - 驗證：database bulk summary integration test、EntryList rendering test、`pnpm check && pnpm test && pnpm test:rust`。
-- [ ] 將四處版本一致升為 `0.3.1`，完成本機及 tag release 驗收。
+- [x] 將四處版本一致升為 `0.3.1`，完成本機及 tag release 驗收。
   - 完成條件：package、Cargo、Cargo lock、Tauri version 一致；Windows x64 與 macOS Apple Silicon CI 成功；Draft assets/checksums 確認後發布。
-  - 驗證：完整 test/build suite、真實 XeLaTeX portable-template test、GitHub Actions 與 Release assets。
+  - 驗證：完整 test/build suite與真實 XeLaTeX portable-template test；GitHub Actions run `31670852554` 全部成功；公開 `v0.3.1` Release 含 NSIS、Apple Silicon DMG 與核對一致的 `SHA256SUMS.txt`。
