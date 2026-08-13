@@ -11,7 +11,7 @@ const writingSystems: WritingSystem[] = [
 ];
 
 function emptyEntry(): LexicalEntry {
-  return { id: "entry-1", notes: null, revision: 0, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", forms: [{ id: "form-1", writingSystemId: "ws-native", text: "", variantLabel: null, dialect: null, status: null, notes: null, sortOrder: 0 }], senses: [], relations: [] };
+  return { id: "entry-1", notes: null, sectionOverride: null, revision: 0, createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", forms: [{ id: "form-1", writingSystemId: "ws-native", text: "", variantLabel: null, dialect: null, status: null, notes: null, sortOrder: 0 }], senses: [], relations: [] };
 }
 
 const metadataProps = { partOfSpeechOptions: ["Verb", "Noun"], semanticDomainOptions: ["Motion"] };
@@ -81,7 +81,7 @@ describe("EntryEditor", () => {
   });
 
   it("autocompletes a linked relation and supports navigation", async () => {
-    const target: EntrySummary = { id: "target-entry-1234", primaryForm: "ambuk", secondaryForm: null, partsOfSpeech: ["Noun"], revision: 1 };
+    const target: EntrySummary = { id: "target-entry-1234", primaryForm: "ambuk", secondaryForm: null, partsOfSpeech: ["Noun"], revision: 1, sectionLabel: "A", manualOrderPending: false };
     const onSave = vi.fn(async (draft: LexicalEntry) => ({ ...draft, revision: 1 }));
     const onNavigate = vi.fn();
     const ref = createRef<EntryEditorHandle>();
@@ -94,6 +94,17 @@ describe("EntryEditor", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Open linked entry" }));
     expect(onNavigate).toHaveBeenCalledWith(target.id);
+  });
+
+  it("confirms a section override before saving it", async () => {
+    const onSave = vi.fn(async (draft: LexicalEntry) => ({ ...draft, revision: 1 }));
+    const ref = createRef<EntryEditorHandle>();
+    render(<EntryEditor {...metadataProps} ref={ref} entry={emptyEntry()} writingSystems={writingSystems} entryOptions={[]} entrySortSettings={{ version: 1, mode: "auto", writingSystemId: "ws-native", alphabet: ["n", "ng"] }} onSave={onSave} onDelete={vi.fn()} onNavigate={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Section override"), { target: { value: "N" } });
+    expect(screen.getByRole("alertdialog", { name: "Move this entry to another section?" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Move entry" }));
+    await act(async () => { await ref.current?.flush(); });
+    expect(onSave.mock.calls.at(-1)?.[0].sectionOverride).toBe("N");
   });
 
   it("autosaves a valid nested draft after the debounce", async () => {

@@ -5,10 +5,10 @@ use tauri::{AppHandle, Manager, State};
 use crate::{
     database::ProjectSession,
     domain::{
-        CreateProjectRequest, DeleteEntryRequest, DeletedEntry, EntrySummary, ExportKind,
-        ExportPreview, ExportProjectRequest, ExportResult, ExportSettingsV1, FontPackStatus,
-        LexicalEntry, ProjectSnapshot, SaveEntryRequest, TexEngineStatus,
-        UpdateProjectSettingsRequest,
+        CreateProjectRequest, DeleteEntryRequest, DeletedEntry, EntrySortSettingsV1, EntrySummary,
+        ExportKind, ExportPreview, ExportProjectRequest, ExportResult, ExportSettingsV1,
+        FontPackStatus, LexicalEntry, ManualSortLayoutV1, ProjectSnapshot, SaveEntryRequest,
+        TexEngineStatus, UpdateProjectSettingsRequest,
     },
     error::{AppError, AppResult},
 };
@@ -189,6 +189,32 @@ pub fn save_export_settings(
         .ok_or_else(|| AppError::new("no_project", "No project is currently open."))?
         .save_export_settings(settings.clone())?;
     Ok(settings)
+}
+
+#[tauri::command]
+pub fn save_entry_sort_settings(
+    state: State<'_, AppState>,
+    settings: EntrySortSettingsV1,
+) -> AppResult<ProjectSnapshot> {
+    let mut guard = active_session(&state)?;
+    let session = guard
+        .as_mut()
+        .ok_or_else(|| AppError::new("no_project", "No project is currently open."))?;
+    session.save_entry_sort_settings(settings)?;
+    session.snapshot()
+}
+
+#[tauri::command]
+pub fn save_manual_sort_layout(
+    state: State<'_, AppState>,
+    layout: ManualSortLayoutV1,
+) -> AppResult<ProjectSnapshot> {
+    let mut guard = active_session(&state)?;
+    let session = guard
+        .as_mut()
+        .ok_or_else(|| AppError::new("no_project", "No project is currently open."))?;
+    session.save_manual_sort_layout(layout)?;
+    session.snapshot()
 }
 
 #[tauri::command]

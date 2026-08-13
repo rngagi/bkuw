@@ -10,8 +10,9 @@ import { ExportDialog } from "./features/export/ExportDialog";
 import { LocaleSelect } from "./features/projects/LocaleSelect";
 import { ProjectStart } from "./features/projects/ProjectStart";
 import { SettingsDialog } from "./features/settings/SettingsDialog";
+import { SortOrderDialog } from "./features/settings/SortOrderDialog";
 import { backend, CommandError } from "./lib/tauri";
-import type { EntrySummary, LexicalEntry, ProjectSnapshot, WritingSystem } from "./types/domain";
+import type { EntrySortSettings, EntrySummary, LexicalEntry, ManualSortItem, ProjectSnapshot, WritingSystem } from "./types/domain";
 
 function prepareEntryForms(entry: LexicalEntry, writingSystems: WritingSystem[]): LexicalEntry {
   const known = new Set(writingSystems.map((system) => system.id));
@@ -51,6 +52,7 @@ function App() {
   const [entry, setEntry] = useState<LexicalEntry | null>(null);
   const [search, setSearch] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [sortOrderOpen, setSortOrderOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [onboarding, setOnboarding] = useState(false);
   const [error, setError] = useState<{ key: string; detail?: string } | null>(null);
@@ -138,12 +140,30 @@ function App() {
     } catch (value) { showError(value); }
   }
 
-  async function saveSettings(request: { name: string; languageName: string | null; languageCode: string | null; analysisLanguage: "zh-TW" | "en" | null; description: string | null; writingSystems: WritingSystem[]; partOfSpeechOptions: string[]; semanticDomainOptions: string[] }) {
+  async function saveSettings(request: { name: string; languageName: string | null; languageCode: string | null; analysisLanguage: "zh-TW" | "en" | null; description: string | null; writingSystems: WritingSystem[]; partOfSpeechOptions: string[]; semanticDomainOptions: string[]; entrySortSettings: EntrySortSettings; manualInitialization: "headings" | "none" | null }) {
     await flush();
-    const updated = await backend.updateProjectSettings(request);
-    setSnapshot(updated);
-    setEntries(updated.entries);
+    const { entrySortSettings, manualInitialization, ...projectRequest } = request;
+    let updated = await backend.updateProjectSettings(projectRequest);
+    updated = await backend.saveEntrySortSettings(entrySortSettings);
+    if (manualInitialization) {
+      const items: ManualSortItem[] = [];
+      let section: string | null = null;
+      for (const summary of updated.entries) {
+        if (manualInitialization === "headings" && summary.sectionLabel && summary.sectionLabel !== section) {
+          section = summary.sectionLabel;
+          items.push({ kind: "heading", id: crypto.randomUUID(), label: section });
+        }
+        items.push({ kind: "entry", entryId: summary.id });
+      }
+      updated = await backend.saveManualSortLayout({ version: 1, items });
+    }
+    setSnapshot(updated); setEntries(updated.entries);
     if (entry) setEntry(prepareEntryForms(await backend.loadEntry(entry.id), updated.writingSystems));
+  }
+
+  async function saveManualSortLayout(layout: ProjectSnapshot["manualSortLayout"]) {
+    const updated = await backend.saveManualSortLayout(layout);
+    setSnapshot(updated); setEntries(updated.entries);
   }
 
   async function setAnalysisLanguage(analysisLanguage: "zh-TW" | "en" | null) {
@@ -206,11 +226,12 @@ function App() {
         </Panel>
         <Separator className="resize-handle" />
         <Panel minSize="440px" className="editor-pane">
-          {loadingEntry ? <div className="editor-empty">{t("common.loading")}</div> : entry ? <EntryEditor key={entry.id} ref={editorRef} entry={entry} writingSystems={snapshot.writingSystems} partOfSpeechOptions={snapshot.partOfSpeechOptions} semanticDomainOptions={snapshot.semanticDomainOptions} entryOptions={entries} onSave={saveEntry} onDelete={deleteEntry} onNavigate={(id) => void selectEntry(id)} /> : <div className="editor-empty">{t("workspace.selectEntry")}</div>}
+          {loadingEntry ? <div className="editor-empty">{t("common.loading")}</div> : entry ? <EntryEditor key={entry.id} ref={editorRef} entry={entry} writingSystems={snapshot.writingSystems} partOfSpeechOptions={snapshot.partOfSpeechOptions} semanticDomainOptions={snapshot.semanticDomainOptions} entryOptions={entries} entrySortSettings={snapshot.entrySortSettings} onSave={saveEntry} onDelete={deleteEntry} onNavigate={(id) => void selectEntry(id)} /> : <div className="editor-empty">{t("workspace.selectEntry")}</div>}
         </Panel>
       </Group>
       {deletedId && <div className="undo-toast" role="status"><span>{t("workspace.deleted")}</span><Button size="small" variant="ghost" onClick={() => void undoDelete()}>{t("common.undo")}</Button></div>}
-      <SettingsDialog open={settingsOpen} onboarding={onboarding} snapshot={snapshot} onOpenChange={(open) => { setSettingsOpen(open); if (!open) setOnboarding(false); }} onSave={saveSettings} />
+      <SettingsDialog open={settingsOpen} onboarding={onboarding} snapshot={snapshot} onOpenChange={(open) => { setSettingsOpen(open); if (!open) setOnboarding(false); }} onSave={saveSettings} onManageManual={() => setSortOrderOpen(true)} />
+      <SortOrderDialog open={sortOrderOpen} snapshot={snapshot} onOpenChange={setSortOrderOpen} onSave={saveManualSortLayout} />
       <ExportDialog open={exportOpen} snapshot={snapshot} onOpenChange={setExportOpen} onFlush={flush} onSetAnalysisLanguage={setAnalysisLanguage} onNavigateEntry={(id) => { setExportOpen(false); void selectEntry(id); }} />
     </main>
   );

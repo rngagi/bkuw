@@ -176,3 +176,20 @@
 - [x] 完整移除 Noto Serif Thai／Tibetan managed packs 與 presets。
   - 完成條件：catalog、下載來源、hash、Rust／TypeScript enum、Export UI、雙語翻譯、E2E 與文件均不再宣稱或使用兩個專用 packs；一般 Thai／Tibetan lexical data 與 Unicode 搜尋能力不受影響。
   - 驗證：catalog regression test、repository search、`pnpm check && pnpm test && pnpm test:rust && pnpm test:e2e:build && pnpm test:e2e && pnpm tauri build --no-bundle`，以及 real-XeLaTeX portable-template test。
+
+## 14. v0.3 dictionary ordering and LaTeX refresh
+
+- [x] 建立 project alphabet 與共用自動排序。
+  - 完成條件：可選 writing system；一行一 element；longest-match 支援 `ng`／`ch`；空 alphabet 使用 ICU4X；entry list 顯示 headings。
+  - 驗證：`custom_alphabet_sorts_multigraphs_and_supplies_section_labels`、ordering unit test、`pnpm check && pnpm test && pnpm test:rust`。
+- [x] 建立 entry section override 與二次確認。
+  - 完成條件：只改小標，完整表記仍在 section 內自然排序；不改拼寫／搜尋；manual mode 時停用。
+  - 驗證：Rust regroup test 與 EntryEditor confirmation test。
+- [x] 建立 opt-in 完全自訂拖拉排序。
+  - 完成條件：headings／entries 可拖拉及鍵盤上移下移；可匯入 headings 或不建立 headings；新 entries 標示 pending；切回 auto 保留 layout。
+  - 驗證：manual layout Rust test、SortOrderDialog component test、migration/backup tests。
+- [ ] 重整 XeLaTeX template 並加入 optional direct root/base related entries。
+  - 完成條件：與 workspace 共用排序／小標；相關詞只顯示一層 incoming live relations；可選 none/root/base/both；改善行距、例句標記、section 與 related block。
+  - 驗證：renderer tests、real XeLaTeX compile、PDF visual QA、完整 checks/tests/build。
+- [ ] 人工檢查排序與 LaTeX 結果後，將四處版本一致升為 `0.3.0`。
+  - 完成條件：使用者確認後才 bump、commit、push 及建立 release。

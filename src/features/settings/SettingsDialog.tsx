@@ -1,10 +1,11 @@
 import * as Dialog from "@radix-ui/react-dialog";
+import * as AlertDialog from "@radix-ui/react-alert-dialog";
 import { ArrowDown, ArrowUp, Plus, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/Button";
 import { backend } from "../../lib/tauri";
-import { createId, type ProjectSnapshot, type WritingSystem } from "../../types/domain";
+import { createId, type EntrySortSettings, type ProjectSnapshot, type WritingSystem } from "../../types/domain";
 
 interface SettingsRequest {
   name: string;
@@ -15,6 +16,8 @@ interface SettingsRequest {
   writingSystems: WritingSystem[];
   partOfSpeechOptions: string[];
   semanticDomainOptions: string[];
+  entrySortSettings: EntrySortSettings;
+  manualInitialization: "headings" | "none" | null;
 }
 
 interface Props {
@@ -23,6 +26,7 @@ interface Props {
   snapshot: ProjectSnapshot;
   onOpenChange(open: boolean): void;
   onSave(request: SettingsRequest): Promise<void>;
+  onManageManual?(): void;
 }
 
 const types = ["orthography", "romanization", "transliteration", "phonemic", "phonetic", "other"] as const;
@@ -56,7 +60,7 @@ function MetadataOptionsEditor({ label, values, onChange }: {
   );
 }
 
-export function SettingsDialog({ open, onboarding = false, snapshot, onOpenChange, onSave }: Props) {
+export function SettingsDialog({ open, onboarding = false, snapshot, onOpenChange, onSave, onManageManual = () => undefined }: Props) {
   const { t } = useTranslation();
   const [name, setName] = useState("");
   const [languageName, setLanguageName] = useState("");
@@ -66,6 +70,11 @@ export function SettingsDialog({ open, onboarding = false, snapshot, onOpenChang
   const [systems, setSystems] = useState<WritingSystem[]>([]);
   const [partOfSpeechOptions, setPartOfSpeechOptions] = useState<string[]>([]);
   const [semanticDomainOptions, setSemanticDomainOptions] = useState<string[]>([]);
+  const [sortMode, setSortMode] = useState<"auto" | "manual">("auto");
+  const [sortWritingSystemId, setSortWritingSystemId] = useState("");
+  const [alphabet, setAlphabet] = useState("");
+  const [manualInitialization, setManualInitialization] = useState<"headings" | "none" | null>(null);
+  const [modeConfirm, setModeConfirm] = useState<"enable" | "disable" | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -79,6 +88,10 @@ export function SettingsDialog({ open, onboarding = false, snapshot, onOpenChang
     setSystems(snapshot.writingSystems);
     setPartOfSpeechOptions(snapshot.partOfSpeechOptions);
     setSemanticDomainOptions(snapshot.semanticDomainOptions);
+    setSortMode(snapshot.entrySortSettings.mode);
+    setSortWritingSystemId(snapshot.entrySortSettings.writingSystemId);
+    setAlphabet(snapshot.entrySortSettings.alphabet.join("\n"));
+    setManualInitialization(null);
     setError("");
   }, [open, snapshot]);
 
@@ -119,6 +132,8 @@ export function SettingsDialog({ open, onboarding = false, snapshot, onOpenChang
         writingSystems: systems.map((item, index) => ({ ...item, name: item.name.trim(), sortOrder: index })),
         partOfSpeechOptions,
         semanticDomainOptions,
+        entrySortSettings: { version: 1, mode: sortMode, writingSystemId: sortWritingSystemId, alphabet: alphabet.split(/\r?\n/).map((item) => item.trim()).filter(Boolean) },
+        manualInitialization,
       });
       onOpenChange(false);
     } catch {
@@ -165,10 +180,12 @@ export function SettingsDialog({ open, onboarding = false, snapshot, onOpenChang
             </div>
 
             <section className="metadata-settings"><h3>{t("settings.metadataTitle")}</h3><p className="section-help">{t("settings.metadataHelp")}</p><div className="two-columns"><MetadataOptionsEditor label={t("settings.partOfSpeechOptions")} values={partOfSpeechOptions} onChange={setPartOfSpeechOptions} /><MetadataOptionsEditor label={t("settings.semanticDomainOptions")} values={semanticDomainOptions} onChange={setSemanticDomainOptions} /></div></section>
+            <section className="metadata-settings"><h3>{t("sorting.title")}</h3><p className="section-help">{t("sorting.help")}</p><div className="two-columns"><label className="field"><span>{t("sorting.writingSystem")}</span><select value={sortWritingSystemId} onChange={(event) => setSortWritingSystemId(event.target.value)}>{systems.map((system) => <option key={system.id} value={system.id}>{system.name}</option>)}</select></label><label className="field"><span>{t("sorting.mode")}</span><output>{t(`sorting.${sortMode}`)}</output></label></div><label className="field"><span>{t("sorting.alphabet")}</span><textarea value={alphabet} placeholder={t("sorting.alphabetPlaceholder")} onChange={(event) => setAlphabet(event.target.value)} /><small>{t("sorting.alphabetHelp")}</small></label><div className="inline-field">{sortMode === "auto" ? <Button type="button" onClick={() => setModeConfirm("enable")}>{t("sorting.enableManual")}</Button> : <><Button type="button" disabled={snapshot.entrySortSettings.mode !== "manual"} onClick={() => { onOpenChange(false); onManageManual(); }}>{t("sorting.manageManual")}</Button><Button type="button" variant="ghost" onClick={() => setModeConfirm("disable")}>{t("sorting.returnAuto")}</Button></>}</div>{sortMode === "manual" && snapshot.entrySortSettings.mode !== "manual" && <small>{t("sorting.saveBeforeManage")}</small>}</section>
             <div className="dialog-actions"><Button type="button" onClick={() => onOpenChange(false)}>{t("common.cancel")}</Button><Button type="submit" variant="primary" disabled={busy}>{busy ? t("common.loading") : t("common.save")}</Button></div>
           </form>
         </Dialog.Content>
       </Dialog.Portal>
+      <AlertDialog.Root open={modeConfirm !== null} onOpenChange={(next) => { if (!next) setModeConfirm(null); }}><AlertDialog.Portal><AlertDialog.Overlay className="dialog-overlay" /><AlertDialog.Content className="dialog-content narrow"><AlertDialog.Title>{t(modeConfirm === "enable" ? "sorting.enableTitle" : "sorting.disableTitle")}</AlertDialog.Title><AlertDialog.Description>{t(modeConfirm === "enable" ? "sorting.enableBody" : "sorting.disableBody")}</AlertDialog.Description><div className="dialog-actions"><AlertDialog.Cancel asChild><Button>{t("common.cancel")}</Button></AlertDialog.Cancel>{modeConfirm === "enable" ? <><AlertDialog.Action asChild><Button onClick={() => { setSortMode("manual"); setManualInitialization("none"); setModeConfirm(null); }}>{t("sorting.startEmpty")}</Button></AlertDialog.Action><AlertDialog.Action asChild><Button variant="primary" onClick={() => { setSortMode("manual"); setManualInitialization("headings"); setModeConfirm(null); }}>{t("sorting.importHeadings")}</Button></AlertDialog.Action></> : <AlertDialog.Action asChild><Button variant="primary" onClick={() => { setSortMode("auto"); setModeConfirm(null); }}>{t("sorting.confirmAuto")}</Button></AlertDialog.Action>}</div></AlertDialog.Content></AlertDialog.Portal></AlertDialog.Root>
     </Dialog.Root>
   );
 }

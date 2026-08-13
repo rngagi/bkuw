@@ -69,6 +69,7 @@ export const relationSchema = z.object({
 export const lexicalEntrySchema = z.object({
   id: z.string(),
   notes: nullableText,
+  sectionOverride: nullableText,
   revision: z.number(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -83,7 +84,23 @@ export const entrySummarySchema = z.object({
   secondaryForm: nullableText,
   partsOfSpeech: z.array(z.string()),
   revision: z.number(),
+  sectionLabel: nullableText,
+  manualOrderPending: z.boolean(),
 });
+
+export const entrySortSettingsSchema = z.object({
+  version: z.literal(1),
+  mode: z.enum(["auto", "manual"]),
+  writingSystemId: z.string(),
+  alphabet: z.array(z.string()),
+});
+
+export const manualSortItemSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("heading"), id: z.string(), label: z.string() }),
+  z.object({ kind: z.literal("entry"), entryId: z.string() }),
+]);
+
+export const manualSortLayoutSchema = z.object({ version: z.literal(1), items: z.array(manualSortItemSchema) });
 
 export const corpusPartOfSpeechSchema = z.enum([
   "noun", "verb", "adjective", "adverb", "pronoun", "particle", "other",
@@ -171,6 +188,8 @@ export const projectSnapshotSchema = z.object({
   partOfSpeechOptions: z.array(z.string()),
   semanticDomainOptions: z.array(z.string()),
   exportSettings: exportSettingsSchema,
+  entrySortSettings: entrySortSettingsSchema,
+  manualSortLayout: manualSortLayoutSchema,
   entries: z.array(entrySummarySchema),
 });
 
@@ -187,6 +206,9 @@ export type Sense = z.infer<typeof senseSchema>;
 export type EntryRelation = z.infer<typeof relationSchema>;
 export type LexicalEntry = z.infer<typeof lexicalEntrySchema>;
 export type EntrySummary = z.infer<typeof entrySummarySchema>;
+export type EntrySortSettings = z.infer<typeof entrySortSettingsSchema>;
+export type ManualSortItem = z.infer<typeof manualSortItemSchema>;
+export type ManualSortLayout = z.infer<typeof manualSortLayoutSchema>;
 export type Project = z.infer<typeof projectSchema>;
 export type ProjectSnapshot = z.infer<typeof projectSnapshotSchema>;
 export type CorpusPartOfSpeech = z.infer<typeof corpusPartOfSpeechSchema>;

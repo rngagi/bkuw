@@ -35,6 +35,8 @@ const snapshot: ProjectSnapshot = {
   writingSystems: [{ id: "ws1", name: "Traditional Chinese", type: "orthography", scriptCode: "Hant", languageTag: "zh-Hant", displayRole: "primary", sortOrder: 0, fontFamily: null, notes: null }],
   partOfSpeechOptions: ["動詞"], semanticDomainOptions: [], entries: [],
   exportSettings: { version: 1, corpus: { partOfSpeechMappings: {} }, latex: { title: "Test", author: "", headwordWritingSystemId: "ws1", pronunciationWritingSystemId: null, exampleWritingSystemId: "ws1", collationLanguageTag: "zh-Hant", sectionMode: "auto", reverseIndex: "gloss", fontPresets: { ws1: "auto" } } },
+  entrySortSettings: { version: 1, mode: "auto", writingSystemId: "ws1", alphabet: [] },
+  manualSortLayout: { version: 1, items: [] },
 };
 
 describe("ExportDialog", () => {

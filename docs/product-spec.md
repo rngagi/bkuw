@@ -66,13 +66,21 @@ Phonemic text 儲存時不包含 delimiter、顯示時加 `/…/`；phonetic tex
 
 Milestone 1 搜尋 lexical entry forms，不搜尋 examples。搜尋為 Unicode-aware substring match，並使用衍生 search key 做 case-folding 與 diacritic folding；因此 `guo` 必須能找到顯示值 `guò`。原始文字以 NFC 保存，搜尋處理不得改寫顯示資料。
 
-進階 FTS、語言特定 collation、fuzzy search、example 全文搜尋與自訂 sort key 留待後續版本。
+進階 FTS、fuzzy search 與 example 全文搜尋留待後續版本。
+
+## 詞條排序與小標
+
+Project 可指定排序使用的 writing system，並以一行一個元素定義字母表；`ng`、`ch` 等 multigraph 會視為單一排序元素。未定義字母表時，依 writing system language tag 使用 Unicode／ICU collation。自動排序同時產生 entry-list 與匯出辭典共用的小標。
+
+每個 entry 可選擇自動小標或覆寫成 project alphabet 的其他小標。變更前必須二次確認並說明：只改變工作區與匯出辭典中的分組，不改寫表記、搜尋內容或該小標內的自然排序；因此 `ngungu` 可移入 `N` 小標，並仍以完整表記在 `N` 內自動排序。
+
+使用者明確確認後才可啟用完全自訂排序。專用介面可拖拉 entries 與 headings、建立或移除 headings，也可從目前自動排序匯入 headings 或從無 headings 開始。新 entry 暫時放在自動對應的小標末端並標示「尚未確認」，直到 layout 再次儲存。切回自動排序需確認；既有手動 layout 保留但不生效。完全自訂模式啟用時，entry-level 小標覆寫停用。
 
 ## UX 與視覺
 
 - 主 workspace 使用穩定、可調整寬度的 two-pane layout：左側搜尋與 entry list，右側 entry editor。
 - 長表單與列表分別捲動，避免 modal-heavy workflow。
-- entry list 顯示 primary form、optional secondary form 與 senses 彙整的 POS。
+- entry list 顯示共用排序小標、primary form、optional secondary form、senses 彙整的 POS，以及手動 layout 中尚未確認的新詞條狀態。
 - 使用 shadcn/ui 慣例、Radix primitives、Tailwind CSS、Lucide icons。
 - 使用 system UI font；lexical forms 可依 writing system 選擇字型。
 - primary accent 從 muted dark red `#b32b2b` 起始，僅作 semantic token。

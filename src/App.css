@@ -124,6 +124,14 @@ textarea { min-height: 72px; resize: vertical; }
 .save-status.error { color: var(--destructive); }
 .editor-scroll { flex: 1; min-height: 0; overflow: auto; padding: 18px clamp(16px, 3vw, 36px) 80px; }
 .editor-section { padding: 0 0 20px; margin: 0 0 20px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; }
+.entry-list-heading { position: absolute; left: 0; right: 0; display: flex; align-items: end; padding: 0 14px 7px; color: var(--muted-foreground); font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; border-bottom: 1px solid var(--border); background: var(--background); }
+.pending-order { color: var(--primary); }
+.sort-dialog { width: min(680px, calc(100vw - 32px)); max-height: min(820px, calc(100vh - 32px)); display: flex; flex-direction: column; }
+.sort-layout { min-height: 220px; overflow: auto; border: 1px solid var(--border); border-radius: 7px; padding: 6px; }
+.sort-item { display: grid; grid-template-columns: 22px 1fr auto auto; align-items: center; gap: 8px; min-height: 44px; padding: 6px 8px; border-bottom: 1px solid var(--border); cursor: grab; }
+.sort-item:last-child { border-bottom: 0; }
+.sort-item.heading { margin-top: 5px; background: var(--muted); font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+.sort-item small { color: var(--primary); }
 .section-heading.standalone { margin: 0 0 12px; }
 .form-row { display: grid; grid-template-columns: minmax(130px, .35fr) 1fr auto; gap: 8px; align-items: center; }
 .form-system-label { color: var(--muted-foreground); font-size: 13px; }

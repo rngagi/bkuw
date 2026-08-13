@@ -12,9 +12,10 @@ use uuid::Uuid;
 use crate::{
     domain::{
         CorpusExportSettings, CreateProjectRequest, DeleteEntryRequest, DeletedEntry, EntryForm,
-        EntryRelation, EntrySummary, Example, ExampleForm, ExportSettingsV1, FontPreset,
-        LatexExportSettings, LexicalEntry, Project, ProjectSnapshot, ReverseIndexMode,
-        SaveEntryRequest, SectionMode, Sense, UpdateProjectSettingsRequest, WritingSystem,
+        EntryRelation, EntrySortMode, EntrySortSettingsV1, EntrySummary, Example, ExampleForm,
+        ExportSettingsV1, FontPreset, LatexExportSettings, LexicalEntry, ManualSortLayoutV1,
+        Project, ProjectSnapshot, ReverseIndexMode, SaveEntryRequest, SectionMode, Sense,
+        UpdateProjectSettingsRequest, WritingSystem,
     },
     error::{AppError, AppResult},
     search::{normalize_text, search_key},
@@ -23,7 +24,8 @@ use crate::{
 const INITIAL_MIGRATION: &str = include_str!("../migrations/001_initial.sql");
 const METADATA_OPTIONS_MIGRATION: &str = include_str!("../migrations/002_metadata_options.sql");
 const EXPORT_SETTINGS_MIGRATION: &str = include_str!("../migrations/003_export_settings.sql");
-const LATEST_SCHEMA_VERSION: i64 = 3;
+const ENTRY_ORDERING_MIGRATION: &str = include_str!("../migrations/004_entry_ordering.sql");
+const LATEST_SCHEMA_VERSION: i64 = 4;
 
 pub struct ProjectSession {
     root: PathBuf,
@@ -158,14 +160,25 @@ impl ProjectSession {
     pub fn snapshot(&self) -> AppResult<ProjectSnapshot> {
         let project = load_project(&self.connection)?;
         let writing_systems = load_writing_systems(&self.connection)?;
+        let entry_sort_settings = load_entry_sort_settings(&self.connection, &writing_systems)?;
+        let manual_sort_layout = load_manual_sort_layout(&self.connection)?;
+        let entries = query_summaries(
+            &self.connection,
+            "",
+            &entry_sort_settings,
+            &manual_sort_layout,
+            &writing_systems,
+        )?;
         Ok(ProjectSnapshot {
             root_path: self.root.to_string_lossy().into_owned(),
             export_settings: load_export_settings(&self.connection, &project, &writing_systems)?,
+            entry_sort_settings: entry_sort_settings.clone(),
+            manual_sort_layout: manual_sort_layout.clone(),
             project,
             writing_systems,
             part_of_speech_options: load_metadata_options(&self.connection, "part_of_speech")?,
             semantic_domain_options: load_metadata_options(&self.connection, "semantic_domain")?,
-            entries: query_summaries(&self.connection, "")?,
+            entries,
         })
     }
 
@@ -296,8 +309,67 @@ impl ProjectSession {
         Ok(settings)
     }
 
+    pub fn save_entry_sort_settings(
+        &mut self,
+        mut settings: EntrySortSettingsV1,
+    ) -> AppResult<EntrySortSettingsV1> {
+        let systems = load_writing_systems(&self.connection)?;
+        let ids = systems.iter().map(|system| system.id.as_str()).collect();
+        crate::ordering::validate_settings(&settings, &ids)
+            .map_err(|message| AppError::new("validation", message))?;
+        settings.alphabet = settings
+            .alphabet
+            .into_iter()
+            .map(|item| normalize_text(item.trim()))
+            .filter(|item| !item.is_empty())
+            .collect();
+        let encoded = serde_json::to_string(&settings).map_err(|error| {
+            AppError::with_details(
+                "internal",
+                "Entry sort settings could not be encoded.",
+                error.to_string(),
+            )
+        })?;
+        self.connection.execute(
+            "INSERT INTO entry_sort_settings(project_id, version, settings_json, updated_at)
+             VALUES (?1, 1, ?2, ?3)
+             ON CONFLICT(project_id) DO UPDATE SET version = 1, settings_json = excluded.settings_json, updated_at = excluded.updated_at",
+            params![project_id(&self.connection)?, encoded, now()],
+        )?;
+        Ok(settings)
+    }
+
+    pub fn save_manual_sort_layout(
+        &mut self,
+        layout: ManualSortLayoutV1,
+    ) -> AppResult<ManualSortLayoutV1> {
+        crate::ordering::validate_layout(&layout)
+            .map_err(|message| AppError::new("validation", message))?;
+        let encoded = serde_json::to_string(&layout).map_err(|error| {
+            AppError::with_details(
+                "internal",
+                "Manual sort layout could not be encoded.",
+                error.to_string(),
+            )
+        })?;
+        self.connection.execute(
+            "INSERT INTO manual_sort_layouts(project_id, version, layout_json, updated_at)
+             VALUES (?1, 1, ?2, ?3)
+             ON CONFLICT(project_id) DO UPDATE SET version = 1, layout_json = excluded.layout_json, updated_at = excluded.updated_at",
+            params![project_id(&self.connection)?, encoded, now()],
+        )?;
+        Ok(layout)
+    }
+
     pub fn query_entries(&self, query: &str) -> AppResult<Vec<EntrySummary>> {
-        query_summaries(&self.connection, query)
+        let systems = load_writing_systems(&self.connection)?;
+        query_summaries(
+            &self.connection,
+            query,
+            &load_entry_sort_settings(&self.connection, &systems)?,
+            &load_manual_sort_layout(&self.connection)?,
+            &systems,
+        )
     }
 
     pub fn load_entry(&self, id: &str) -> AppResult<LexicalEntry> {
@@ -324,10 +396,11 @@ impl ProjectSession {
         let transaction = self.connection.transaction()?;
         let updated = transaction.execute(
             "UPDATE lexical_entries
-             SET notes = ?1, revision = revision + 1, updated_at = ?2
-             WHERE id = ?3 AND revision = ?4 AND deleted_at IS NULL",
+             SET notes = ?1, section_override = ?2, revision = revision + 1, updated_at = ?3
+             WHERE id = ?4 AND revision = ?5 AND deleted_at IS NULL",
             params![
                 normalize_optional(request.entry.notes.clone()),
+                normalize_optional(request.entry.section_override.clone()),
                 timestamp,
                 id,
                 request.expected_revision
@@ -513,6 +586,13 @@ fn migrate(connection: &mut Connection, root: &Path) -> AppResult<()> {
         transaction.execute_batch(EXPORT_SETTINGS_MIGRATION)?;
         transaction.execute(
             "INSERT INTO schema_migrations(version, applied_at) VALUES (3, ?1)",
+            params![now()],
+        )?;
+    }
+    if current < 4 {
+        transaction.execute_batch(ENTRY_ORDERING_MIGRATION)?;
+        transaction.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (4, ?1)",
             params![now()],
         )?;
     }
@@ -747,6 +827,75 @@ fn load_metadata_options(connection: &Connection, kind: &str) -> AppResult<Vec<S
     rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
 }
 
+fn default_entry_sort_settings(systems: &[WritingSystem]) -> EntrySortSettingsV1 {
+    let writing_system_id = systems
+        .iter()
+        .find(|system| system.display_role.as_deref() == Some("primary"))
+        .or_else(|| systems.first())
+        .map(|system| system.id.clone())
+        .unwrap_or_default();
+    EntrySortSettingsV1 {
+        version: 1,
+        mode: EntrySortMode::Auto,
+        writing_system_id,
+        alphabet: Vec::new(),
+    }
+}
+
+fn load_entry_sort_settings(
+    connection: &Connection,
+    systems: &[WritingSystem],
+) -> AppResult<EntrySortSettingsV1> {
+    let encoded = connection
+        .query_row(
+            "SELECT settings_json FROM entry_sort_settings WHERE project_id = ?1",
+            params![project_id(connection)?],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?;
+    match encoded {
+        None => Ok(default_entry_sort_settings(systems)),
+        Some(value) => {
+            let settings: EntrySortSettingsV1 = serde_json::from_str(&value).map_err(|error| {
+                AppError::with_details(
+                    "database",
+                    "Entry sort settings are invalid.",
+                    error.to_string(),
+                )
+            })?;
+            let ids = systems.iter().map(|system| system.id.as_str()).collect();
+            if crate::ordering::validate_settings(&settings, &ids).is_ok() {
+                Ok(settings)
+            } else {
+                Ok(default_entry_sort_settings(systems))
+            }
+        }
+    }
+}
+
+fn load_manual_sort_layout(connection: &Connection) -> AppResult<ManualSortLayoutV1> {
+    let encoded = connection
+        .query_row(
+            "SELECT layout_json FROM manual_sort_layouts WHERE project_id = ?1",
+            params![project_id(connection)?],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?;
+    match encoded {
+        None => Ok(ManualSortLayoutV1 {
+            version: 1,
+            items: Vec::new(),
+        }),
+        Some(value) => serde_json::from_str(&value).map_err(|error| {
+            AppError::with_details(
+                "database",
+                "Manual sort layout is invalid.",
+                error.to_string(),
+            )
+        }),
+    }
+}
+
 fn replace_metadata_options(
     transaction: &Transaction<'_>,
     project_id: &str,
@@ -773,7 +922,13 @@ fn replace_metadata_options(
     Ok(())
 }
 
-fn query_summaries(connection: &Connection, query: &str) -> AppResult<Vec<EntrySummary>> {
+fn query_summaries(
+    connection: &Connection,
+    query: &str,
+    settings: &EntrySortSettingsV1,
+    layout: &ManualSortLayoutV1,
+    systems: &[WritingSystem],
+) -> AppResult<Vec<EntrySummary>> {
     let key = search_key(query.trim());
     let pattern = format!("%{key}%");
     let mut statement = connection.prepare(
@@ -792,35 +947,55 @@ fn query_summaries(connection: &Connection, query: &str) -> AppResult<Vec<EntryS
                           FROM senses s
                           WHERE s.entry_id = e.id AND trim(COALESCE(s.part_of_speech, '')) <> ''), ''),
                 e.revision
+                ,e.section_override
+                ,COALESCE((SELECT f.text FROM entry_forms f
+                           WHERE f.entry_id = e.id AND f.writing_system_id = ?3
+                           ORDER BY f.sort_order LIMIT 1), '')
          FROM lexical_entries e
          WHERE e.deleted_at IS NULL
            AND (?1 = '' OR EXISTS (
              SELECT 1 FROM entry_forms f
              WHERE f.entry_id = e.id AND f.search_key LIKE ?2
            ))
-         ORDER BY 2 COLLATE NOCASE, e.created_at, e.id",
+         ORDER BY e.created_at, e.id",
     )?;
-    let rows = statement.query_map(params![key, pattern], |row| {
+    let rows = statement.query_map(params![key, pattern, settings.writing_system_id], |row| {
         let joined: String = row.get(3)?;
-        Ok(EntrySummary {
-            id: row.get(0)?,
-            primary_form: row.get(1)?,
-            secondary_form: row.get(2)?,
-            parts_of_speech: joined
-                .split(',')
-                .filter(|value| !value.is_empty())
-                .map(str::to_owned)
-                .collect(),
-            revision: row.get(4)?,
+        Ok(crate::ordering::SortableSummary {
+            summary: EntrySummary {
+                id: row.get(0)?,
+                primary_form: row.get(1)?,
+                secondary_form: row.get(2)?,
+                parts_of_speech: joined
+                    .split(',')
+                    .filter(|value| !value.is_empty())
+                    .map(str::to_owned)
+                    .collect(),
+                revision: row.get(4)?,
+                section_label: None,
+                manual_order_pending: false,
+            },
+            section_override: row.get(5)?,
+            sort_text: row.get::<_, String>(6)?,
         })
     })?;
-    rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    let rows = rows.collect::<Result<Vec<_>, _>>()?;
+    let language_tag = systems
+        .iter()
+        .find(|system| system.id == settings.writing_system_id)
+        .and_then(|system| system.language_tag.as_deref());
+    Ok(crate::ordering::order_summaries(
+        rows,
+        settings,
+        layout,
+        language_tag,
+    ))
 }
 
 fn load_entry(connection: &Connection, id: &str, include_deleted: bool) -> AppResult<LexicalEntry> {
     let entry = connection
         .query_row(
-            "SELECT id, notes, revision, created_at, updated_at
+            "SELECT id, notes, section_override, revision, created_at, updated_at
              FROM lexical_entries
              WHERE id = ?1 AND (?2 OR deleted_at IS NULL)",
             params![id, include_deleted],
@@ -828,9 +1003,10 @@ fn load_entry(connection: &Connection, id: &str, include_deleted: bool) -> AppRe
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, Option<String>>(1)?,
-                    row.get::<_, i64>(2)?,
-                    row.get::<_, String>(3)?,
+                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, i64>(3)?,
                     row.get::<_, String>(4)?,
+                    row.get::<_, String>(5)?,
                 ))
             },
         )
@@ -840,9 +1016,10 @@ fn load_entry(connection: &Connection, id: &str, include_deleted: bool) -> AppRe
     Ok(LexicalEntry {
         id: entry.0,
         notes: entry.1,
-        revision: entry.2,
-        created_at: entry.3,
-        updated_at: entry.4,
+        section_override: entry.2,
+        revision: entry.3,
+        created_at: entry.4,
+        updated_at: entry.5,
         forms: load_forms(connection, id)?,
         senses: load_senses(connection, id)?,
         relations: load_relations(connection, id)?,
@@ -1261,8 +1438,9 @@ mod tests {
     use super::ProjectSession;
     use crate::domain::{
         CorpusPartOfSpeech, CreateProjectRequest, DeleteEntryRequest, EntryForm, EntryRelation,
-        Example, ExampleForm, ExportKind, ExportProjectRequest, SaveEntryRequest, Sense,
-        UpdateProjectSettingsRequest, WritingSystem,
+        EntrySortMode, EntrySortSettingsV1, Example, ExampleForm, ExportKind, ExportProjectRequest,
+        ManualSortItem, ManualSortLayoutV1, SaveEntryRequest, Sense, UpdateProjectSettingsRequest,
+        WritingSystem,
     };
     use crate::font_manager::FontManager;
 
@@ -1276,6 +1454,275 @@ mod tests {
         })
         .expect("project creation");
         (directory, session)
+    }
+
+    #[test]
+    fn custom_alphabet_sorts_multigraphs_and_supplies_section_labels() {
+        let (_directory, mut session) = create_session();
+        let snapshot = session.snapshot().expect("snapshot");
+        let primary_id = snapshot.writing_systems[0].id.clone();
+        session
+            .save_entry_sort_settings(EntrySortSettingsV1 {
+                version: 1,
+                mode: EntrySortMode::Auto,
+                writing_system_id: primary_id.clone(),
+                alphabet: vec!["a".into(), "b".into(), "c".into(), "n".into(), "ng".into()],
+            })
+            .expect("sort settings");
+
+        for text in ["ngungu", "naga", "caxa", "baba", "ama", "ata", "ngayon"] {
+            let mut entry = session.create_entry().expect("entry");
+            entry.forms.push(EntryForm {
+                id: super::new_id(),
+                writing_system_id: primary_id.clone(),
+                text: text.into(),
+                variant_label: None,
+                dialect: None,
+                status: None,
+                notes: None,
+                sort_order: 0,
+            });
+            session
+                .save_entry(SaveEntryRequest {
+                    expected_revision: 0,
+                    entry,
+                })
+                .expect("save entry");
+        }
+
+        let summaries = session.query_entries("").expect("summaries");
+        assert_eq!(
+            summaries
+                .iter()
+                .map(|item| item.primary_form.as_str())
+                .collect::<Vec<_>>(),
+            vec!["ama", "ata", "baba", "caxa", "naga", "ngayon", "ngungu"]
+        );
+        assert_eq!(
+            summaries
+                .iter()
+                .map(|item| item.section_label.as_deref())
+                .collect::<Vec<_>>(),
+            vec![
+                Some("A"),
+                Some("A"),
+                Some("B"),
+                Some("C"),
+                Some("N"),
+                Some("NG"),
+                Some("NG")
+            ]
+        );
+    }
+
+    #[test]
+    fn section_override_regroups_without_changing_natural_order() {
+        let (_directory, mut session) = create_session();
+        let snapshot = session.snapshot().expect("snapshot");
+        let primary_id = snapshot.writing_systems[0].id.clone();
+        session
+            .save_entry_sort_settings(EntrySortSettingsV1 {
+                version: 1,
+                mode: EntrySortMode::Auto,
+                writing_system_id: primary_id.clone(),
+                alphabet: vec!["n".into(), "ng".into()],
+            })
+            .expect("settings");
+        for (text, override_label) in [("naga", None), ("ngayon", None), ("ngungu", Some("N"))] {
+            let mut entry = session.create_entry().expect("entry");
+            entry.section_override = override_label.map(str::to_owned);
+            entry.forms.push(EntryForm {
+                id: super::new_id(),
+                writing_system_id: primary_id.clone(),
+                text: text.into(),
+                variant_label: None,
+                dialect: None,
+                status: None,
+                notes: None,
+                sort_order: 0,
+            });
+            session
+                .save_entry(SaveEntryRequest {
+                    expected_revision: 0,
+                    entry,
+                })
+                .expect("save");
+        }
+        let summaries = session.query_entries("").expect("summaries");
+        assert_eq!(
+            summaries
+                .iter()
+                .map(|item| (item.primary_form.as_str(), item.section_label.as_deref()))
+                .collect::<Vec<_>>(),
+            vec![
+                ("naga", Some("N")),
+                ("ngungu", Some("N")),
+                ("ngayon", Some("NG")),
+            ]
+        );
+    }
+
+    #[test]
+    fn manual_layout_orders_headings_and_marks_new_entries_pending() {
+        let (_directory, mut session) = create_session();
+        let snapshot = session.snapshot().expect("snapshot");
+        let primary_id = snapshot.writing_systems[0].id.clone();
+        let mut ids = Vec::new();
+        for text in ["ama", "baba"] {
+            let mut entry = session.create_entry().expect("entry");
+            ids.push(entry.id.clone());
+            entry.forms.push(EntryForm {
+                id: super::new_id(),
+                writing_system_id: primary_id.clone(),
+                text: text.into(),
+                variant_label: None,
+                dialect: None,
+                status: None,
+                notes: None,
+                sort_order: 0,
+            });
+            session
+                .save_entry(SaveEntryRequest {
+                    expected_revision: 0,
+                    entry,
+                })
+                .expect("save");
+        }
+        session
+            .save_manual_sort_layout(ManualSortLayoutV1 {
+                version: 1,
+                items: vec![
+                    ManualSortItem::Heading {
+                        id: "special".into(),
+                        label: "Special".into(),
+                    },
+                    ManualSortItem::Entry {
+                        entry_id: ids[1].clone(),
+                    },
+                    ManualSortItem::Heading {
+                        id: "regular".into(),
+                        label: "Regular".into(),
+                    },
+                    ManualSortItem::Entry {
+                        entry_id: ids[0].clone(),
+                    },
+                ],
+            })
+            .expect("layout");
+        session
+            .save_entry_sort_settings(EntrySortSettingsV1 {
+                version: 1,
+                mode: EntrySortMode::Manual,
+                writing_system_id: primary_id.clone(),
+                alphabet: vec!["a".into(), "b".into(), "c".into()],
+            })
+            .expect("settings");
+
+        let mut entry = session.create_entry().expect("new entry");
+        entry.forms.push(EntryForm {
+            id: super::new_id(),
+            writing_system_id: primary_id,
+            text: "caxa".into(),
+            variant_label: None,
+            dialect: None,
+            status: None,
+            notes: None,
+            sort_order: 0,
+        });
+        session
+            .save_entry(SaveEntryRequest {
+                expected_revision: 0,
+                entry,
+            })
+            .expect("save new");
+
+        let summaries = session.query_entries("").expect("summaries");
+        assert_eq!(
+            summaries
+                .iter()
+                .map(|item| item.primary_form.as_str())
+                .collect::<Vec<_>>(),
+            vec!["baba", "ama", "caxa"]
+        );
+        assert_eq!(
+            summaries
+                .iter()
+                .map(|item| item.section_label.as_deref())
+                .collect::<Vec<_>>(),
+            vec![Some("Special"), Some("Regular"), Some("C")]
+        );
+        assert_eq!(
+            summaries
+                .iter()
+                .map(|item| item.manual_order_pending)
+                .collect::<Vec<_>>(),
+            vec![false, false, true]
+        );
+    }
+
+    #[test]
+    fn migration_four_sort_settings_layout_and_override_survive_reopen() {
+        let (_directory, mut session) = create_session();
+        let snapshot = session.snapshot().expect("snapshot");
+        let primary_id = snapshot.writing_systems[0].id.clone();
+        let mut entry = session.create_entry().expect("entry");
+        let entry_id = entry.id.clone();
+        entry.section_override = Some("N".into());
+        entry.forms.push(EntryForm {
+            id: super::new_id(),
+            writing_system_id: primary_id.clone(),
+            text: "ngungu".into(),
+            variant_label: None,
+            dialect: None,
+            status: None,
+            notes: None,
+            sort_order: 0,
+        });
+        session
+            .save_entry(SaveEntryRequest {
+                expected_revision: 0,
+                entry,
+            })
+            .expect("entry save");
+        let settings = EntrySortSettingsV1 {
+            version: 1,
+            mode: EntrySortMode::Manual,
+            writing_system_id: primary_id,
+            alphabet: vec!["n".into(), "ng".into()],
+        };
+        let layout = ManualSortLayoutV1 {
+            version: 1,
+            items: vec![
+                ManualSortItem::Heading {
+                    id: "n".into(),
+                    label: "N".into(),
+                },
+                ManualSortItem::Entry {
+                    entry_id: entry_id.clone(),
+                },
+            ],
+        };
+        session
+            .save_entry_sort_settings(settings.clone())
+            .expect("settings");
+        session
+            .save_manual_sort_layout(layout.clone())
+            .expect("layout");
+        let root = session.snapshot().expect("snapshot").root_path;
+        session.close().expect("close");
+
+        let reopened = ProjectSession::open(root).expect("reopen");
+        let snapshot = reopened.snapshot().expect("snapshot");
+        assert_eq!(snapshot.entry_sort_settings, settings);
+        assert_eq!(snapshot.manual_sort_layout, layout);
+        assert_eq!(
+            reopened
+                .load_entry(&entry_id)
+                .expect("entry")
+                .section_override
+                .as_deref(),
+            Some("N")
+        );
     }
 
     #[test]
@@ -1532,7 +1979,10 @@ mod tests {
         let connection = rusqlite::Connection::open(root.join("project.sqlite")).expect("open");
         connection
             .execute_batch(
-                "DROP TABLE export_settings;
+                "DROP TABLE manual_sort_layouts;
+                 DROP TABLE entry_sort_settings;
+                 ALTER TABLE lexical_entries DROP COLUMN section_override;
+                 DROP TABLE export_settings;
                  ALTER TABLE projects DROP COLUMN analysis_language;
                  DROP TABLE metadata_options;
                  DELETE FROM schema_migrations WHERE version >= 2;",

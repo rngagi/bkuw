@@ -4,6 +4,7 @@ mod domain;
 mod error;
 mod export;
 mod font_manager;
+mod ordering;
 mod search;
 
 use commands::AppState;
@@ -34,6 +35,8 @@ pub fn run() {
             commands::delete_entry,
             commands::restore_entry,
             commands::save_export_settings,
+            commands::save_entry_sort_settings,
+            commands::save_manual_sort_layout,
             commands::preview_export,
             commands::export_project,
             commands::detect_xelatex,

@@ -46,6 +46,8 @@ export_project(request) -> ExportResult
 detect_xelatex() -> TexEngineStatus
 list_font_packs() -> FontPackStatus[]
 install_font_pack(packId) -> FontPackStatus
+save_entry_sort_settings(settings) -> ProjectSnapshot
+save_manual_sort_layout(layout) -> ProjectSnapshot
 ```
 
 Errors 使用 `{ code, message, details? }`，其中 export 另穩定區分 `export_validation`、`export_stale`、`export_filesystem`、`latex_compile`、`latex_timeout`，字型管理另使用 `font_download`、`font_integrity`、`font_filesystem`、`font_unknown`。UI 顯示依 code 本地化的安全訊息；compile failure/timeout 的 detail 指向保留的 diagnostic log，frontend 只針對這兩個 code 將完整路徑顯示為可選取文字，不把其他內部 error details 外洩。
@@ -65,7 +67,9 @@ Main window 的 close request 由 React 攔截，先 flush entry autosave、關�
 - `export_settings`：project-owned versioned JSON profile；v0.2 固定 version 1。
 - `writing_systems`：project、name、type、script/language tags、display role、sort order、font。
 - `metadata_options`：project-owned POS／semantic-domain reusable values 與 sort order。
-- `lexical_entries`：project、notes、revision、timestamps、soft-delete timestamp。
+- `lexical_entries`：project、notes、optional section override、revision、timestamps、soft-delete timestamp。
+- `entry_sort_settings`：project-owned versioned JSON；保存 auto/manual mode、排序 writing system 與 ordered alphabet elements。
+- `manual_sort_layouts`：project-owned versioned JSON；保存 headings 與 entry IDs 的線性 layout。
 - `entry_forms`：entry、writing system、NFC text、derived search key、metadata、sort order。
 - `senses`：entry、gloss、definition、POS、semantic domain、sort order。
 - `examples`：sense、translation、notes、sort order。
@@ -98,7 +102,13 @@ Frontend adapter 對 Rust unit response 接受 Tauri JSON `null`，再映射為 
 
 Entry forms 在 frontend 依 writing-system settings 自動補齊並固定排序；example 先建立 primary form，再允許加入尚未使用的 writing system。Phonemic／phonetic delimiter 是 presentation concern，不寫回 lexical text。Document-level input policy 透過既有及動態 controls 統一關閉 autocorrect、autocapitalize、autocomplete 與 spellcheck。
 
-Migration 2 新增 `metadata_options`。Migration 3 新增 `projects.analysis_language` 與 `export_settings`。舊 schema 開啟時仍遵守先建立一致性 SQLite backup、再於 transaction 套用 migration 的規則。
+Migration 2 新增 `metadata_options`。Migration 3 新增 `projects.analysis_language` 與 `export_settings`。Migration 4 新增 entry section override、versioned sort settings 與 manual layout。舊 schema 開啟時仍遵守先建立一致性 SQLite backup、再於 transaction 套用 migration 的規則。
+
+## Ordering module
+
+Rust `ordering` module 是工作區的集中排序 seam，LaTeX 重整階段會直接使用同一份排序輸出，避免另建規則。輸入為 live entry summaries、project sort settings、manual layout 與 language tag；輸出包含確定順序、section label 與 `manualOrderPending`。自訂 alphabet 使用 longest-match tokenization，確保 `ng` 不被拆為 `n`＋`g`；未定義 alphabet 時使用 ICU4X collator。Section override 只替換 group key，full form sort key 不變。
+
+Manual layout 把 heading 與 entry 當作同一線性序列。已刪除 entry 在讀取時忽略；layout 未收錄的新／恢復 entry 依自動規則插入對應 section 尾端並標示 pending。切回 auto 不刪除 layout。Frontend 只送出 typed settings/layout commands，不自行推導持久化順序。
 
 ## Export architecture
 

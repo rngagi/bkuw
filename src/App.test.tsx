@@ -45,6 +45,7 @@ import { CommandError } from "./lib/tauri";
 const entry: LexicalEntry = {
   id: "entry-1",
   notes: null,
+  sectionOverride: null,
   revision: 0,
   createdAt: "2026-01-01T00:00:00Z",
   updatedAt: "2026-01-01T00:00:00Z",
@@ -69,6 +70,8 @@ const snapshot: ProjectSnapshot = {
     version: 1, corpus: { partOfSpeechMappings: {} },
     latex: { title: "Test", author: "", headwordWritingSystemId: "ws-1", pronunciationWritingSystemId: null, exampleWritingSystemId: "ws-1", collationLanguageTag: null, sectionMode: "auto", reverseIndex: "gloss", fontPresets: { "ws-1": "auto" } },
   },
+  entrySortSettings: { version: 1, mode: "auto", writingSystemId: "ws-1", alphabet: [] },
+  manualSortLayout: { version: 1, items: [] },
   entries: [],
 };
 

@@ -14,7 +14,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/Button";
 import { CommandError } from "../../lib/tauri";
 import { displayWritingSystemText } from "../../lib/writingSystems";
-import { createId, type EntrySummary, type LexicalEntry, type Sense, type WritingSystem } from "../../types/domain";
+import { createId, type EntrySortSettings, type EntrySummary, type LexicalEntry, type Sense, type WritingSystem } from "../../types/domain";
 
 export interface EntryEditorHandle {
   flush(): Promise<LexicalEntry | undefined>;
@@ -27,6 +27,7 @@ interface Props {
   partOfSpeechOptions: string[];
   semanticDomainOptions: string[];
   entryOptions: EntrySummary[];
+  entrySortSettings?: EntrySortSettings;
   onSave(entry: LexicalEntry): Promise<LexicalEntry>;
   onDelete(): Promise<void>;
   onNavigate(id: string): void;
@@ -139,15 +140,18 @@ function RelationEditor({ control, register, setValue, index, entryId, entryOpti
   );
 }
 
-export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEditor({ entry, writingSystems, partOfSpeechOptions, semanticDomainOptions, entryOptions, onSave, onDelete, onNavigate }, ref) {
+export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEditor({ entry, writingSystems, partOfSpeechOptions, semanticDomainOptions, entryOptions, entrySortSettings, onSave, onDelete, onNavigate }, ref) {
   const { t } = useTranslation();
+  const sortSettings = entrySortSettings ?? { version: 1 as const, mode: "auto" as const, writingSystemId: writingSystems[0]?.id ?? "", alphabet: [] };
   const { control, register, reset, getValues, setValue, watch } = useForm<LexicalEntry>({ defaultValues: entry });
   const senses = useFieldArray({ control, name: "senses" });
   const relations = useFieldArray({ control, name: "relations" });
   const watchedForms = useWatch({ control, name: "forms" }) ?? [];
+  const sectionOverride = useWatch({ control, name: "sectionOverride" });
   const [status, setStatus] = useState<"saved" | "dirty" | "saving" | "error">("saved");
   const [saveFailure, setSaveFailure] = useState<{ code: string; message: string; details?: string } | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [pendingSection, setPendingSection] = useState<string | null | undefined>(undefined);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const composing = useRef(false);
   const dirty = useRef(false);
@@ -252,12 +256,13 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
       <header className="editor-toolbar"><span className={`save-status ${status}`} role="status" aria-live="polite">{status === "saving" ? t("workspace.saving") : status === "saved" ? t("workspace.saved") : status === "error" ? t("workspace.saveFailed") : t("workspace.unsaved")}</span><Button type="submit" size="small"><Save size={15} />{t("common.save")}</Button><Button type="button" size="small" variant="danger" onClick={() => setDeleteConfirmOpen(true)}><Trash2 size={15} />{t("entry.deleteEntry")}</Button></header>
       {saveFailure && <div className="error-banner save-error" role="alert"><strong>{t("entry.saveErrorTitle")}</strong><span>{saveFailure.code === "generic" ? saveFailure.message : t(`error.${saveFailure.code}`, { defaultValue: saveFailure.message })}</span>{saveFailure.details && <details><summary>{t("common.details")}</summary><code>{saveFailure.details}</code></details>}</div>}
       <div className="editor-scroll">
-        <section className="editor-section"><div className="section-heading"><h2>{t("entry.forms")}</h2></div>{watchedForms.map((form, index) => { const system = writingSystems.find((item) => item.id === form.writingSystemId); return <div className="form-row" key={form.id}><span className="form-system-label">{system?.name ?? t("entry.writingSystem")}</span><WritingSystemInput autoFocus={index === 0} system={system} registration={register(`forms.${index}.text`)} /><span /></div>; })}<label className="field"><span>{t("entry.notes")}</span><textarea {...register("notes")} /></label></section>
+        <section className="editor-section"><div className="section-heading"><h2>{t("entry.forms")}</h2></div>{watchedForms.map((form, index) => { const system = writingSystems.find((item) => item.id === form.writingSystemId); return <div className="form-row" key={form.id}><span className="form-system-label">{system?.name ?? t("entry.writingSystem")}</span><WritingSystemInput autoFocus={index === 0} system={system} registration={register(`forms.${index}.text`)} /><span /></div>; })}<label className="field"><span>{t("sorting.entrySection")}</span><select aria-label={t("sorting.entrySection")} value={sectionOverride ?? ""} disabled={sortSettings.mode === "manual"} onChange={(event) => setPendingSection(event.target.value || null)}><option value="">{t("sorting.automaticSection")}</option>{sortSettings.alphabet.map((item) => <option key={item} value={item.toUpperCase()}>{item.toUpperCase()}</option>)}</select><small>{t(sortSettings.mode === "manual" ? "sorting.overrideDisabled" : "sorting.entrySectionHelp")}</small></label><label className="field"><span>{t("entry.notes")}</span><textarea {...register("notes")} /></label></section>
         <div className="section-heading standalone"><h2>{t("entry.senses")}</h2><Button type="button" size="small" onClick={addSense}><Plus size={14} />{t("entry.addSense")}</Button></div>
         {senses.fields.map((sense, index) => <SenseEditor key={sense.id} control={control} register={register} sense={sense} index={index} writingSystems={writingSystems} partOfSpeechOptions={partOfSpeechOptions} semanticDomainOptions={semanticDomainOptions} onRemove={() => senses.remove(index)} onMove={senses.move} count={senses.fields.length} />)}
         <section className="editor-section"><div className="section-heading"><h2>{t("entry.relations")}</h2><Button type="button" size="small" onClick={() => relations.append({ id: createId(), targetEntryId: null, relationType: "root", fallbackText: "", notes: null, sortOrder: relations.fields.length })}><Plus size={14} />{t("entry.addRelation")}</Button></div><p className="section-help">{t("entry.fallbackHelp")}</p>{relations.fields.map((relation, index) => <RelationEditor key={relation.id} control={control} register={register} setValue={setValue} index={index} entryId={entry.id} entryOptions={entryOptions} primaryWritingSystem={writingSystems.find((system) => system.displayRole === "primary")} onNavigate={onNavigate} onRemove={() => relations.remove(index)} />)}</section>
       </div>
     </form>
     <AlertDialog.Root open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}><AlertDialog.Portal><AlertDialog.Overlay className="dialog-overlay" /><AlertDialog.Content className="dialog-content narrow"><AlertDialog.Title>{t("entry.deleteTitle")}</AlertDialog.Title><AlertDialog.Description>{t("entry.deleteBody")}</AlertDialog.Description><div className="dialog-actions"><AlertDialog.Cancel asChild><Button>{t("common.cancel")}</Button></AlertDialog.Cancel><AlertDialog.Action asChild><Button variant="danger" onClick={() => void onDelete()}>{t("entry.confirmDelete")}</Button></AlertDialog.Action></div></AlertDialog.Content></AlertDialog.Portal></AlertDialog.Root>
+    <AlertDialog.Root open={pendingSection !== undefined} onOpenChange={(open) => { if (!open) setPendingSection(undefined); }}><AlertDialog.Portal><AlertDialog.Overlay className="dialog-overlay" /><AlertDialog.Content className="dialog-content narrow"><AlertDialog.Title>{t("sorting.overrideTitle")}</AlertDialog.Title><AlertDialog.Description>{t("sorting.overrideBody", { section: pendingSection ?? t("sorting.automaticSection") })}</AlertDialog.Description><div className="dialog-actions"><AlertDialog.Cancel asChild><Button>{t("common.cancel")}</Button></AlertDialog.Cancel><AlertDialog.Action asChild><Button variant="primary" onClick={() => { setValue("sectionOverride", pendingSection ?? null, { shouldDirty: true }); setPendingSection(undefined); }}>{t("sorting.confirmOverride")}</Button></AlertDialog.Action></div></AlertDialog.Content></AlertDialog.Portal></AlertDialog.Root>
   </>;
 });

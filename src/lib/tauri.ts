@@ -8,11 +8,13 @@ import {
   exportPreviewSchema,
   exportResultSchema,
   exportSettingsSchema,
+  entrySortSettingsSchema, manualSortLayoutSchema,
   lexicalEntrySchema,
   projectSnapshotSchema,
   texEngineStatusSchema, fontPackStatusSchema,
   type ExportKind,
   type ExportSettings,
+  type EntrySortSettings, type ManualSortLayout,
   type LexicalEntry,
   type ProjectSnapshot,
   type WritingSystem,
@@ -118,6 +120,16 @@ export const backend = {
 
   saveExportSettings(settings: ExportSettings): Promise<ExportSettings> {
     return call("save_export_settings", { settings }, exportSettingsSchema);
+  },
+
+  saveEntrySortSettings(settings: EntrySortSettings): Promise<ProjectSnapshot> {
+    entrySortSettingsSchema.parse(settings);
+    return call("save_entry_sort_settings", { settings }, projectSnapshotSchema);
+  },
+
+  saveManualSortLayout(layout: ManualSortLayout): Promise<ProjectSnapshot> {
+    manualSortLayoutSchema.parse(layout);
+    return call("save_manual_sort_layout", { layout }, projectSnapshotSchema);
   },
 
   previewExport(kind: ExportKind) {

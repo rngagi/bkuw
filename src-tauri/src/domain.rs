@@ -263,6 +263,7 @@ pub struct EntryRelation {
 pub struct LexicalEntry {
     pub id: String,
     pub notes: Option<String>,
+    pub section_override: Option<String>,
     pub revision: i64,
     pub created_at: String,
     pub updated_at: String,
@@ -279,6 +280,38 @@ pub struct EntrySummary {
     pub secondary_form: Option<String>,
     pub parts_of_speech: Vec<String>,
     pub revision: i64,
+    pub section_label: Option<String>,
+    pub manual_order_pending: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum EntrySortMode {
+    Auto,
+    Manual,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct EntrySortSettingsV1 {
+    pub version: u8,
+    pub mode: EntrySortMode,
+    pub writing_system_id: String,
+    pub alphabet: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum ManualSortItem {
+    Heading { id: String, label: String },
+    Entry { entry_id: String },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ManualSortLayoutV1 {
+    pub version: u8,
+    pub items: Vec<ManualSortItem>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -290,6 +323,8 @@ pub struct ProjectSnapshot {
     pub part_of_speech_options: Vec<String>,
     pub semantic_domain_options: Vec<String>,
     pub export_settings: ExportSettingsV1,
+    pub entry_sort_settings: EntrySortSettingsV1,
+    pub manual_sort_layout: ManualSortLayoutV1,
     pub entries: Vec<EntrySummary>,
 }
 

@@ -4,6 +4,8 @@
 
 目前版本為 `0.2.3`。v0.2 export milestone 已完成本機 Rust／frontend 與真實 XeLaTeX 驗證；v0.2.1 修正 autosave focus，v0.2.2 顯示 XeLaTeX 診斷路徑並修正 Windows 關閉視窗權限，v0.2.3 改由 bkuw 下載、驗證、快取並隨匯出附上可攜字型。GitHub Actions 以 Windows x64 與 macOS Apple Silicon 建置安裝包；version tag 通過全部 CI 後會建立附 checksums 與雙語說明的 Draft Release。介面支援英文與台灣繁中，macOS Intel 不在支援與建置範圍內。
 
+目前 `main` 正在準備 v0.3：project 可定義含 multigraph 的字母表、自動／詞條小標覆寫／完整手動拖拉三種排序層級；工作區與匯出辭典將共用同一排序結果。
+
 ## 技術組成
 
 - Tauri 2、Rust、SQLite
