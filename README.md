@@ -2,7 +2,7 @@
 
 `bkuw` 是一套為語言田野工作設計的 local-first 詞彙資料庫。它以 lexical entry 為核心，支援動態 writing systems、多義項、多表記例句、root/base 關係、Unicode/IPA 搜尋，以及 corpus CSV、XeLaTeX、Overleaf ZIP 與 PDF 匯出。
 
-目前版本為 `0.3.0`。v0.3 加入 project-defined alphabet、entry 小標覆寫與 opt-in 手動拖拉排序，並讓工作區與匯出辭典共用順序；XeLaTeX template 亦改善行距、小標、例句、詞條註解、IPA 詞頭與一層 root/base related entries。Export snapshot 改用 bulk loading，長時間 PDF 匯出會在背景執行並顯示進度。GitHub Actions 以 Windows x64 與 macOS Apple Silicon 建置安裝包；version tag 通過全部 CI 後會建立附 checksums 與雙語說明的 Draft Release。介面支援英文與台灣繁中，macOS Intel 不在支援與建置範圍內。
+目前版本為 `0.3.1`。v0.3.1 的詞表會把 IPA 放在主要表記同一行，並依序顯示每個義項自己的詞性與簡釋；匯出新增 Chiron Sung HK／昭源宋體與 Chiron Hei HK／昭源黑體，選擇時會標示明體／宋體或黑體／無襯線風格。v0.3 加入 project-defined alphabet、entry 小標覆寫與 opt-in 手動拖拉排序，並讓工作區與匯出辭典共用順序。GitHub Actions 以 Windows x64 與 macOS Apple Silicon 建置安裝包；version tag 通過全部 CI 後會建立附 checksums 與雙語說明的 Draft Release。介面支援英文與台灣繁中，macOS Intel 不在支援與建置範圍內。
 
 Project 可定義含 multigraph 的字母表，並提供自動／詞條小標覆寫／完整手動拖拉三種排序層級；工作區與匯出辭典共用同一排序結果。
 
@@ -65,6 +65,6 @@ MyLanguage.bkuw/
 
 App header 的「匯出／Export」會先 flush autosave，再依序保存 profile、顯示 validation preview、選擇目的地並產生輸出。CSV 固定遵循 rngagi-corpus v0.3 九欄契約；LaTeX 會產生可編輯資料夾與 Overleaf-ready ZIP。本機有 XeLaTeX 時可一併建立 PDF，否則不影響來源與 ZIP 匯出。
 
-LaTeX/PDF 不再依賴作業系統已安裝的字型。bkuw 會從官方固定版本下載 TeX Gyre Termes、Charis SIL、Noto Serif 與 Noto Serif CJK TC，驗證 SHA-256 後存入 app-private cache，並把實際使用的字型與授權檔放入來源資料夾和 ZIP。TeX Gyre Termes 是所有 LaTeX/PDF 匯出的必要 pack；缺少或驗證失敗時會阻擋匯出。Phonemic／phonetic（IPA）書寫系統固定使用 Charis SIL；現階段不提供 Thai／Tibetan 專用 managed font packs。
+LaTeX/PDF 不再依賴作業系統已安裝的字型。bkuw 會從官方固定版本下載 TeX Gyre Termes、Charis SIL、Noto Serif、Noto Serif CJK TC、[Chiron Sung HK](https://github.com/chiron-fonts/chiron-sung-hk) 與 [Chiron Hei HK](https://github.com/chiron-fonts/chiron-hei-hk)，驗證 SHA-256 後存入 app-private cache，並把實際使用的字型與授權檔放入來源資料夾和 ZIP。Chiron Sung HK 是明體／宋體風格，Chiron Hei HK 是黑體／無襯線風格。TeX Gyre Termes 是所有 LaTeX/PDF 匯出的必要 pack；缺少或驗證失敗時會阻擋匯出。Phonemic／phonetic（IPA）書寫系統固定使用 Charis SIL；現階段不提供 Thai／Tibetan 專用 managed font packs。
 
 目前只修改 `bkuw` repository，尚未建立與 `rngagi-corpus` 的跨 repository 自動 contract test。若 corpus template 或版本改變，必須依 [CSV 契約](docs/corpus-csv-contract.md)人工重驗並更新 golden fixture。

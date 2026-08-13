@@ -82,7 +82,12 @@ export const entrySummarySchema = z.object({
   id: z.string(),
   primaryForm: z.string(),
   secondaryForm: nullableText,
-  partsOfSpeech: z.array(z.string()),
+  pronunciationForm: nullableText,
+  pronunciationWritingSystemId: nullableText,
+  senses: z.array(z.object({
+    partOfSpeech: nullableText,
+    gloss: nullableText,
+  })),
   revision: z.number(),
   sectionLabel: nullableText,
   manualOrderPending: z.boolean(),
@@ -107,7 +112,7 @@ export const corpusPartOfSpeechSchema = z.enum([
 ]);
 
 export const fontPresetSchema = z.enum([
-  "auto", "charisSil", "notoSerif", "notoSerifCjkTc",
+  "auto", "charisSil", "notoSerif", "notoSerifCjkTc", "chironSungHk", "chironHeiHk",
 ]);
 
 export const exportSettingsSchema = z.object({

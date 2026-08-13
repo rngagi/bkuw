@@ -10,13 +10,26 @@ interface Props { entries: EntrySummary[]; writingSystems: WritingSystem[]; sele
 export function EntryList({ entries, writingSystems, selectedId, hasQuery, onSelect }: Props) {
   const { t } = useTranslation();
   const parentRef = useRef<HTMLDivElement>(null);
+  const primary = writingSystems.find((system) => system.displayRole === "primary");
+  const secondary = writingSystems.find((system) => system.displayRole === "secondary");
   const rows = useMemo(() => entries.flatMap((entry, index) => {
     const previous = index > 0 ? entries[index - 1].sectionLabel : null;
     return entry.sectionLabel && entry.sectionLabel !== previous
       ? [{ kind: "heading" as const, label: entry.sectionLabel }, { kind: "entry" as const, entry }]
       : [{ kind: "entry" as const, entry }];
   }), [entries]);
-  const virtualizer = useVirtualizer({ count: rows.length, getScrollElement: () => parentRef.current, estimateSize: (index) => rows[index]?.kind === "heading" ? 38 : 68, overscan: 8 });
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: (index) => {
+      const row = rows[index];
+      if (!row || row.kind === "heading") return 38;
+      const hasDistinctSecondary = Boolean(row.entry.secondaryForm)
+        && secondary?.id !== row.entry.pronunciationWritingSystemId;
+      return 62 + Math.max(0, row.entry.senses.length - 1) * 18 + (hasDistinctSecondary ? 18 : 0);
+    },
+    overscan: 8,
+  });
   if (!entries.length) return <div className="empty-list">{t(hasQuery ? "workspace.noMatch" : "workspace.noEntries")}</div>;
   return (
     <div className="entry-list" ref={parentRef}>
@@ -25,9 +38,16 @@ export function EntryList({ entries, writingSystems, selectedId, hasQuery, onSel
           const item = rows[row.index];
           if (item.kind === "heading") return <div key={`heading-${row.index}-${item.label}`} className="entry-list-heading" style={{ transform: `translateY(${row.start}px)`, height: row.size }}>{item.label}</div>;
           const entry = item.entry;
-          const primary = writingSystems.find((system) => system.displayRole === "primary");
-          const secondary = writingSystems.find((system) => system.displayRole === "secondary");
-          return <button key={entry.id} className={cn("entry-list-item", selectedId === entry.id && "selected")} style={{ transform: `translateY(${row.start}px)`, height: row.size }} onClick={() => onSelect(entry.id)}><strong>{entry.primaryForm ? displayWritingSystemText(entry.primaryForm, primary) : t("workspace.untitled")}{entry.manualOrderPending && <span className="pending-order" title={t("sorting.pendingHelp")}> •</span>}</strong>{entry.secondaryForm && <span>{displayWritingSystemText(entry.secondaryForm, secondary)}</span>}{entry.partsOfSpeech.length > 0 && <small>{entry.partsOfSpeech.join(" · ")}</small>}</button>;
+          const pronunciationSystem = writingSystems.find(
+            (system) => system.id === entry.pronunciationWritingSystemId,
+          );
+          const hasDistinctSecondary = Boolean(entry.secondaryForm)
+            && secondary?.id !== entry.pronunciationWritingSystemId;
+          return <button key={entry.id} className={cn("entry-list-item", selectedId === entry.id && "selected")} style={{ transform: `translateY(${row.start}px)`, height: row.size }} onClick={() => onSelect(entry.id)}>
+            <div className="entry-list-headword"><strong>{entry.primaryForm ? displayWritingSystemText(entry.primaryForm, primary) : t("workspace.untitled")}{entry.manualOrderPending && <span className="pending-order" title={t("sorting.pendingHelp")}> •</span>}</strong>{entry.pronunciationForm && <span>{displayWritingSystemText(entry.pronunciationForm, pronunciationSystem)}</span>}</div>
+            {hasDistinctSecondary && <span>{displayWritingSystemText(entry.secondaryForm!, secondary)}</span>}
+            {entry.senses.map((sense, index) => (sense.partOfSpeech || sense.gloss) && <small className="entry-sense-summary" key={`${entry.id}-sense-${index}`}>{sense.partOfSpeech && <span className="entry-sense-pos">{sense.partOfSpeech}</span>}{sense.gloss && <span className="entry-sense-gloss">{sense.gloss}</span>}</small>)}
+          </button>;
         })}
       </div>
     </div>

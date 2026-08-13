@@ -25,7 +25,8 @@ use crate::{
     },
     error::{AppError, AppResult},
     font_manager::{
-        CHARIS_PACK_ID, FontManager, NOTO_CJK_TC_PACK_ID, NOTO_SERIF_PACK_ID, TERMES_PACK_ID,
+        CHARIS_PACK_ID, CHIRON_HEI_HK_PACK_ID, CHIRON_SUNG_HK_PACK_ID, FontManager,
+        NOTO_CJK_TC_PACK_ID, NOTO_SERIF_PACK_ID, TERMES_PACK_ID,
     },
 };
 
@@ -843,6 +844,8 @@ fn portable_font_pack_id(
         crate::domain::FontPreset::CharisSil => CHARIS_PACK_ID,
         crate::domain::FontPreset::NotoSerif => NOTO_SERIF_PACK_ID,
         crate::domain::FontPreset::NotoSerifCjkTc => NOTO_CJK_TC_PACK_ID,
+        crate::domain::FontPreset::ChironSungHk => CHIRON_SUNG_HK_PACK_ID,
+        crate::domain::FontPreset::ChironHeiHk => CHIRON_HEI_HK_PACK_ID,
         crate::domain::FontPreset::Auto => match script {
             Some("Hant") => NOTO_CJK_TC_PACK_ID,
             Some("Latn") => CHARIS_PACK_ID,
@@ -1374,5 +1377,25 @@ mod font_selection_tests {
                 CHARIS_PACK_ID,
             );
         }
+    }
+
+    #[test]
+    fn chiron_presets_resolve_to_their_managed_font_packs() {
+        assert_eq!(
+            portable_font_pack_id(
+                &crate::domain::FontPreset::ChironSungHk,
+                Some("Hant"),
+                "orthography",
+            ),
+            CHIRON_SUNG_HK_PACK_ID,
+        );
+        assert_eq!(
+            portable_font_pack_id(
+                &crate::domain::FontPreset::ChironHeiHk,
+                Some("Hant"),
+                "orthography",
+            ),
+            CHIRON_HEI_HK_PACK_ID,
+        );
     }
 }

@@ -107,7 +107,9 @@ LaTeX 匯出包含可編輯來源資料夾與不含 PDF／aux／log 的 Overleaf
 
 LaTeX profile 可選擇不顯示關聯詞，或顯示 root、base、兩者。對每個 target entry 只收集直接指向它的 incoming live relations，最多一層、不遞迴，同一 source entry 去重；摘要顯示 headword、optional pronunciation 與第一個 sense gloss，並連回完整詞條。
 
-bkuw 自行管理 portable font packs，不依賴 OS 已安裝字型，也不把字型安裝進系統。首次需要時，由使用者在 Export wizard 下載官方固定版本；Rust 必須先驗證 SHA-256 與 pack manifest，才寫入 app-private cache。匯出資料夾與 ZIP 必須包含實際需要的字型及授權檔。TeX Gyre Termes 是所有 LaTeX/PDF 匯出的必要 base；缺少或 invalid 時屬 fatal validation error。Phonemic／phonetic writing systems 固定使用 Charis SIL，Hant 可使用 Noto Serif CJK TC，其他 scripts 使用一般 Noto Serif fallback。現階段不提供 Thai／Tibetan 專用 managed font packs 或 presets。
+bkuw 自行管理 portable font packs，不依賴 OS 已安裝字型，也不把字型安裝進系統。首次需要時，由使用者在 Export wizard 下載官方固定版本；Rust 必須先驗證 SHA-256 與 pack manifest，才寫入 app-private cache。匯出資料夾與 ZIP 必須包含實際需要的字型及授權檔。TeX Gyre Termes 是所有 LaTeX/PDF 匯出的必要 base；缺少或 invalid 時屬 fatal validation error。Phonemic／phonetic writing systems 固定使用 Charis SIL。Hant 可選 Noto Serif CJK TC、明體／宋體風格的 Chiron Sung HK，或黑體／無襯線風格的 Chiron Hei HK；UI 必須在選項下明示風格，不要求使用者只靠字型名稱判斷。其他 scripts 使用一般 Noto Serif fallback。現階段不提供 Thai／Tibetan 專用 managed font packs 或 presets。
+
+左側詞表的主要表記與第一個可用 pronunciation form 顯示在同一行；若 pronunciation writing system 同時是 secondary，不得再顯示一次。下方依 sense order 顯示簡釋，每一列保留該 sense 自己的詞性與 gloss 配對；不同義項的詞性不得彙整成一個無法對應的清單。
 
 PDF 只在本機偵測到 XeLaTeX 時產生。bkuw 在隔離 build directory 中以 `-no-shell-escape` 執行兩次並限制 120 秒；失敗保留來源與 diagnostic log，並在錯誤區顯示可選取、可複製的完整 log 路徑。找不到引擎仍是成功的 LaTeX 匯出，UI 提供 Overleaf 上傳步驟，但不自動上傳 lexical data。
 
@@ -121,4 +123,4 @@ PDF 只在本機偵測到 XeLaTeX 時產生。bkuw 在隔離 build directory 中
 
 ## 明確排除
 
-v0.3 不包含 accounts、authentication、cloud sync、team collaboration、permissions、server backend、audio、CSV import、mobile、AI transcription、ASR、ELAN-style timeline、waveform segmentation、Git syncing、code signing、notarization、auto-update 或自動上傳 lexical data。v0.3.0 可透過受信任 version tag 建立 unsigned Draft GitHub Release；正式發布前須人工確認安裝包、checksums 與警告內容。
+v0.3 不包含 accounts、authentication、cloud sync、team collaboration、permissions、server backend、audio、CSV import、mobile、AI transcription、ASR、ELAN-style timeline、waveform segmentation、Git syncing、code signing、notarization、auto-update 或自動上傳 lexical data。v0.3.x 可透過受信任 version tag 建立 unsigned Draft GitHub Release；正式發布前須人工確認安裝包、checksums 與警告內容。

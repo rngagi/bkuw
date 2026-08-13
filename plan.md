@@ -43,7 +43,7 @@
 ## 4. Entry workspace
 
 - [x] 建立可調寬度 two-pane workspace、搜尋列與 virtualized entry list。
-  - 完成條件：左右獨立捲動；列表顯示 primary、secondary 與彙整 POS；keyboard selection 可用。
+  - 完成條件：左右獨立捲動；列表顯示 primary、secondary 與 sense-level POS／簡釋；keyboard selection 可用。
   - 驗證：workspace interaction tests。
 - [x] 實作 entry create/load 與多 writing-system forms editor。
   - 完成條件：forms 依 writing-system order 顯示；文字以 NFC 保存；空 project/entry state 完整。
@@ -200,3 +200,18 @@
 - [x] 人工檢查排序與 LaTeX 結果後，將四處版本一致升為 `0.3.0`。
   - 完成條件：使用者確認後 bump、commit、push 並以 `v0.3.0` tag 建立 Windows x64／macOS Apple Silicon release。
   - 驗證：版本一致性檢查、`pnpm check && pnpm test && pnpm test:rust && pnpm tauri build --no-bundle`、真實 XeLaTeX compile；遠端 installer 與 release 由 tag workflow 驗收。
+
+## 15. v0.3.1 Chiron fonts and entry-list summaries
+
+- [x] 將 Chiron Sung HK 與 Chiron Hei HK 納入 managed portable font catalog。
+  - 完成條件：使用 fixed upstream tags、static OTF Regular／Bold、逐檔 SHA-256 與 SIL OFL license；preview、source folder 與 Overleaf ZIP 共用既有 font-manager contract。
+  - 驗證：catalog、preset resolution、integrity、namespaced font/license export tests。
+- [x] 在 Export wizard 提供 Chiron 字型選擇與雙語風格提示。
+  - 完成條件：非 IPA writing systems 可選 Chiron Sung HK／Chiron Hei HK；選擇時分別明示明體／宋體與黑體／無襯線風格；IPA 仍固定 Charis SIL。
+  - 驗證：ExportDialog persistence/style component test、English／zh-TW translation review。
+- [x] 改善 virtualized entry list 的 IPA 與簡釋 read model。
+  - 完成條件：pronunciation 與 primary 同行且不重複；每個 sense 依序顯示自己的 POS＋gloss，缺其中一項仍安全顯示；row height 隨內容調整。
+  - 驗證：database bulk summary integration test、EntryList rendering test、`pnpm check && pnpm test && pnpm test:rust`。
+- [ ] 將四處版本一致升為 `0.3.1`，完成本機及 tag release 驗收。
+  - 完成條件：package、Cargo、Cargo lock、Tauri version 一致；Windows x64 與 macOS Apple Silicon CI 成功；Draft assets/checksums 確認後發布。
+  - 驗證：完整 test/build suite、真實 XeLaTeX portable-template test、GitHub Actions 與 Release assets。

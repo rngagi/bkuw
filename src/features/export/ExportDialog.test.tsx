@@ -208,4 +208,23 @@ describe("ExportDialog", () => {
     fireEvent.click(screen.getByLabelText("LaTeX"));
     expect(screen.getByText("Charis SIL (fixed for IPA)")).toBeInTheDocument();
   });
+
+  it("offers both Chiron families and explains their typeface styles", async () => {
+    render(<ExportDialog open snapshot={snapshot} onOpenChange={vi.fn()} onFlush={vi.fn(async () => undefined)} onSetAnalysisLanguage={vi.fn()} onNavigateEntry={vi.fn()} />);
+    fireEvent.click(screen.getByLabelText("LaTeX"));
+
+    const font = screen.getByLabelText("Portable font for Traditional Chinese");
+    expect(within(font).getByRole("option", { name: "Chiron Sung HK" })).toBeInTheDocument();
+    expect(within(font).getByRole("option", { name: "Chiron Hei HK" })).toBeInTheDocument();
+
+    fireEvent.change(font, { target: { value: "chironSungHk" } });
+    expect(screen.getByText("Ming/Song style for Traditional Chinese, including Hong Kong glyph conventions.")).toBeInTheDocument();
+    fireEvent.change(font, { target: { value: "chironHeiHk" } });
+    expect(screen.getByText("Hei/sans-serif style for Traditional Chinese, including Hong Kong glyph conventions.")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    await waitFor(() => expect(backendMock.saveExportSettings).toHaveBeenCalledWith(expect.objectContaining({
+      latex: expect.objectContaining({ fontPresets: { ws1: "chironHeiHk" } }),
+    })));
+  });
 });

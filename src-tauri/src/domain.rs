@@ -55,6 +55,8 @@ pub enum FontPreset {
     CharisSil,
     NotoSerif,
     NotoSerifCjkTc,
+    ChironSungHk,
+    ChironHeiHk,
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -286,11 +288,20 @@ pub struct LexicalEntry {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct EntrySenseSummary {
+    pub part_of_speech: Option<String>,
+    pub gloss: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct EntrySummary {
     pub id: String,
     pub primary_form: String,
     pub secondary_form: Option<String>,
-    pub parts_of_speech: Vec<String>,
+    pub pronunciation_form: Option<String>,
+    pub pronunciation_writing_system_id: Option<String>,
+    pub senses: Vec<EntrySenseSummary>,
     pub revision: i64,
     pub section_label: Option<String>,
     pub manual_order_pending: bool,

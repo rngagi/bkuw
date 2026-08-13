@@ -158,7 +158,7 @@ describe("App keyboard and delete workflow", () => {
     const manualSnapshot: ProjectSnapshot = {
       ...snapshot,
       entrySortSettings: { version: 1, mode: "manual", writingSystemId: "ws-1", alphabet: ["a", "ng"] },
-      entries: [{ id: "entry-1", primaryForm: "ngayan", secondaryForm: null, partsOfSpeech: [], revision: 1, sectionLabel: "NG", manualOrderPending: true }],
+      entries: [{ id: "entry-1", primaryForm: "ngayan", secondaryForm: null, pronunciationForm: null, pronunciationWritingSystemId: null, senses: [], revision: 1, sectionLabel: "NG", manualOrderPending: true }],
     };
     backendMock.createProject.mockResolvedValue(manualSnapshot);
     backendMock.queryEntries.mockResolvedValue(manualSnapshot.entries);

@@ -8,8 +8,8 @@ const snapshot = {
   entrySortSettings: { version: 1, mode: "manual", writingSystemId: "ws", alphabet: ["a", "b"] },
   manualSortLayout: { version: 1, items: [{ kind: "heading", id: "a", label: "A" }, { kind: "entry", entryId: "one" }, { kind: "heading", id: "b", label: "B" }, { kind: "entry", entryId: "two" }] },
   entries: [
-    { id: "one", primaryForm: "ama", secondaryForm: null, partsOfSpeech: [], revision: 1, sectionLabel: "A", manualOrderPending: false },
-    { id: "two", primaryForm: "baba", secondaryForm: null, partsOfSpeech: [], revision: 1, sectionLabel: "B", manualOrderPending: false },
+    { id: "one", primaryForm: "ama", secondaryForm: null, pronunciationForm: null, pronunciationWritingSystemId: null, senses: [], revision: 1, sectionLabel: "A", manualOrderPending: false },
+    { id: "two", primaryForm: "baba", secondaryForm: null, pronunciationForm: null, pronunciationWritingSystemId: null, senses: [], revision: 1, sectionLabel: "B", manualOrderPending: false },
   ],
 } as unknown as ProjectSnapshot;
 

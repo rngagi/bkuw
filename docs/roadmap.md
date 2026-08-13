@@ -18,6 +18,8 @@ v0.2.3 加入 bkuw-managed portable font packs：固定官方來源與 SHA-256�
 
 Project-defined alphabet、entry section override 與 opt-in manual drag ordering；workspace 與匯出辭典共用順序及小標。XeLaTeX template 改善行距、詞條註解、IPA 詞頭、例句與 optional direct root/base related entries。Export snapshot 使用 bulk loading，長時間工作移至 background executor 並顯示階段進度。
 
+v0.3.1 新增 Chiron Sung HK／Chiron Hei HK managed portable fonts 與明體／黑體風格提示；詞表將 IPA 合併至主要表記同行，並依序呈現每個義項自己的詞性與簡釋。
+
 ## 後續候選
 
 - Audio import/playback 與 optional recording。

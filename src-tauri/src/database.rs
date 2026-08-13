@@ -13,10 +13,10 @@ use uuid::Uuid;
 use crate::{
     domain::{
         CorpusExportSettings, CreateProjectRequest, DeleteEntryRequest, DeletedEntry, EntryForm,
-        EntryRelation, EntrySortMode, EntrySortSettingsV1, EntrySummary, Example, ExampleForm,
-        ExportSettingsV1, FontPreset, LatexExportSettings, LexicalEntry, ManualSortLayoutV1,
-        Project, ProjectSnapshot, RelatedEntriesMode, ReverseIndexMode, SaveEntryRequest,
-        SectionMode, Sense, UpdateProjectSettingsRequest, WritingSystem,
+        EntryRelation, EntrySenseSummary, EntrySortMode, EntrySortSettingsV1, EntrySummary,
+        Example, ExampleForm, ExportSettingsV1, FontPreset, LatexExportSettings, LexicalEntry,
+        ManualSortLayoutV1, Project, ProjectSnapshot, RelatedEntriesMode, ReverseIndexMode,
+        SaveEntryRequest, SectionMode, Sense, UpdateProjectSettingsRequest, WritingSystem,
     },
     error::{AppError, AppResult},
     search::{normalize_text, search_key},
@@ -1154,6 +1154,7 @@ fn query_summaries(
 ) -> AppResult<Vec<EntrySummary>> {
     let key = search_key(query.trim());
     let pattern = format!("%{key}%");
+    let mut senses_by_entry = load_entry_sense_summaries(connection, &key, &pattern)?;
     let mut statement = connection.prepare(
         "SELECT e.id,
                 COALESCE((
@@ -1166,9 +1167,16 @@ fn query_summaries(
                  JOIN writing_systems w ON w.id = f.writing_system_id
                  WHERE f.entry_id = e.id AND w.display_role = 'secondary'
                  ORDER BY f.sort_order LIMIT 1),
-                COALESCE((SELECT group_concat(DISTINCT s.part_of_speech)
-                          FROM senses s
-                          WHERE s.entry_id = e.id AND trim(COALESCE(s.part_of_speech, '')) <> ''), ''),
+                (SELECT f.writing_system_id FROM entry_forms f
+                 JOIN writing_systems w ON w.id = f.writing_system_id
+                 WHERE f.entry_id = e.id AND w.type IN ('phonetic', 'phonemic')
+                 ORDER BY CASE w.type WHEN 'phonetic' THEN 0 ELSE 1 END,
+                          w.sort_order, f.sort_order LIMIT 1),
+                (SELECT f.text FROM entry_forms f
+                 JOIN writing_systems w ON w.id = f.writing_system_id
+                 WHERE f.entry_id = e.id AND w.type IN ('phonetic', 'phonemic')
+                 ORDER BY CASE w.type WHEN 'phonetic' THEN 0 ELSE 1 END,
+                          w.sort_order, f.sort_order LIMIT 1),
                 e.revision
                 ,e.section_override
                 ,COALESCE((SELECT f.text FROM entry_forms f
@@ -1183,23 +1191,21 @@ fn query_summaries(
          ORDER BY e.created_at, e.id",
     )?;
     let rows = statement.query_map(params![key, pattern, settings.writing_system_id], |row| {
-        let joined: String = row.get(3)?;
+        let id: String = row.get(0)?;
         Ok(crate::ordering::SortableSummary {
             summary: EntrySummary {
-                id: row.get(0)?,
+                senses: senses_by_entry.remove(&id).unwrap_or_default(),
+                id,
                 primary_form: row.get(1)?,
                 secondary_form: row.get(2)?,
-                parts_of_speech: joined
-                    .split(',')
-                    .filter(|value| !value.is_empty())
-                    .map(str::to_owned)
-                    .collect(),
-                revision: row.get(4)?,
+                pronunciation_writing_system_id: row.get(3)?,
+                pronunciation_form: row.get(4)?,
+                revision: row.get(5)?,
                 section_label: None,
                 manual_order_pending: false,
             },
-            section_override: row.get(5)?,
-            sort_text: row.get::<_, String>(6)?,
+            section_override: row.get(6)?,
+            sort_text: row.get::<_, String>(7)?,
         })
     })?;
     let rows = rows.collect::<Result<Vec<_>, _>>()?;
@@ -1213,6 +1219,39 @@ fn query_summaries(
         layout,
         language_tag,
     ))
+}
+
+fn load_entry_sense_summaries(
+    connection: &Connection,
+    search_key: &str,
+    search_pattern: &str,
+) -> AppResult<HashMap<String, Vec<EntrySenseSummary>>> {
+    let mut statement = connection.prepare(
+        "SELECT s.entry_id, s.part_of_speech, s.gloss
+         FROM senses s
+         JOIN lexical_entries e ON e.id = s.entry_id
+         WHERE e.deleted_at IS NULL
+           AND (?1 = '' OR EXISTS (
+             SELECT 1 FROM entry_forms f
+             WHERE f.entry_id = e.id AND f.search_key LIKE ?2
+           ))
+         ORDER BY s.entry_id, s.sort_order, s.id",
+    )?;
+    let rows = statement.query_map(params![search_key, search_pattern], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            EntrySenseSummary {
+                part_of_speech: row.get(1)?,
+                gloss: row.get(2)?,
+            },
+        ))
+    })?;
+    let mut summaries: HashMap<String, Vec<EntrySenseSummary>> = HashMap::new();
+    for row in rows {
+        let (entry_id, summary) = row?;
+        summaries.entry(entry_id).or_default().push(summary);
+    }
+    Ok(summaries)
 }
 
 fn load_entry(connection: &Connection, id: &str, include_deleted: bool) -> AppResult<LexicalEntry> {
@@ -1662,8 +1701,8 @@ mod tests {
     use crate::domain::{
         CorpusPartOfSpeech, CreateProjectRequest, DeleteEntryRequest, EntryForm, EntryRelation,
         EntrySortMode, EntrySortSettingsV1, Example, ExampleForm, ExportKind, ExportProjectRequest,
-        ManualSortItem, ManualSortLayoutV1, RelatedEntriesMode, SaveEntryRequest, Sense,
-        UpdateProjectSettingsRequest, WritingSystem,
+        FontPreset, ManualSortItem, ManualSortLayoutV1, RelatedEntriesMode, SaveEntryRequest,
+        Sense, UpdateProjectSettingsRequest, WritingSystem,
     };
     use crate::font_manager::FontManager;
 
@@ -2089,6 +2128,107 @@ mod tests {
             vec!["Verb", "Noun"]
         );
         assert_eq!(reopened_snapshot.semantic_domain_options, vec!["Motion"]);
+    }
+
+    #[test]
+    fn entry_summaries_keep_pronunciation_and_ordered_sense_metadata() {
+        let (_directory, mut session) = create_session();
+        let snapshot = session.snapshot().expect("snapshot");
+        let primary_id = snapshot.writing_systems[0].id.clone();
+        let ipa_id = super::new_id();
+        session
+            .update_settings(UpdateProjectSettingsRequest {
+                name: snapshot.project.name,
+                language_name: Some("Test Language".into()),
+                language_code: Some("und".into()),
+                analysis_language: Some("zh-TW".into()),
+                description: None,
+                writing_systems: vec![
+                    snapshot.writing_systems[0].clone(),
+                    WritingSystem {
+                        id: ipa_id.clone(),
+                        name: "IPA".into(),
+                        kind: "phonemic".into(),
+                        script_code: Some("Latn".into()),
+                        language_tag: None,
+                        display_role: Some("secondary".into()),
+                        sort_order: 1,
+                        font_family: None,
+                        notes: None,
+                    },
+                ],
+                part_of_speech_options: vec!["Noun".into(), "Verb".into()],
+                semantic_domain_options: Vec::new(),
+            })
+            .expect("settings");
+        let mut entry = session.create_entry().expect("entry");
+        entry.forms.extend([
+            EntryForm {
+                id: super::new_id(),
+                writing_system_id: primary_id,
+                text: "ata".into(),
+                variant_label: None,
+                dialect: None,
+                status: None,
+                notes: None,
+                sort_order: 0,
+            },
+            EntryForm {
+                id: super::new_id(),
+                writing_system_id: ipa_id.clone(),
+                text: "ata".into(),
+                variant_label: None,
+                dialect: None,
+                status: None,
+                notes: None,
+                sort_order: 1,
+            },
+        ]);
+        entry.senses.extend([
+            Sense {
+                id: super::new_id(),
+                gloss: Some("父親".into()),
+                definition: None,
+                part_of_speech: Some("Noun".into()),
+                semantic_domain: None,
+                sort_order: 0,
+                examples: Vec::new(),
+            },
+            Sense {
+                id: super::new_id(),
+                gloss: Some("稱作父親".into()),
+                definition: None,
+                part_of_speech: Some("Verb".into()),
+                semantic_domain: None,
+                sort_order: 1,
+                examples: Vec::new(),
+            },
+        ]);
+        session
+            .save_entry(SaveEntryRequest {
+                expected_revision: entry.revision,
+                entry,
+            })
+            .expect("save");
+
+        let summaries = session.query_entries("").expect("summaries");
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].pronunciation_form.as_deref(), Some("ata"));
+        assert_eq!(
+            summaries[0].pronunciation_writing_system_id.as_deref(),
+            Some(ipa_id.as_str())
+        );
+        assert_eq!(
+            summaries[0]
+                .senses
+                .iter()
+                .map(|sense| (sense.part_of_speech.as_deref(), sense.gloss.as_deref()))
+                .collect::<Vec<_>>(),
+            vec![
+                (Some("Noun"), Some("父親")),
+                (Some("Verb"), Some("稱作父親"))
+            ]
+        );
     }
 
     #[test]
@@ -2744,6 +2884,10 @@ mod tests {
         settings.latex.title = "Field #1 & notes".into();
         settings.latex.author = "A_B".into();
         settings.latex.pronunciation_writing_system_id = Some(ipa_id.clone());
+        settings
+            .latex
+            .font_presets
+            .insert(writing_system_id.clone(), FontPreset::ChironSungHk);
         session.save_export_settings(settings).expect("settings");
         let mut entry = session.create_entry().expect("entry");
         entry.notes = Some("詞條備註".into());
@@ -2796,7 +2940,12 @@ mod tests {
 
         let fonts = FontManager::seeded_for_tests(
             directory.path().join("font-cache"),
-            &["tex-gyre-termes", "noto-serif-cjk-tc", "charis-sil"],
+            &[
+                "tex-gyre-termes",
+                "noto-serif-cjk-tc",
+                "charis-sil",
+                "chiron-sung-hk",
+            ],
         );
         let preview = session
             .preview_export_with_fonts(ExportKind::Latex, &fonts)
@@ -2852,6 +3001,9 @@ mod tests {
         assert!(names.contains(&"fonts/tex-gyre-termes/LICENSE.txt".into()));
         assert!(names.contains(&"fonts/noto-serif-cjk-tc/NotoSerifCJKtc-Regular.otf".into()));
         assert!(names.contains(&"fonts/noto-serif-cjk-tc/LICENSE.txt".into()));
+        assert!(names.contains(&"fonts/chiron-sung-hk/ChironSungHK-R.otf".into()));
+        assert!(names.contains(&"fonts/chiron-sung-hk/ChironSungHK-B.otf".into()));
+        assert!(names.contains(&"fonts/chiron-sung-hk/LICENSE.txt".into()));
         assert_eq!(result.pdf_status, crate::domain::PdfStatus::NotRequested);
     }
 
@@ -3291,6 +3443,10 @@ mod tests {
         let mut export_settings = session.snapshot().expect("snapshot").export_settings;
         export_settings.latex.related_entries = RelatedEntriesMode::Root;
         export_settings.latex.pronunciation_writing_system_id = Some(ipa_id);
+        export_settings.latex.font_presets.insert(
+            snapshot.writing_systems[0].id.clone(),
+            FontPreset::ChironHeiHk,
+        );
         session
             .save_export_settings(export_settings)
             .expect("related entries setting");
@@ -3302,6 +3458,9 @@ mod tests {
             .install("noto-serif-cjk-tc")
             .expect("install Noto Serif CJK TC");
         fonts.install("charis-sil").expect("install Charis SIL");
+        fonts
+            .install("chiron-hei-hk")
+            .expect("install Chiron Hei HK");
         let preview = session
             .preview_export_with_fonts(ExportKind::Pdf, &fonts)
             .expect("preview");

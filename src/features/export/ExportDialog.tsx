@@ -27,7 +27,9 @@ interface Props {
 const corpusParts: CorpusPartOfSpeech[] = [
   "noun", "verb", "adjective", "adverb", "pronoun", "particle", "other",
 ];
-const fontPresets = ["auto", "charisSil", "notoSerif", "notoSerifCjkTc"] as const;
+const fontPresets = [
+  "auto", "charisSil", "notoSerif", "notoSerifCjkTc", "chironSungHk", "chironHeiHk",
+] as const;
 
 interface ExportError {
   message: string;
@@ -227,7 +229,11 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
                 <div className="field"><span>{t("export.dictionaryOrder")}</span><output>{t("export.dictionaryOrderHelp")}</output></div>
                 <label className="field"><span>{t("export.reverseIndex")}</span><select value={settings.latex.reverseIndex} onChange={(event) => patchLatex({ reverseIndex: event.target.value as ExportSettings["latex"]["reverseIndex"] })}><option value="gloss">{t("export.gloss")}</option><option value="none">{t("common.none")}</option></select></label>
                 <label className="field"><span>{t("export.relatedEntries")}</span><select aria-label={t("export.relatedEntries")} value={settings.latex.relatedEntries} onChange={(event) => patchLatex({ relatedEntries: event.target.value as ExportSettings["latex"]["relatedEntries"] })}><option value="none">{t("common.none")}</option><option value="root">{t("export.relatedRoot")}</option><option value="base">{t("export.relatedBase")}</option><option value="both">{t("export.relatedBoth")}</option></select><small>{t("export.relatedEntriesHelp")}</small></label>
-                {snapshot.writingSystems.map((system) => <label className="field" key={system.id}><span>{t("export.fontFor", { name: system.name })}</span>{system.type === "phonemic" || system.type === "phonetic" ? <output>{t("export.ipaFixedFont")}</output> : <select value={settings.latex.fontPresets[system.id] ?? "auto"} onChange={(event) => patchLatex({ fontPresets: { ...settings.latex.fontPresets, [system.id]: event.target.value as typeof fontPresets[number] } })}>{fontPresets.map((preset) => <option value={preset} key={preset}>{t(`export.font.${preset}`)}</option>)}</select>}</label>)}
+                {snapshot.writingSystems.map((system) => {
+                  const preset = settings.latex.fontPresets[system.id] ?? "auto";
+                  const label = t("export.fontFor", { name: system.name });
+                  return <label className="field" key={system.id}><span>{label}</span>{system.type === "phonemic" || system.type === "phonetic" ? <output>{t("export.ipaFixedFont")}</output> : <><select aria-label={label} value={preset} onChange={(event) => patchLatex({ fontPresets: { ...settings.latex.fontPresets, [system.id]: event.target.value as typeof fontPresets[number] } })}>{fontPresets.map((value) => <option value={value} key={value}>{t(`export.font.${value}`)}</option>)}</select><small>{t(`export.fontStyle.${preset}`)}</small></>}</label>;
+                })}
                 {kind === "pdf" && <p className="engine-status">{engine === null ? t("export.xelatexChecking") : engine.available ? t("export.xelatexFound", { path: engine.path }) : t("export.xelatexMissing")}</p>}
               </div>}
             </section>

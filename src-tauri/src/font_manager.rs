@@ -20,6 +20,8 @@ pub(crate) const TERMES_PACK_ID: &str = "tex-gyre-termes";
 pub(crate) const CHARIS_PACK_ID: &str = "charis-sil";
 pub(crate) const NOTO_SERIF_PACK_ID: &str = "noto-serif";
 pub(crate) const NOTO_CJK_TC_PACK_ID: &str = "noto-serif-cjk-tc";
+pub(crate) const CHIRON_SUNG_HK_PACK_ID: &str = "chiron-sung-hk";
+pub(crate) const CHIRON_HEI_HK_PACK_ID: &str = "chiron-hei-hk";
 
 const NOTO_COMMIT: &str = "341cc991ffa33bb58fd0cb08728c6c6ac6c3b19a";
 
@@ -68,7 +70,7 @@ impl Downloader for HttpDownloader {
     fn download(&self, url: &str) -> AppResult<Vec<u8>> {
         let client = reqwest::blocking::Client::builder()
             .timeout(Duration::from_secs(120))
-            .user_agent("bkuw/0.3.0 font-manager")
+            .user_agent("bkuw/0.3.1 font-manager")
             .build()
             .map_err(|error| font_error("font_download", "create HTTP client", error))?;
         let response = client
@@ -525,7 +527,57 @@ const NOTO_CJK_FILES: &[PackFile] = &[
     },
     NOTO_CJK_LICENSE,
 ];
-const CATALOG: [Pack; 4] = [
+const CHIRON_SUNG_HK_FILES: &[PackFile] = &[
+    PackFile {
+        output: "ChironSungHK-R.otf",
+        archive_path: None,
+        url: Some(
+            "https://raw.githubusercontent.com/chiron-fonts/chiron-sung-hk/v1.024/STATIC_OTF/ChironSungHK-R.otf",
+        ),
+        sha256: "d53da9ffb3593a6dcce34f9e4a5d94369c7e619efa1b3d9a60717c7d72aa65d0",
+    },
+    PackFile {
+        output: "ChironSungHK-B.otf",
+        archive_path: None,
+        url: Some(
+            "https://raw.githubusercontent.com/chiron-fonts/chiron-sung-hk/v1.024/STATIC_OTF/ChironSungHK-B.otf",
+        ),
+        sha256: "bc3f911227c98ae45caf31147201c29dd3cf14fc2c84af72936f4ef6067b397d",
+    },
+    PackFile {
+        output: "LICENSE.txt",
+        archive_path: None,
+        url: Some(
+            "https://raw.githubusercontent.com/chiron-fonts/chiron-sung-hk/v1.024/LICENSE.md",
+        ),
+        sha256: "f610abd1c4f410c07fe99e6be924a500e577a378b182a73c691527e2e368c96f",
+    },
+];
+const CHIRON_HEI_HK_FILES: &[PackFile] = &[
+    PackFile {
+        output: "ChironHeiHK-R.otf",
+        archive_path: None,
+        url: Some(
+            "https://raw.githubusercontent.com/chiron-fonts/chiron-hei-hk/v2.609/STATIC_OTF/ChironHeiHK-R.otf",
+        ),
+        sha256: "72f68279a78a118b469bc683a1ab12364a5a3c244ee592da441d4a3cb0eda4b1",
+    },
+    PackFile {
+        output: "ChironHeiHK-B.otf",
+        archive_path: None,
+        url: Some(
+            "https://raw.githubusercontent.com/chiron-fonts/chiron-hei-hk/v2.609/STATIC_OTF/ChironHeiHK-B.otf",
+        ),
+        sha256: "51a6c39f8dd0a4522a7c5d366d77e9e52aebe4280d9b16ed95f03288c802e821",
+    },
+    PackFile {
+        output: "LICENSE.txt",
+        archive_path: None,
+        url: Some("https://raw.githubusercontent.com/chiron-fonts/chiron-hei-hk/v2.609/LICENSE.md"),
+        sha256: "8f6a49079a7accfffdff0026c868bbb5e62ada6a9b2554c28ae94349bdeab03f",
+    },
+];
+const CATALOG: [Pack; 6] = [
     Pack {
         id: TERMES_PACK_ID,
         version: "2.004",
@@ -580,6 +632,32 @@ const CATALOG: [Pack; 4] = [
         family: LatexFontFamily {
             regular: "NotoSerifCJKtc-Regular.otf",
             bold: Some("NotoSerifCJKtc-Bold.otf"),
+            italic: None,
+            bold_italic: None,
+        },
+    },
+    Pack {
+        id: CHIRON_SUNG_HK_PACK_ID,
+        version: "1.024",
+        mandatory: false,
+        source: PackSource::Files,
+        files: CHIRON_SUNG_HK_FILES,
+        family: LatexFontFamily {
+            regular: "ChironSungHK-R.otf",
+            bold: Some("ChironSungHK-B.otf"),
+            italic: None,
+            bold_italic: None,
+        },
+    },
+    Pack {
+        id: CHIRON_HEI_HK_PACK_ID,
+        version: "2.609",
+        mandatory: false,
+        source: PackSource::Files,
+        files: CHIRON_HEI_HK_FILES,
+        family: LatexFontFamily {
+            regular: "ChironHeiHK-R.otf",
+            bold: Some("ChironHeiHK-B.otf"),
             italic: None,
             bold_italic: None,
         },
@@ -659,6 +737,8 @@ mod tests {
                 CHARIS_PACK_ID,
                 NOTO_SERIF_PACK_ID,
                 NOTO_CJK_TC_PACK_ID,
+                CHIRON_SUNG_HK_PACK_ID,
+                CHIRON_HEI_HK_PACK_ID,
             ]
         );
     }
@@ -695,6 +775,34 @@ mod tests {
         assert!(names.contains(&"fonts/tex-gyre-termes/texgyretermes-regular.otf".into()));
         assert!(names.contains(&"fonts/tex-gyre-termes/LICENSE.txt".into()));
         assert!(!names.iter().any(|name| name.ends_with("manifest.json")));
+    }
+
+    #[test]
+    fn both_chiron_packs_export_static_faces_and_separate_licenses() {
+        let directory = tempdir().expect("temp directory");
+        let manager = FontManager::seeded_for_tests(
+            directory.path().into(),
+            &[CHIRON_SUNG_HK_PACK_ID, CHIRON_HEI_HK_PACK_ID],
+        );
+        let names = manager
+            .export_files(&[CHIRON_SUNG_HK_PACK_ID.into(), CHIRON_HEI_HK_PACK_ID.into()])
+            .expect("export files")
+            .into_iter()
+            .map(|(name, _)| name)
+            .collect::<Vec<_>>();
+        for expected in [
+            "fonts/chiron-sung-hk/ChironSungHK-R.otf",
+            "fonts/chiron-sung-hk/ChironSungHK-B.otf",
+            "fonts/chiron-sung-hk/LICENSE.txt",
+            "fonts/chiron-hei-hk/ChironHeiHK-R.otf",
+            "fonts/chiron-hei-hk/ChironHeiHK-B.otf",
+            "fonts/chiron-hei-hk/LICENSE.txt",
+        ] {
+            assert!(
+                names.iter().any(|name| name == expected),
+                "missing {expected}"
+            );
+        }
     }
 
     #[test]

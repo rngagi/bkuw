@@ -81,7 +81,7 @@ describe("EntryEditor", () => {
   });
 
   it("autocompletes a linked relation and supports navigation", async () => {
-    const target: EntrySummary = { id: "target-entry-1234", primaryForm: "ambuk", secondaryForm: null, partsOfSpeech: ["Noun"], revision: 1, sectionLabel: "A", manualOrderPending: false };
+    const target: EntrySummary = { id: "target-entry-1234", primaryForm: "ambuk", secondaryForm: null, pronunciationForm: null, pronunciationWritingSystemId: null, senses: [{ partOfSpeech: "Noun", gloss: "bridge" }], revision: 1, sectionLabel: "A", manualOrderPending: false };
     const onSave = vi.fn(async (draft: LexicalEntry) => ({ ...draft, revision: 1 }));
     const onNavigate = vi.fn();
     const ref = createRef<EntryEditorHandle>();
