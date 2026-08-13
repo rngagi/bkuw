@@ -34,7 +34,7 @@ const snapshot: ProjectSnapshot = {
   project: { id: "p1", name: "Test", languageName: null, languageCode: null, analysisLanguage: "zh-TW", description: null, createdAt: "2026-01-01Z", updatedAt: "2026-01-01Z" },
   writingSystems: [{ id: "ws1", name: "Traditional Chinese", type: "orthography", scriptCode: "Hant", languageTag: "zh-Hant", displayRole: "primary", sortOrder: 0, fontFamily: null, notes: null }],
   partOfSpeechOptions: ["動詞"], semanticDomainOptions: [], entries: [],
-  exportSettings: { version: 1, corpus: { partOfSpeechMappings: {} }, latex: { title: "Test", author: "", headwordWritingSystemId: "ws1", pronunciationWritingSystemId: null, exampleWritingSystemId: "ws1", collationLanguageTag: "zh-Hant", sectionMode: "auto", reverseIndex: "gloss", fontPresets: { ws1: "auto" } } },
+  exportSettings: { version: 1, corpus: { partOfSpeechMappings: {} }, latex: { title: "Test", author: "", headwordWritingSystemId: "ws1", pronunciationWritingSystemId: null, exampleWritingSystemId: "ws1", collationLanguageTag: "zh-Hant", sectionMode: "auto", reverseIndex: "gloss", relatedEntries: "none", fontPresets: { ws1: "auto" } } },
   entrySortSettings: { version: 1, mode: "auto", writingSystemId: "ws1", alphabet: [] },
   manualSortLayout: { version: 1, items: [] },
 };
@@ -81,6 +81,14 @@ describe("ExportDialog", () => {
     expect(await screen.findByText("找不到 XeLaTeX；已建立可上傳 Overleaf 的 ZIP，但未產生 PDF。")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "開啟 Overleaf" }));
     expect(backendMock.openOverleaf).toHaveBeenCalled();
+  });
+
+  it("persists the optional direct related-entry mode for LaTeX", async () => {
+    render(<ExportDialog open snapshot={snapshot} onOpenChange={vi.fn()} onFlush={vi.fn(async () => undefined)} onSetAnalysisLanguage={vi.fn()} onNavigateEntry={vi.fn()} />);
+    fireEvent.click(screen.getByLabelText("LaTeX"));
+    fireEvent.change(screen.getByLabelText("Related entries"), { target: { value: "both" } });
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    await waitFor(() => expect(backendMock.saveExportSettings).toHaveBeenCalledWith(expect.objectContaining({ latex: expect.objectContaining({ relatedEntries: "both" }) })));
   });
 
   it("shows the preserved XeLaTeX diagnostic log path after a Windows compile failure", async () => {

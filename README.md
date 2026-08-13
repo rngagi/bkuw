@@ -6,6 +6,8 @@
 
 目前 `main` 正在準備 v0.3：project 可定義含 multigraph 的字母表、自動／詞條小標覆寫／完整手動拖拉三種排序層級；工作區與匯出辭典將共用同一排序結果。
 
+v0.3 的 XeLaTeX template 亦調整為較寬鬆行距、欄內小標、橢圓例句標記與一層 direct root/base related entries；相關詞可在 export profile 關閉或選擇 root、base、兩者。
+
 ## 技術組成
 
 - Tauri 2、Rust、SQLite

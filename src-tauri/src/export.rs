@@ -13,7 +13,6 @@ use icu_collator::{Collator, options::CollatorOptions};
 use icu_locale::Locale;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use unicode_segmentation::UnicodeSegmentation;
 use uuid::Uuid;
 use wait_timeout::ChildExt;
 use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
@@ -48,6 +47,7 @@ pub(crate) struct ExportSnapshot {
     pub project: Project,
     pub writing_systems: Vec<WritingSystem>,
     pub settings: ExportSettingsV1,
+    pub sections: BTreeMap<String, Option<String>>,
     pub entries: Vec<LexicalEntry>,
 }
 
@@ -511,26 +511,16 @@ fn render_entries(snapshot: &ExportSnapshot) -> AppResult<String> {
         .latex
         .pronunciation_writing_system_id
         .as_deref();
-    let mut entries = snapshot.entries.iter().collect::<Vec<_>>();
-    sort_entries(
-        &mut entries,
-        headword_id,
-        snapshot.settings.latex.collation_language_tag.as_deref(),
-    );
     let systems = snapshot
         .writing_systems
         .iter()
         .map(|system| (system.id.as_str(), system))
         .collect::<BTreeMap<_, _>>();
-    let section_mode = &snapshot.settings.latex.section_mode;
-    let script = systems
-        .get(headword_id)
-        .and_then(|system| system.script_code.as_deref());
     let mut current_section: Option<String> = None;
     let mut output = String::new();
-    for entry in entries {
+    for entry in &snapshot.entries {
         let headword = form_text(entry, headword_id).unwrap_or_default();
-        let section = section_for(headword, section_mode, script);
+        let section = snapshot.sections.get(&entry.id).cloned().flatten();
         if section.is_some() && section != current_section {
             current_section.clone_from(&section);
             output.push_str(&format!(
@@ -610,11 +600,12 @@ fn render_entries(snapshot: &ExportSnapshot) -> AppResult<String> {
             .iter()
             .filter_map(|relation| {
                 relation.fallback_text.as_deref().map(|label| {
-                    format!(
-                        "{}: {}",
-                        tex_escape(&relation.relation_type),
-                        tex_escape(label)
-                    )
+                    let relation_label = match relation.relation_type.as_str() {
+                        "root" => "詞根",
+                        "base" => "詞基",
+                        other => other,
+                    };
+                    format!("{}：{}", tex_escape(relation_label), tex_escape(label))
                 })
             })
             .collect::<Vec<_>>();
@@ -624,8 +615,72 @@ fn render_entries(snapshot: &ExportSnapshot) -> AppResult<String> {
         if let Some(notes) = &entry.notes {
             output.push_str(&format!("\\BkuwMeta{{Notes: {}}}\n", tex_escape(notes)));
         }
+        render_related_entries(snapshot, entry, &mut output);
     }
     Ok(output)
+}
+
+fn render_related_entries(snapshot: &ExportSnapshot, target: &LexicalEntry, output: &mut String) {
+    let mode = snapshot.settings.latex.related_entries;
+    if mode == crate::domain::RelatedEntriesMode::None {
+        return;
+    }
+    let headword_id = snapshot.settings.latex.headword_writing_system_id.as_str();
+    let pronunciation_id = snapshot
+        .settings
+        .latex
+        .pronunciation_writing_system_id
+        .as_deref();
+    let related = snapshot
+        .entries
+        .iter()
+        .filter(|entry| {
+            entry.id != target.id
+                && entry.relations.iter().any(|relation| {
+                    relation.target_entry_id.as_deref() == Some(target.id.as_str())
+                        && match mode {
+                            crate::domain::RelatedEntriesMode::None => false,
+                            crate::domain::RelatedEntriesMode::Root => {
+                                relation.relation_type == "root"
+                            }
+                            crate::domain::RelatedEntriesMode::Base => {
+                                relation.relation_type == "base"
+                            }
+                            crate::domain::RelatedEntriesMode::Both => {
+                                matches!(relation.relation_type.as_str(), "root" | "base")
+                            }
+                        }
+                })
+        })
+        .collect::<Vec<_>>();
+    if related.is_empty() {
+        return;
+    }
+    let title = if snapshot.project.analysis_language.as_deref() == Some("zh-TW") {
+        "關聯詞"
+    } else {
+        "Related entries"
+    };
+    output.push_str(&format!("\\BkuwRelatedStart{{{}}}\n", tex_escape(title)));
+    for entry in related {
+        let headword = form_text(entry, headword_id).unwrap_or_default();
+        let pronunciation = pronunciation_id
+            .and_then(|id| form_text(entry, id).map(|text| ws_display_text(snapshot, id, text)))
+            .unwrap_or_default();
+        let gloss = entry
+            .senses
+            .first()
+            .and_then(|sense| sense.gloss.as_deref())
+            .unwrap_or_default();
+        output.push_str(&format!(
+            "\\BkuwRelated{{entry:{}}}{{{}}}{{{}}}{{{}}}\n",
+            entry.id,
+            ws_text(snapshot, headword_id, headword),
+            pronunciation,
+            tex_escape(gloss),
+        ));
+    }
+    output.push_str("\\BkuwRelatedEnd\n");
 }
 
 fn render_reverse_index(snapshot: &ExportSnapshot) -> AppResult<String> {
@@ -669,18 +724,6 @@ fn render_reverse_index(snapshot: &ExportSnapshot) -> AppResult<String> {
         .collect())
 }
 
-fn sort_entries(entries: &mut [&LexicalEntry], headword_id: &str, language_tag: Option<&str>) {
-    let collator = collator(language_tag.unwrap_or("und"));
-    entries.sort_by(|left, right| {
-        compare_with(
-            collator.as_ref(),
-            form_text(left, headword_id).unwrap_or_default(),
-            form_text(right, headword_id).unwrap_or_default(),
-        )
-        .then_with(|| left.id.cmp(&right.id))
-    });
-}
-
 fn collator(language_tag: &str) -> Option<icu_collator::CollatorBorrowed<'static>> {
     let locale = language_tag.parse::<Locale>().ok()?;
     Collator::try_new(locale.into(), CollatorOptions::default()).ok()
@@ -694,25 +737,6 @@ fn compare_with(
     collator
         .map(|value| value.compare(left, right))
         .unwrap_or_else(|| left.cmp(right))
-}
-
-fn section_for(
-    headword: &str,
-    mode: &crate::domain::SectionMode,
-    script: Option<&str>,
-) -> Option<String> {
-    let enabled = match mode {
-        crate::domain::SectionMode::None => false,
-        crate::domain::SectionMode::FirstGrapheme => true,
-        crate::domain::SectionMode::Auto => matches!(script, Some("Latn" | "Cyrl" | "Grek")),
-    };
-    enabled.then(|| {
-        headword
-            .graphemes(true)
-            .next()
-            .unwrap_or("#")
-            .to_uppercase()
-    })
 }
 
 fn ws_text(snapshot: &ExportSnapshot, writing_system_id: &str, text: &str) -> String {

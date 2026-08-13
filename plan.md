@@ -188,8 +188,8 @@
 - [x] 建立 opt-in 完全自訂拖拉排序。
   - 完成條件：headings／entries 可拖拉及鍵盤上移下移；可匯入 headings 或不建立 headings；新 entries 標示 pending；切回 auto 保留 layout。
   - 驗證：manual layout Rust test、SortOrderDialog component test、migration/backup tests。
-- [ ] 重整 XeLaTeX template 並加入 optional direct root/base related entries。
+- [x] 重整 XeLaTeX template 並加入 optional direct root/base related entries。
   - 完成條件：與 workspace 共用排序／小標；相關詞只顯示一層 incoming live relations；可選 none/root/base/both；改善行距、例句標記、section 與 related block。
-  - 驗證：renderer tests、real XeLaTeX compile、PDF visual QA、完整 checks/tests/build。
+  - 驗證：renderer／舊 profile 相容性 tests、real XeLaTeX compile、兩頁 PDF visual QA，以及 `pnpm check && pnpm test && pnpm test:rust && pnpm tauri build --no-bundle`。
 - [ ] 人工檢查排序與 LaTeX 結果後，將四處版本一致升為 `0.3.0`。
   - 完成條件：使用者確認後才 bump、commit、push 及建立 release。

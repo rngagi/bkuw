@@ -57,6 +57,16 @@ pub enum FontPreset {
     NotoSerifCjkTc,
 }
 
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum RelatedEntriesMode {
+    #[default]
+    None,
+    Root,
+    Base,
+    Both,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct LatexExportSettings {
@@ -68,6 +78,8 @@ pub struct LatexExportSettings {
     pub collation_language_tag: Option<String>,
     pub section_mode: SectionMode,
     pub reverse_index: ReverseIndexMode,
+    #[serde(default)]
+    pub related_entries: RelatedEntriesMode,
     pub font_presets: BTreeMap<String, FontPreset>,
 }
 

@@ -17,3 +17,6 @@ No lexical data is uploaded by bkuw. / bkuw 不會自行上傳任何詞彙資料
 
 Required fonts and their license notices are included under `fonts/`. The project does not rely on fonts installed in the operating system or Overleaf.
 所需字型與授權聲明均已放在 `fonts/`；本專案不依賴作業系統或 Overleaf 原本安裝的字型。
+
+Entry order and headings follow the bkuw project ordering settings. Optional related-entry lists contain direct links only, one level deep.
+詞條順序與小標依 bkuw 專案排序設定；選用的關聯詞清單只包含一層直接連結。

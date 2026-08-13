@@ -124,6 +124,7 @@ export const exportSettingsSchema = z.object({
     collationLanguageTag: nullableText,
     sectionMode: z.enum(["auto", "firstGrapheme", "none"]),
     reverseIndex: z.enum(["gloss", "none"]),
+    relatedEntries: z.enum(["none", "root", "base", "both"]),
     fontPresets: z.record(z.string(), fontPresetSchema),
   }),
 });

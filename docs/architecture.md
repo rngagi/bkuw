@@ -106,17 +106,17 @@ Migration 2 新增 `metadata_options`。Migration 3 新增 `projects.analysis_la
 
 ## Ordering module
 
-Rust `ordering` module 是工作區的集中排序 seam，LaTeX 重整階段會直接使用同一份排序輸出，避免另建規則。輸入為 live entry summaries、project sort settings、manual layout 與 language tag；輸出包含確定順序、section label 與 `manualOrderPending`。自訂 alphabet 使用 longest-match tokenization，確保 `ng` 不被拆為 `n`＋`g`；未定義 alphabet 時使用 ICU4X collator。Section override 只替換 group key，full form sort key 不變。
+Rust `ordering` module 是工作區與 LaTeX 匯出的集中排序 seam。輸入為 live entry summaries、project sort settings、manual layout 與 language tag；輸出包含確定順序、section label 與 `manualOrderPending`。自訂 alphabet 使用 longest-match tokenization，確保 `ng` 不被拆為 `n`＋`g`；未定義 alphabet 時使用 ICU4X collator。Section override 只替換 group key，full form sort key 不變。
 
 Manual layout 把 heading 與 entry 當作同一線性序列。已刪除 entry 在讀取時忽略；layout 未收錄的新／恢復 entry 依自動規則插入對應 section 尾端並標示 pending。切回 auto 不刪除 layout。Frontend 只送出 typed settings/layout commands，不自行推導持久化順序。
 
 ## Export architecture
 
-`ProjectSession` 建立只含 live entries 的完整 `ExportSnapshot`。Preview 以 snapshot + format 的 SHA-256 token 綁定資料；真正匯出前重新建立 snapshot，token 不同即回傳 `export_stale`。React 不讀 SQL 或 filesystem，所有 DTO 由 `src/types/domain.ts` 的 Zod schema 驗證。
+`ProjectSession` 依 `ProjectSnapshot.entries` 的既定順序建立只含 live entries 的完整 `ExportSnapshot`，並附上每個 entry 的 section label；LaTeX renderer 不再自行排序。Preview 以 snapshot + format 的 SHA-256 token 綁定資料；真正匯出前重新建立 snapshot，token 不同即回傳 `export_stale`。React 不讀 SQL 或 filesystem，所有 DTO 由 `src/types/domain.ts` 的 Zod schema 驗證。
 
 CSV renderer 固定 rngagi-corpus v0.3 九欄。ICU4X 依 profile language tag 排 primary form，entry UUID 與 sense order 是 deterministic tie-breakers。Writer 使用 UTF-8、無 BOM、CRLF 及 RFC 4180 quoting。輸出先寫同層 temporary sibling；Unix 使用 replace rename，Windows 使用 `MoveFileExW` 的 replace/write-through flags，避免留下半成品。
 
-LaTeX renderer 從零建立通用 XeLaTeX source，不複製 `docs/main.tex` 的授權巨集。所有 user text 經集中 escaping；writing-system font macros 使用純字母 control sequence與 project-relative font paths。Reverse index 由 Rust 排序並直接產生 `hyperlink`／`pageref`，不使用 makeindex。
+LaTeX renderer 從零建立通用 XeLaTeX source，不複製 `docs/main.tex` 的授權巨集。所有 user text 經集中 escaping；writing-system font macros 使用純字母 control sequence 與 project-relative font paths。Related-entry renderer 依 profile 選擇 root/base/both，掃描 export snapshot 中直接指向 target 的 relations；snapshot 已排除 soft-deleted entries，source 以 entry 為單位去重且不遞迴。Reverse index 由 Rust 排序並直接產生 `hyperlink`／`pageref`，不使用 makeindex。
 
 Font manager 是另一個 deep module。固定 catalog 只包含 TeX Gyre Termes、Charis SIL、Noto Serif 與 Noto Serif CJK TC，並記錄 pack ID、上游固定 commit/release、HTTPS URL、archive members、逐檔與 archive SHA-256、版本、LaTeX faces 與授權檔。下載先進 app-local staging directory；只有 archive 與每個 extracted/downloaded file 全部通過雜湊驗證，才以 manifest 啟用 cache。cache 每次使用前依 manifest 重驗，損毀 pack 視為 invalid。React 不接觸網路或 filesystem，只能列出狀態與請求安裝；Rust HTTP client 只能使用 catalog 內建 URL。
 

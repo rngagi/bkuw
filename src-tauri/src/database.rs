@@ -14,8 +14,8 @@ use crate::{
         CorpusExportSettings, CreateProjectRequest, DeleteEntryRequest, DeletedEntry, EntryForm,
         EntryRelation, EntrySortMode, EntrySortSettingsV1, EntrySummary, Example, ExampleForm,
         ExportSettingsV1, FontPreset, LatexExportSettings, LexicalEntry, ManualSortLayoutV1,
-        Project, ProjectSnapshot, ReverseIndexMode, SaveEntryRequest, SectionMode, Sense,
-        UpdateProjectSettingsRequest, WritingSystem,
+        Project, ProjectSnapshot, RelatedEntriesMode, ReverseIndexMode, SaveEntryRequest,
+        SectionMode, Sense, UpdateProjectSettingsRequest, WritingSystem,
     },
     error::{AppError, AppResult},
     search::{normalize_text, search_key},
@@ -491,20 +491,21 @@ impl ProjectSession {
 
     fn export_snapshot(&self) -> AppResult<crate::export::ExportSnapshot> {
         let snapshot = self.snapshot()?;
-        let mut statement = self.connection.prepare(
-            "SELECT id FROM lexical_entries WHERE deleted_at IS NULL ORDER BY created_at, id",
-        )?;
-        let ids = statement
-            .query_map([], |row| row.get::<_, String>(0))?
-            .collect::<Result<Vec<_>, _>>()?;
-        let entries = ids
+        let sections = snapshot
+            .entries
             .iter()
-            .map(|id| load_entry(&self.connection, id, false))
+            .map(|entry| (entry.id.clone(), entry.section_label.clone()))
+            .collect();
+        let entries = snapshot
+            .entries
+            .iter()
+            .map(|entry| load_entry(&self.connection, &entry.id, false))
             .collect::<AppResult<Vec<_>>>()?;
         Ok(crate::export::ExportSnapshot {
             project: snapshot.project,
             writing_systems: snapshot.writing_systems,
             settings: snapshot.export_settings,
+            sections,
             entries,
         })
     }
@@ -680,6 +681,7 @@ fn default_export_settings(project: &Project, systems: &[WritingSystem]) -> Expo
             collation_language_tag: language_tag,
             section_mode: SectionMode::Auto,
             reverse_index: ReverseIndexMode::Gloss,
+            related_entries: RelatedEntriesMode::None,
             font_presets: systems
                 .iter()
                 .map(|system| (system.id.clone(), FontPreset::Auto))
@@ -1439,8 +1441,8 @@ mod tests {
     use crate::domain::{
         CorpusPartOfSpeech, CreateProjectRequest, DeleteEntryRequest, EntryForm, EntryRelation,
         EntrySortMode, EntrySortSettingsV1, Example, ExampleForm, ExportKind, ExportProjectRequest,
-        ManualSortItem, ManualSortLayoutV1, SaveEntryRequest, Sense, UpdateProjectSettingsRequest,
-        WritingSystem,
+        ManualSortItem, ManualSortLayoutV1, RelatedEntriesMode, SaveEntryRequest, Sense,
+        UpdateProjectSettingsRequest, WritingSystem,
     };
     use crate::font_manager::FontManager;
 
@@ -2055,6 +2057,35 @@ mod tests {
     }
 
     #[test]
+    fn older_export_profile_defaults_related_entries_to_none() {
+        let (_directory, session) = create_session();
+        let snapshot = session.snapshot().expect("snapshot");
+        let mut value = serde_json::to_value(&snapshot.export_settings).expect("json");
+        value
+            .get_mut("latex")
+            .and_then(serde_json::Value::as_object_mut)
+            .expect("latex object")
+            .remove("relatedEntries");
+        session
+            .connection
+            .execute(
+                "INSERT INTO export_settings(project_id, version, settings_json, updated_at)
+             VALUES (?1, 1, ?2, ?3)",
+                rusqlite::params![snapshot.project.id, value.to_string(), super::now()],
+            )
+            .expect("legacy profile");
+        assert_eq!(
+            session
+                .snapshot()
+                .expect("loaded profile")
+                .export_settings
+                .latex
+                .related_entries,
+            RelatedEntriesMode::None,
+        );
+    }
+
+    #[test]
     fn exports_exact_rngagi_corpus_v03_csv_from_senses() {
         let (directory, mut session) = create_session();
         let snapshot = session.snapshot().expect("snapshot");
@@ -2489,6 +2520,7 @@ mod tests {
         let main = std::fs::read_to_string(project.join("main.tex")).expect("main.tex");
         assert!(main.contains("Field \\#1 \\& notes"));
         assert!(main.contains("A\\_B"));
+        assert!(main.contains("\\ovalbox{\\scriptsize\\bfseries 例}"));
         assert!(!main.contains("zxjatype"));
         let entries = std::fs::read_to_string(project.join("entries.tex")).expect("entries.tex");
         assert!(entries.contains("過\\_\\#\\%"));
@@ -2508,6 +2540,169 @@ mod tests {
         assert!(names.contains(&"fonts/noto-serif-cjk-tc/NotoSerifCJKtc-Regular.otf".into()));
         assert!(names.contains(&"fonts/noto-serif-cjk-tc/LICENSE.txt".into()));
         assert_eq!(result.pdf_status, crate::domain::PdfStatus::NotRequested);
+    }
+
+    #[test]
+    fn latex_uses_project_order_and_renders_direct_incoming_root_entries() {
+        let (directory, mut session) = create_session();
+        let snapshot = session.snapshot().expect("snapshot");
+        let primary_id = snapshot.writing_systems[0].id.clone();
+        session
+            .save_entry_sort_settings(EntrySortSettingsV1 {
+                version: 1,
+                mode: EntrySortMode::Auto,
+                writing_system_id: primary_id.clone(),
+                alphabet: vec!["m".into(), "h".into()],
+            })
+            .expect("sort settings");
+
+        let mut root = session.create_entry().expect("root");
+        let root_id = root.id.clone();
+        root.forms.push(EntryForm {
+            id: super::new_id(),
+            writing_system_id: primary_id.clone(),
+            text: "hako".into(),
+            variant_label: None,
+            dialect: None,
+            status: None,
+            notes: None,
+            sort_order: 0,
+        });
+        root.senses.push(Sense {
+            id: super::new_id(),
+            gloss: Some("橋".into()),
+            definition: None,
+            part_of_speech: None,
+            semantic_domain: None,
+            sort_order: 0,
+            examples: vec![],
+        });
+        session
+            .save_entry(SaveEntryRequest {
+                expected_revision: 0,
+                entry: root,
+            })
+            .expect("root save");
+
+        for (form, gloss, relation_type) in [
+            ("hako utux", "彩虹", "root"),
+            ("mhako", "搭橋", "root"),
+            ("bahako", "橋基", "base"),
+        ] {
+            let mut entry = session.create_entry().expect("related");
+            entry.forms.push(EntryForm {
+                id: super::new_id(),
+                writing_system_id: primary_id.clone(),
+                text: form.into(),
+                variant_label: None,
+                dialect: None,
+                status: None,
+                notes: None,
+                sort_order: 0,
+            });
+            entry.senses.push(Sense {
+                id: super::new_id(),
+                gloss: Some(gloss.into()),
+                definition: None,
+                part_of_speech: None,
+                semantic_domain: None,
+                sort_order: 0,
+                examples: vec![],
+            });
+            entry.relations.push(EntryRelation {
+                id: super::new_id(),
+                target_entry_id: Some(root_id.clone()),
+                relation_type: relation_type.into(),
+                fallback_text: None,
+                notes: None,
+                sort_order: 0,
+            });
+            session
+                .save_entry(SaveEntryRequest {
+                    expected_revision: 0,
+                    entry,
+                })
+                .expect("related save");
+        }
+        let mut settings = session.snapshot().expect("snapshot").export_settings;
+        settings.latex.related_entries = RelatedEntriesMode::Root;
+        session
+            .save_export_settings(settings)
+            .expect("export settings");
+        let fonts = FontManager::seeded_for_tests(
+            directory.path().join("font-cache"),
+            &["tex-gyre-termes", "noto-serif"],
+        );
+        let preview = session
+            .preview_export_with_fonts(ExportKind::Latex, &fonts)
+            .expect("preview");
+        let result = session
+            .export_project_with_fonts(
+                ExportProjectRequest {
+                    kind: ExportKind::Latex,
+                    destination: directory.path().to_string_lossy().into_owned(),
+                    snapshot_token: preview.snapshot_token,
+                    overwrite: false,
+                },
+                &fonts,
+            )
+            .expect("export");
+        let entries = std::fs::read_to_string(
+            std::path::PathBuf::from(result.latex_directory.expect("directory"))
+                .join("entries.tex"),
+        )
+        .expect("entries");
+        assert!(entries.find("mhako").expect("m entry") < entries.find("hako").expect("h entry"));
+        assert!(entries.contains("\\BkuwSection{M}"));
+        assert!(entries.contains("\\BkuwRelated{entry:"));
+        let related = entries
+            .split("\\BkuwRelatedStart")
+            .nth(1)
+            .expect("related block")
+            .split("\\BkuwRelatedEnd")
+            .next()
+            .expect("related end");
+        assert!(related.contains("hako utux"));
+        assert!(related.contains("彩虹"));
+        assert!(related.contains("mhako"));
+        assert!(related.contains("搭橋"));
+        assert!(!related.contains("bahako"));
+        assert!(entries.contains("詞根：hako"));
+
+        let mut settings = session.snapshot().expect("snapshot").export_settings;
+        settings.latex.related_entries = RelatedEntriesMode::Both;
+        session
+            .save_export_settings(settings)
+            .expect("both settings");
+        let preview = session
+            .preview_export_with_fonts(ExportKind::Latex, &fonts)
+            .expect("both preview");
+        let result = session
+            .export_project_with_fonts(
+                ExportProjectRequest {
+                    kind: ExportKind::Latex,
+                    destination: directory.path().to_string_lossy().into_owned(),
+                    snapshot_token: preview.snapshot_token,
+                    overwrite: false,
+                },
+                &fonts,
+            )
+            .expect("both export");
+        let entries = std::fs::read_to_string(
+            std::path::PathBuf::from(result.latex_directory.expect("directory"))
+                .join("entries.tex"),
+        )
+        .expect("both entries");
+        let related = entries
+            .split("\\BkuwRelatedStart")
+            .nth(1)
+            .expect("both related block")
+            .split("\\BkuwRelatedEnd")
+            .next()
+            .expect("both related end");
+        assert!(related.contains("bahako"));
+        assert!(related.contains("橋基"));
+        assert!(entries.contains("詞基：hako"));
     }
 
     #[test]
@@ -2560,7 +2755,7 @@ mod tests {
         let mut entry = session.create_entry().expect("entry");
         entry.forms.push(EntryForm {
             id: super::new_id(),
-            writing_system_id,
+            writing_system_id: writing_system_id.clone(),
             text: "word".into(),
             variant_label: None,
             dialect: None,
@@ -2674,9 +2869,10 @@ mod tests {
             .expect("Hant settings");
         let writing_system_id = snapshot.writing_systems[0].id.clone();
         let mut entry = session.create_entry().expect("entry");
+        let root_id = entry.id.clone();
         entry.forms.push(EntryForm {
             id: super::new_id(),
-            writing_system_id,
+            writing_system_id: writing_system_id.clone(),
             text: "過".into(),
             variant_label: None,
             dialect: None,
@@ -2691,7 +2887,18 @@ mod tests {
             part_of_speech: Some("verb".into()),
             semantic_domain: None,
             sort_order: 0,
-            examples: vec![],
+            examples: vec![Example {
+                id: super::new_id(),
+                translation: Some("他過河了。".into()),
+                notes: None,
+                sort_order: 0,
+                forms: vec![ExampleForm {
+                    id: super::new_id(),
+                    writing_system_id: writing_system_id.clone(),
+                    text: "他過河了。".into(),
+                    sort_order: 0,
+                }],
+            }],
         });
         session
             .save_entry(SaveEntryRequest {
@@ -2699,6 +2906,45 @@ mod tests {
                 entry,
             })
             .expect("save");
+        let mut related = session.create_entry().expect("related entry");
+        related.forms.push(EntryForm {
+            id: super::new_id(),
+            writing_system_id,
+            text: "經過".into(),
+            variant_label: None,
+            dialect: None,
+            status: None,
+            notes: None,
+            sort_order: 0,
+        });
+        related.senses.push(Sense {
+            id: super::new_id(),
+            gloss: Some("通行".into()),
+            definition: None,
+            part_of_speech: Some("verb".into()),
+            semantic_domain: None,
+            sort_order: 0,
+            examples: vec![],
+        });
+        related.relations.push(EntryRelation {
+            id: super::new_id(),
+            target_entry_id: Some(root_id),
+            relation_type: "root".into(),
+            fallback_text: None,
+            notes: None,
+            sort_order: 0,
+        });
+        session
+            .save_entry(SaveEntryRequest {
+                expected_revision: 0,
+                entry: related,
+            })
+            .expect("save related entry");
+        let mut export_settings = session.snapshot().expect("snapshot").export_settings;
+        export_settings.latex.related_entries = RelatedEntriesMode::Root;
+        session
+            .save_export_settings(export_settings)
+            .expect("related entries setting");
         let fonts = FontManager::new(directory.path().join("font-cache"));
         fonts
             .install("tex-gyre-termes")
