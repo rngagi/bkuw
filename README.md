@@ -61,6 +61,6 @@ MyLanguage.bkuw/
 
 App header 的「匯出／Export」會先 flush autosave，再依序保存 profile、顯示 validation preview、選擇目的地並產生輸出。CSV 固定遵循 rngagi-corpus v0.3 九欄契約；LaTeX 會產生可編輯資料夾與 Overleaf-ready ZIP。本機有 XeLaTeX 時可一併建立 PDF，否則不影響來源與 ZIP 匯出。
 
-LaTeX/PDF 不再依賴作業系統已安裝的字型。bkuw 會從官方固定版本下載字型 pack，驗證 SHA-256 後存入 app-private cache，並把實際使用的字型與授權檔放入來源資料夾和 ZIP。TeX Gyre Termes 是所有 LaTeX/PDF 匯出的必要 pack；缺少或驗證失敗時會阻擋匯出。Phonemic／phonetic（IPA）書寫系統固定使用 Charis SIL。
+LaTeX/PDF 不再依賴作業系統已安裝的字型。bkuw 會從官方固定版本下載 TeX Gyre Termes、Charis SIL、Noto Serif 與 Noto Serif CJK TC，驗證 SHA-256 後存入 app-private cache，並把實際使用的字型與授權檔放入來源資料夾和 ZIP。TeX Gyre Termes 是所有 LaTeX/PDF 匯出的必要 pack；缺少或驗證失敗時會阻擋匯出。Phonemic／phonetic（IPA）書寫系統固定使用 Charis SIL；現階段不提供 Thai／Tibetan 專用 managed font packs。
 
 目前只修改 `bkuw` repository，尚未建立與 `rngagi-corpus` 的跨 repository 自動 contract test。若 corpus template 或版本改變，必須依 [CSV 契約](docs/corpus-csv-contract.md)人工重驗並更新 golden fixture。

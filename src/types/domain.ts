@@ -90,7 +90,7 @@ export const corpusPartOfSpeechSchema = z.enum([
 ]);
 
 export const fontPresetSchema = z.enum([
-  "auto", "charisSil", "notoSerif", "notoSerifCjkTc", "notoSerifTibetan", "notoSerifThai",
+  "auto", "charisSil", "notoSerif", "notoSerifCjkTc",
 ]);
 
 export const exportSettingsSchema = z.object({

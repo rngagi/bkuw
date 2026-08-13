@@ -20,8 +20,6 @@ pub(crate) const TERMES_PACK_ID: &str = "tex-gyre-termes";
 pub(crate) const CHARIS_PACK_ID: &str = "charis-sil";
 pub(crate) const NOTO_SERIF_PACK_ID: &str = "noto-serif";
 pub(crate) const NOTO_CJK_TC_PACK_ID: &str = "noto-serif-cjk-tc";
-pub(crate) const NOTO_TIBETAN_PACK_ID: &str = "noto-serif-tibetan";
-pub(crate) const NOTO_THAI_PACK_ID: &str = "noto-serif-thai";
 
 const NOTO_COMMIT: &str = "341cc991ffa33bb58fd0cb08728c6c6ac6c3b19a";
 
@@ -527,46 +525,7 @@ const NOTO_CJK_FILES: &[PackFile] = &[
     },
     NOTO_CJK_LICENSE,
 ];
-const NOTO_TIBETAN_FILES: &[PackFile] = &[
-    PackFile {
-        output: "NotoSerifTibetan-Regular.ttf",
-        archive_path: None,
-        url: Some(
-            "https://raw.githubusercontent.com/notofonts/notofonts.github.io/341cc991ffa33bb58fd0cb08728c6c6ac6c3b19a/fonts/NotoSerifTibetan/full/ttf/NotoSerifTibetan-Regular.ttf",
-        ),
-        sha256: "2ac2555a88b5bcbbacc490003e96dd4d00d064daeee4a9465d68cf301f9886b3",
-    },
-    PackFile {
-        output: "NotoSerifTibetan-Bold.ttf",
-        archive_path: None,
-        url: Some(
-            "https://raw.githubusercontent.com/notofonts/notofonts.github.io/341cc991ffa33bb58fd0cb08728c6c6ac6c3b19a/fonts/NotoSerifTibetan/full/ttf/NotoSerifTibetan-Bold.ttf",
-        ),
-        sha256: "2b25c40f870d0b2261fe9b3f008c05bfba61ae815ba533c1548a5c6e9d74c774",
-    },
-    NOTO_LICENSE,
-];
-const NOTO_THAI_FILES: &[PackFile] = &[
-    PackFile {
-        output: "NotoSerifThai-Regular.ttf",
-        archive_path: None,
-        url: Some(
-            "https://raw.githubusercontent.com/notofonts/notofonts.github.io/341cc991ffa33bb58fd0cb08728c6c6ac6c3b19a/fonts/NotoSerifThai/full/ttf/NotoSerifThai-Regular.ttf",
-        ),
-        sha256: "428afb46af2c025ed2b9fe39bda2fffce9475fa5d2e7ae7911771633014b91b0",
-    },
-    PackFile {
-        output: "NotoSerifThai-Bold.ttf",
-        archive_path: None,
-        url: Some(
-            "https://raw.githubusercontent.com/notofonts/notofonts.github.io/341cc991ffa33bb58fd0cb08728c6c6ac6c3b19a/fonts/NotoSerifThai/full/ttf/NotoSerifThai-Bold.ttf",
-        ),
-        sha256: "07f789854188fd1f6f0858b4fd7bf868c48afa830d2f0b37008bf30598860a2f",
-    },
-    NOTO_LICENSE,
-];
-
-const CATALOG: [Pack; 6] = [
+const CATALOG: [Pack; 4] = [
     Pack {
         id: TERMES_PACK_ID,
         version: "2.004",
@@ -621,32 +580,6 @@ const CATALOG: [Pack; 6] = [
         family: LatexFontFamily {
             regular: "NotoSerifCJKtc-Regular.otf",
             bold: Some("NotoSerifCJKtc-Bold.otf"),
-            italic: None,
-            bold_italic: None,
-        },
-    },
-    Pack {
-        id: NOTO_TIBETAN_PACK_ID,
-        version: NOTO_COMMIT,
-        mandatory: false,
-        source: PackSource::Files,
-        files: NOTO_TIBETAN_FILES,
-        family: LatexFontFamily {
-            regular: "NotoSerifTibetan-Regular.ttf",
-            bold: Some("NotoSerifTibetan-Bold.ttf"),
-            italic: None,
-            bold_italic: None,
-        },
-    },
-    Pack {
-        id: NOTO_THAI_PACK_ID,
-        version: NOTO_COMMIT,
-        mandatory: false,
-        source: PackSource::Files,
-        files: NOTO_THAI_FILES,
-        family: LatexFontFamily {
-            regular: "NotoSerifThai-Regular.ttf",
-            bold: Some("NotoSerifThai-Bold.ttf"),
             italic: None,
             bold_italic: None,
         },
@@ -706,6 +639,28 @@ mod tests {
             .expect("Termes catalog entry");
         assert!(termes.mandatory);
         assert_eq!(termes.state, FontPackState::Missing);
+    }
+
+    #[test]
+    fn catalog_contains_only_the_supported_portable_font_packs() {
+        let directory = tempdir().expect("temp directory");
+        let manager = FontManager::with_downloader(
+            directory.path().into(),
+            Arc::new(FakeDownloader::default()),
+        );
+        assert_eq!(
+            manager
+                .statuses()
+                .into_iter()
+                .map(|pack| pack.id)
+                .collect::<Vec<_>>(),
+            vec![
+                TERMES_PACK_ID,
+                CHARIS_PACK_ID,
+                NOTO_SERIF_PACK_ID,
+                NOTO_CJK_TC_PACK_ID,
+            ]
+        );
     }
 
     #[test]

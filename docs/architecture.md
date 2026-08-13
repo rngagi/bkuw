@@ -108,7 +108,7 @@ CSV renderer 固定 rngagi-corpus v0.3 九欄。ICU4X 依 profile language tag �
 
 LaTeX renderer 從零建立通用 XeLaTeX source，不複製 `docs/main.tex` 的授權巨集。所有 user text 經集中 escaping；writing-system font macros 使用純字母 control sequence與 project-relative font paths。Reverse index 由 Rust 排序並直接產生 `hyperlink`／`pageref`，不使用 makeindex。
 
-Font manager 是另一個 deep module。固定 catalog 記錄 pack ID、上游固定 commit/release、HTTPS URL、archive members、逐檔與 archive SHA-256、版本、LaTeX faces 與授權檔。下載先進 app-local staging directory；只有 archive 與每個 extracted/downloaded file 全部通過雜湊驗證，才以 manifest 啟用 cache。cache 每次使用前依 manifest 重驗，損毀 pack 視為 invalid。React 不接觸網路或 filesystem，只能列出狀態與請求安裝；Rust HTTP client 只能使用 catalog 內建 URL。
+Font manager 是另一個 deep module。固定 catalog 只包含 TeX Gyre Termes、Charis SIL、Noto Serif 與 Noto Serif CJK TC，並記錄 pack ID、上游固定 commit/release、HTTPS URL、archive members、逐檔與 archive SHA-256、版本、LaTeX faces 與授權檔。下載先進 app-local staging directory；只有 archive 與每個 extracted/downloaded file 全部通過雜湊驗證，才以 manifest 啟用 cache。cache 每次使用前依 manifest 重驗，損毀 pack 視為 invalid。React 不接觸網路或 filesystem，只能列出狀態與請求安裝；Rust HTTP client 只能使用 catalog 內建 URL。
 
 TeX Gyre Termes 是所有 LaTeX/PDF export 的 mandatory base pack，缺少或 invalid 時 preview 產生 fatal blocking issue。分析語言與每個 writing system 依 profile/script 決定其他必要 packs；phonemic／phonetic 類型不接受 preset override，固定解析為 Charis SIL。需要的字型檔與相應 license 都放進 `fonts/<pack-id>/`，LaTeX folder 與 Overleaf ZIP 因此不依賴 OS font registry。
 

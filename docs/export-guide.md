@@ -12,7 +12,7 @@ LaTeX 輸出資料夾包含 `main.tex`、`entries.tex`、`reverse-index.tex`、`
 
 找不到 XeLaTeX 時，來源與 ZIP 仍會正常建立。到 Overleaf 建立 Upload Project、上傳 ZIP，並將 compiler 設為 XeLaTeX。bkuw 不會自動上傳詞彙資料。
 
-字型不需要也不應手動安裝到作業系統。Export wizard 會列出 TeX Gyre Termes、Charis SIL 與 Noto packs 的狀態；按「下載並重試」後，bkuw 從官方固定版本下載、驗證 SHA-256 並保存於專用 cache。TeX Gyre Termes 是必要 base，缺少或損毀時 LaTeX/PDF preview 會直接阻擋；IPA（phonemic／phonetic）固定使用 Charis SIL。輸出的 `fonts/` 目錄與 Overleaf ZIP 會自帶需要的字型及授權檔，因此不依賴 Windows、macOS 或 Overleaf 原本安裝的 fonts。首次下載完成後，cache 可離線重用。
+字型不需要也不應手動安裝到作業系統。Export wizard 會列出 TeX Gyre Termes、Charis SIL、Noto Serif 與 Noto Serif CJK TC 的狀態；按「下載並重試」後，bkuw 從官方固定版本下載、驗證 SHA-256 並保存於專用 cache。TeX Gyre Termes 是必要 base，缺少或損毀時 LaTeX/PDF preview 會直接阻擋；IPA（phonemic／phonetic）固定使用 Charis SIL。現階段不提供 Thai／Tibetan 專用 managed font packs。輸出的 `fonts/` 目錄與 Overleaf ZIP 會自帶需要的字型及授權檔，因此不依賴 Windows、macOS 或 Overleaf 原本安裝的 fonts。首次下載完成後，cache 可離線重用。
 
 編譯失敗或超過 120 秒時，來源專案與 `diagnostic.log` 會保留。錯誤畫面會顯示完整的診斷紀錄位置；可複製該路徑，並在 Windows 檔案總管或 macOS Finder 前往該檔案。錯誤畫面也會區分 validation、stale preview、filesystem、compile 與 timeout；修正後重新 preview 再匯出。
 
@@ -28,6 +28,6 @@ The LaTeX folder contains `main.tex`, `entries.tex`, `reverse-index.tex`, `.late
 
 If XeLaTeX is unavailable, source and ZIP generation still succeeds. In Overleaf, create an Upload Project, upload the ZIP, and select XeLaTeX. bkuw never uploads lexical data automatically.
 
-Do not install these fonts into the operating system. The Export wizard lists the status of TeX Gyre Termes, Charis SIL, and the Noto packs. “Download and retry” fetches a fixed official version, verifies its SHA-256 digest, and stores it in bkuw's private cache. TeX Gyre Termes is mandatory, so a missing or invalid pack blocks LaTeX/PDF preview. IPA (phonemic/phonetic) always uses Charis SIL. Exported projects and Overleaf ZIPs carry their required fonts and license files under `fonts/`, independent of fonts installed on Windows, macOS, or Overleaf. Once downloaded, the cache can be reused offline.
+Do not install these fonts into the operating system. The Export wizard lists TeX Gyre Termes, Charis SIL, Noto Serif, and Noto Serif CJK TC. “Download and retry” fetches a fixed official version, verifies its SHA-256 digest, and stores it in bkuw's private cache. TeX Gyre Termes is mandatory, so a missing or invalid pack blocks LaTeX/PDF preview. IPA (phonemic/phonetic) always uses Charis SIL. Dedicated Thai and Tibetan managed font packs are not currently offered. Exported projects and Overleaf ZIPs carry their required fonts and license files under `fonts/`, independent of fonts installed on Windows, macOS, or Overleaf. Once downloaded, the cache can be reused offline.
 
 On a compile failure or 120-second timeout, bkuw preserves the source project and `diagnostic.log`. The error panel shows the full diagnostic-log path so it can be copied and opened from Windows File Explorer or macOS Finder. Correct the reported problem, create a fresh preview, and export again.

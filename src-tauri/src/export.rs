@@ -26,8 +26,7 @@ use crate::{
     },
     error::{AppError, AppResult},
     font_manager::{
-        CHARIS_PACK_ID, FontManager, NOTO_CJK_TC_PACK_ID, NOTO_SERIF_PACK_ID, NOTO_THAI_PACK_ID,
-        NOTO_TIBETAN_PACK_ID, TERMES_PACK_ID,
+        CHARIS_PACK_ID, FontManager, NOTO_CJK_TC_PACK_ID, NOTO_SERIF_PACK_ID, TERMES_PACK_ID,
     },
 };
 
@@ -816,12 +815,8 @@ fn portable_font_pack_id(
         crate::domain::FontPreset::CharisSil => CHARIS_PACK_ID,
         crate::domain::FontPreset::NotoSerif => NOTO_SERIF_PACK_ID,
         crate::domain::FontPreset::NotoSerifCjkTc => NOTO_CJK_TC_PACK_ID,
-        crate::domain::FontPreset::NotoSerifTibetan => NOTO_TIBETAN_PACK_ID,
-        crate::domain::FontPreset::NotoSerifThai => NOTO_THAI_PACK_ID,
         crate::domain::FontPreset::Auto => match script {
             Some("Hant") => NOTO_CJK_TC_PACK_ID,
-            Some("Tibt") => NOTO_TIBETAN_PACK_ID,
-            Some("Thai") => NOTO_THAI_PACK_ID,
             Some("Latn") => CHARIS_PACK_ID,
             _ => NOTO_SERIF_PACK_ID,
         },

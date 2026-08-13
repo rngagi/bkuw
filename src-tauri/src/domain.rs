@@ -55,8 +55,6 @@ pub enum FontPreset {
     CharisSil,
     NotoSerif,
     NotoSerifCjkTc,
-    NotoSerifTibetan,
-    NotoSerifThai,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

@@ -170,3 +170,9 @@
   - 驗證：English／zh-TW translations、ExportDialog download/retry test。
 - [x] package、Cargo、Cargo lock 與 Tauri app version 一致升為 `0.2.3`，完成全部本機與遠端驗收。
   - 驗證：`pnpm check && pnpm test && pnpm test:rust && pnpm test:e2e:build && pnpm test:e2e && pnpm tauri build --no-bundle`；GitHub Actions run `31614974863` 的 Portable XeLaTeX、Windows x64 與 macOS Apple Silicon 全部成功；公開 `v0.2.3` Release 含 NSIS、DMG 與 `SHA256SUMS.txt`。
+
+## 13. 移除未使用的 script-specific font packs
+
+- [x] 完整移除 Noto Serif Thai／Tibetan managed packs 與 presets。
+  - 完成條件：catalog、下載來源、hash、Rust／TypeScript enum、Export UI、雙語翻譯、E2E 與文件均不再宣稱或使用兩個專用 packs；一般 Thai／Tibetan lexical data 與 Unicode 搜尋能力不受影響。
+  - 驗證：catalog regression test、repository search、`pnpm check && pnpm test && pnpm test:rust && pnpm test:e2e:build && pnpm test:e2e && pnpm tauri build --no-bundle`，以及 real-XeLaTeX portable-template test。

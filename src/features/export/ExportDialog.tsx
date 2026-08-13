@@ -27,7 +27,7 @@ interface Props {
 const corpusParts: CorpusPartOfSpeech[] = [
   "noun", "verb", "adjective", "adverb", "pronoun", "particle", "other",
 ];
-const fontPresets = ["auto", "charisSil", "notoSerif", "notoSerifCjkTc", "notoSerifTibetan", "notoSerifThai"] as const;
+const fontPresets = ["auto", "charisSil", "notoSerif", "notoSerifCjkTc"] as const;
 
 interface ExportError {
   message: string;
