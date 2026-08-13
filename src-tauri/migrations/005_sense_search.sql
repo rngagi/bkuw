@@ -1,0 +1,1 @@
+ALTER TABLE senses ADD COLUMN search_key TEXT NOT NULL DEFAULT '';

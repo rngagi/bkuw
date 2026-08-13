@@ -26,7 +26,8 @@ const INITIAL_MIGRATION: &str = include_str!("../migrations/001_initial.sql");
 const METADATA_OPTIONS_MIGRATION: &str = include_str!("../migrations/002_metadata_options.sql");
 const EXPORT_SETTINGS_MIGRATION: &str = include_str!("../migrations/003_export_settings.sql");
 const ENTRY_ORDERING_MIGRATION: &str = include_str!("../migrations/004_entry_ordering.sql");
-const LATEST_SCHEMA_VERSION: i64 = 4;
+const SENSE_SEARCH_MIGRATION: &str = include_str!("../migrations/005_sense_search.sql");
+const LATEST_SCHEMA_VERSION: i64 = 5;
 
 pub struct ProjectSession {
     root: PathBuf,
@@ -801,7 +802,39 @@ fn migrate(connection: &mut Connection, root: &Path) -> AppResult<()> {
             params![now()],
         )?;
     }
+    if current < 5 {
+        transaction.execute_batch(SENSE_SEARCH_MIGRATION)?;
+        backfill_sense_search_keys(&transaction)?;
+        transaction.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (5, ?1)",
+            params![now()],
+        )?;
+    }
     transaction.commit()?;
+    Ok(())
+}
+
+fn backfill_sense_search_keys(transaction: &Transaction<'_>) -> AppResult<()> {
+    let senses = {
+        let mut statement = transaction.prepare("SELECT id, gloss, definition FROM senses")?;
+        let rows = statement.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, Option<String>>(1)?,
+                row.get::<_, Option<String>>(2)?,
+            ))
+        })?;
+        rows.collect::<Result<Vec<_>, _>>()?
+    };
+    for (id, gloss, definition) in senses {
+        transaction.execute(
+            "UPDATE senses SET search_key = ?1 WHERE id = ?2",
+            params![
+                sense_search_key(gloss.as_deref(), definition.as_deref()),
+                id
+            ],
+        )?;
+    }
     Ok(())
 }
 
@@ -1187,6 +1220,9 @@ fn query_summaries(
            AND (?1 = '' OR EXISTS (
              SELECT 1 FROM entry_forms f
              WHERE f.entry_id = e.id AND f.search_key LIKE ?2
+           ) OR EXISTS (
+             SELECT 1 FROM senses s
+             WHERE s.entry_id = e.id AND s.search_key LIKE ?2
            ))
          ORDER BY e.created_at, e.id",
     )?;
@@ -1234,6 +1270,9 @@ fn load_entry_sense_summaries(
            AND (?1 = '' OR EXISTS (
              SELECT 1 FROM entry_forms f
              WHERE f.entry_id = e.id AND f.search_key LIKE ?2
+           ) OR EXISTS (
+             SELECT 1 FROM senses matched_sense
+             WHERE matched_sense.entry_id = e.id AND matched_sense.search_key LIKE ?2
            ))
          ORDER BY s.entry_id, s.sort_order, s.id",
     )?;
@@ -1431,18 +1470,21 @@ fn insert_forms(
 
 fn insert_senses(transaction: &Transaction<'_>, entry_id: &str, senses: &[Sense]) -> AppResult<()> {
     for sense in senses {
+        let gloss = normalize_optional(sense.gloss.clone());
+        let definition = normalize_optional(sense.definition.clone());
         transaction.execute(
             "INSERT INTO senses
-             (id, entry_id, gloss, definition, part_of_speech, semantic_domain, sort_order)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+             (id, entry_id, gloss, definition, part_of_speech, semantic_domain, sort_order, search_key)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 sense.id,
                 entry_id,
-                normalize_optional(sense.gloss.clone()),
-                normalize_optional(sense.definition.clone()),
+                gloss,
+                definition,
                 normalize_optional(sense.part_of_speech.clone()),
                 normalize_optional(sense.semantic_domain.clone()),
-                sense.sort_order
+                sense.sort_order,
+                sense_search_key(gloss.as_deref(), definition.as_deref())
             ],
         )?;
         for example in &sense.examples {
@@ -1474,6 +1516,14 @@ fn insert_senses(transaction: &Transaction<'_>, entry_id: &str, senses: &[Sense]
         }
     }
     Ok(())
+}
+
+fn sense_search_key(gloss: Option<&str>, definition: Option<&str>) -> String {
+    search_key(&format!(
+        "{}\n{}",
+        gloss.unwrap_or_default(),
+        definition.unwrap_or_default()
+    ))
 }
 
 fn insert_relations(
@@ -2232,6 +2282,66 @@ mod tests {
     }
 
     #[test]
+    fn searches_sense_glosses_and_definitions_with_unicode_folding() {
+        let (_directory, mut session) = create_session();
+        let snapshot = session.snapshot().expect("snapshot");
+        let mut entry = session.create_entry().expect("entry");
+        entry.forms.push(EntryForm {
+            id: super::new_id(),
+            writing_system_id: snapshot.writing_systems[0].id.clone(),
+            text: "ata".into(),
+            variant_label: None,
+            dialect: None,
+            status: None,
+            notes: None,
+            sort_order: 0,
+        });
+        entry.senses.push(Sense {
+            id: super::new_id(),
+            gloss: Some("guò".into()),
+            definition: Some("跨越界線".into()),
+            part_of_speech: Some("Verb".into()),
+            semantic_domain: Some("Motion".into()),
+            sort_order: 0,
+            examples: Vec::new(),
+        });
+        let mut saved = session
+            .save_entry(SaveEntryRequest {
+                expected_revision: 0,
+                entry,
+            })
+            .expect("save");
+
+        for query in ["guo", "跨越"] {
+            assert_eq!(session.query_entries(query).expect("search").len(), 1);
+        }
+        assert!(session.query_entries("Motion").expect("search").is_empty());
+
+        saved.senses[0].gloss = Some("mǎ".into());
+        saved.senses[0].definition = Some("燃燒".into());
+        let expected_revision = saved.revision;
+        session
+            .save_entry(SaveEntryRequest {
+                expected_revision,
+                entry: saved,
+            })
+            .expect("update");
+        assert!(session.query_entries("guo").expect("old gloss").is_empty());
+        assert!(
+            session
+                .query_entries("跨越")
+                .expect("old definition")
+                .is_empty()
+        );
+        for query in ["ma", "燃燒"] {
+            assert_eq!(
+                session.query_entries(query).expect("updated search").len(),
+                1
+            );
+        }
+    }
+
+    #[test]
     fn stale_revision_does_not_replace_the_aggregate() {
         let (_directory, mut session) = create_session();
         let entry = session.create_entry().expect("entry");
@@ -2369,6 +2479,7 @@ mod tests {
                  DROP TABLE export_settings;
                  ALTER TABLE projects DROP COLUMN analysis_language;
                  DROP TABLE metadata_options;
+                 ALTER TABLE senses DROP COLUMN search_key;
                  DELETE FROM schema_migrations WHERE version >= 2;",
             )
             .expect("simulate version one");
@@ -2436,6 +2547,74 @@ mod tests {
             Some("zh-TW")
         );
         assert_eq!(reopened_snapshot.export_settings, settings);
+    }
+
+    #[test]
+    fn migration_five_backs_up_and_backfills_sense_search_keys() {
+        let (_directory, mut session) = create_session();
+        let snapshot = session.snapshot().expect("snapshot");
+        let mut entry = session.create_entry().expect("entry");
+        entry.forms.push(EntryForm {
+            id: super::new_id(),
+            writing_system_id: snapshot.writing_systems[0].id.clone(),
+            text: "ata".into(),
+            variant_label: None,
+            dialect: None,
+            status: None,
+            notes: None,
+            sort_order: 0,
+        });
+        entry.senses.push(Sense {
+            id: super::new_id(),
+            gloss: Some("guò".into()),
+            definition: Some("跨越".into()),
+            part_of_speech: None,
+            semantic_domain: None,
+            sort_order: 0,
+            examples: Vec::new(),
+        });
+        session
+            .save_entry(SaveEntryRequest {
+                expected_revision: 0,
+                entry,
+            })
+            .expect("save");
+        let root = std::path::PathBuf::from(snapshot.root_path);
+        session.close().expect("close");
+
+        let connection = rusqlite::Connection::open(root.join("project.sqlite")).expect("open");
+        connection
+            .execute_batch(
+                "ALTER TABLE senses DROP COLUMN search_key;
+                 DELETE FROM schema_migrations WHERE version >= 5;",
+            )
+            .expect("simulate version four");
+        drop(connection);
+
+        let reopened = ProjectSession::open(&root).expect("migrated reopen");
+        assert_eq!(
+            reopened.query_entries("guo").expect("gloss search").len(),
+            1
+        );
+        assert_eq!(
+            reopened
+                .query_entries("跨越")
+                .expect("definition search")
+                .len(),
+            1
+        );
+        let backups = std::fs::read_dir(root.join("backups"))
+            .expect("backups")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("backup entries");
+        assert_eq!(backups.len(), 1);
+        let backup = rusqlite::Connection::open(backups[0].path()).expect("open backup");
+        let version: i64 = backup
+            .query_row("SELECT MAX(version) FROM schema_migrations", [], |row| {
+                row.get(0)
+            })
+            .expect("backup version");
+        assert_eq!(version, 4);
     }
 
     #[test]

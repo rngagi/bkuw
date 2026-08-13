@@ -84,8 +84,8 @@ Owned children 使用 `ON DELETE CASCADE`。Relation target 被永久移除時�
 ## Unicode 與搜尋
 
 - 顯示文字在 Rust 寫入前正規化為 NFC。
-- `entry_forms.search_key` 是可重建的衍生欄位：Unicode case fold、分解、移除 combining marks、再正規化。
-- query 使用同一演算法，對 search key 做 substring matching；Chinese、Tibetan、Thai、IPA 等未折疊內容仍保留並可搜尋。
+- `entry_forms.search_key` 與 `senses.search_key` 是可重建的衍生欄位：Unicode case fold、分解、移除 combining marks、再正規化。Sense key 只由 gloss＋definition 組成，不混入 POS 或 semantic domain。
+- query 使用同一演算法，對 form 或 sense search key 做 substring matching；Chinese、Tibetan、Thai、IPA 等未折疊內容仍保留並可搜尋。
 - 不假設 code point 等於 grapheme；character-level UI behavior 必須使用 grapheme-aware APIs。
 - Example forms 在 Milestone 1 保存同樣的正規化文字，但不納入 entry-list search。
 
@@ -102,7 +102,7 @@ Frontend adapter 對 Rust unit response 接受 Tauri JSON `null`，再映射為 
 
 Entry forms 在 frontend 依 writing-system settings 自動補齊並固定排序；example 先建立 primary form，再允許加入尚未使用的 writing system。Phonemic／phonetic delimiter 是 presentation concern，不寫回 lexical text。Document-level input policy 透過既有及動態 controls 統一關閉 autocorrect、autocapitalize、autocomplete 與 spellcheck。
 
-Migration 2 新增 `metadata_options`。Migration 3 新增 `projects.analysis_language` 與 `export_settings`。Migration 4 新增 entry section override、versioned sort settings 與 manual layout。舊 schema 開啟時仍遵守先建立一致性 SQLite backup、再於 transaction 套用 migration 的規則。
+Migration 2 新增 `metadata_options`。Migration 3 新增 `projects.analysis_language` 與 `export_settings`。Migration 4 新增 entry section override、versioned sort settings 與 manual layout。Migration 5 新增並以 Rust Unicode folding 回填 `senses.search_key`。舊 schema 開啟時仍遵守先建立一致性 SQLite backup、再於 transaction 套用 migration 的規則。
 
 ## Ordering module
 

@@ -108,7 +108,7 @@ describe("App keyboard and delete workflow", () => {
     expect(await screen.findByText("Sense 1")).toBeInTheDocument();
 
     fireEvent.keyDown(window, { key: "f", ctrlKey: true });
-    expect(screen.getByRole("textbox", { name: "Search every lexical form…" })).toHaveFocus();
+    expect(screen.getByRole("textbox", { name: "Search forms, glosses, and definitions…" })).toHaveFocus();
     fireEvent.keyDown(window, { key: "s", ctrlKey: true });
     await waitFor(() => expect(backendMock.saveEntry).toHaveBeenCalled());
 

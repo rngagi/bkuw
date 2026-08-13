@@ -22,7 +22,7 @@ const resources = {
         projectExistsBody: "A .bkuw project with this name already exists in the selected folder. Choose another name or open the existing project.",
       },
       workspace: {
-        newEntry: "New entry", search: "Search every lexical form…", noEntries: "No entries yet",
+        newEntry: "New entry", search: "Search forms, glosses, and definitions…", noEntries: "No entries yet",
         noMatch: "No matching entries", selectEntry: "Select an entry or create a new one.",
         closeProject: "Close project", untitled: "Untitled entry", moreSenses: "…{{count}} senses total", saved: "Saved", saving: "Saving…",
         unsaved: "Unsaved changes", saveFailed: "Save failed", deleted: "Entry deleted",
@@ -163,7 +163,7 @@ const resources = {
         projectExistsBody: "所選資料夾中已有同名的 .bkuw 專案。請改用其他名稱，或開啟既有專案。",
       },
       workspace: {
-        newEntry: "新增詞條", search: "搜尋所有詞彙表記…", noEntries: "尚無詞條", noMatch: "找不到符合的詞條",
+        newEntry: "新增詞條", search: "搜尋表記、簡釋與定義…", noEntries: "尚無詞條", noMatch: "找不到符合的詞條",
         selectEntry: "選取詞條或建立新詞條。", closeProject: "關閉專案", untitled: "未命名詞條", moreSenses: "…等 {{count}} 個語義", saved: "已儲存",
         saving: "儲存中…", unsaved: "尚未儲存", saveFailed: "儲存失敗", deleted: "已刪除詞條",
       },

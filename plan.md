@@ -215,3 +215,9 @@
 - [x] 將四處版本一致升為 `0.3.1`，完成本機及 tag release 驗收。
   - 完成條件：package、Cargo、Cargo lock、Tauri version 一致；Windows x64 與 macOS Apple Silicon CI 成功；Draft assets/checksums 確認後發布。
   - 驗證：完整 test/build suite與真實 XeLaTeX portable-template test；GitHub Actions run `31670852554` 全部成功；公開 `v0.3.1` Release 含 NSIS、Apple Silicon DMG 與核對一致的 `SHA256SUMS.txt`。
+
+## 16. Sense search
+
+- [x] 將工作區搜尋擴充至義項簡釋與定義。
+  - 完成條件：migration 5 為既有 senses 回填 Unicode-safe search key；新保存義項同步更新衍生鍵；form／gloss／definition 共用 case／diacritic-insensitive substring search；POS、semantic domain 與 examples 不納入。
+  - 驗證：migration backup/backfill、Unicode sense query integration tests、雙語搜尋提示，以及 `pnpm check && pnpm test && pnpm test:rust`。

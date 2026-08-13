@@ -64,7 +64,7 @@ Phonemic text 儲存時不包含 delimiter、顯示時加 `/…/`；phonetic tex
 
 ## 搜尋
 
-Milestone 1 搜尋 lexical entry forms，不搜尋 examples。搜尋為 Unicode-aware substring match，並使用衍生 search key 做 case-folding 與 diacritic folding；因此 `guo` 必須能找到顯示值 `guò`。原始文字以 NFC 保存，搜尋處理不得改寫顯示資料。
+工作區搜尋 lexical entry forms，以及 sense 的簡釋與定義；不搜尋 POS、semantic domain 或 examples。搜尋為 Unicode-aware substring match，並使用衍生 search key 做 case-folding 與 diacritic folding；因此 `guo` 必須能找到表記或義項中的顯示值 `guò`。原始文字以 NFC 保存，搜尋處理不得改寫顯示資料。
 
 進階 FTS、fuzzy search 與 example 全文搜尋留待後續版本。
 
