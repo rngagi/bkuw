@@ -28,6 +28,8 @@ v0.3.1 新增 Chiron Sung HK／Chiron Hei HK managed portable fonts 與明體／
 
 Sense-level 相片接受 PNG／JPEG／WebP，在本機 Canvas 輕度縮圖後統一保存為 project-relative PNG。Migration 6 保存圖片 metadata 與 SHA-256；LaTeX／PDF profile 可選擇是否把相片加入來源資料夾、Overleaf ZIP 與成品。
 
+v0.4.1 修正 React field-array UI key 覆蓋持久化 sense ID，導致相片上傳誤報找不到義項的問題；同時細分詞條、義項與相片不存在的雙語錯誤訊息。CI／release 流程改為 version tag 重用完全相同 commit SHA 的成功 `main` artifacts，不再重複測試與平台打包。
+
 ## 候選 backlog
 
 - Audio import/playback 與 optional recording。

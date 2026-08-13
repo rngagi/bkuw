@@ -14,7 +14,7 @@
 - [x] Form／sense 搜尋、精簡詞表摘要、sense-level 相片與 optional LaTeX／PDF photo export。
 - [x] Windows x64／macOS Apple Silicon CI、NSIS／DMG artifacts 與 same-SHA artifact promotion Draft Release；version tag 不重跑 CI。
 
-最新公開版本為 `v0.4.0`。macOS Intel 不在支援或建置範圍內。
+最新公開版本為 `v0.4.1`。macOS Intel 不在支援或建置範圍內。
 
 ## 候選 backlog
 

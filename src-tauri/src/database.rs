@@ -450,7 +450,7 @@ impl ProjectSession {
             |row| row.get::<_, bool>(0),
         )?;
         if !exists {
-            return Err(AppError::new("not_found", "The sense was not found."));
+            return Err(AppError::new("sense_not_found", "The sense was not found."));
         }
         load_sense_images(&self.connection, sense_id)
     }
@@ -527,7 +527,7 @@ impl ProjectSession {
         )?;
         if !sense_exists {
             let _ = fs::remove_file(&temporary_path);
-            return Err(AppError::new("not_found", "The sense was not found."));
+            return Err(AppError::new("sense_not_found", "The sense was not found."));
         }
         let sort_order = transaction.query_row(
             "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM sense_images WHERE sense_id = ?1",
@@ -583,7 +583,7 @@ impl ProjectSession {
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .optional()?
-            .ok_or_else(|| AppError::new("not_found", "The sense image was not found."))?;
+            .ok_or_else(|| AppError::new("image_not_found", "The sense image was not found."))?;
         let bytes = fs::read(self.media_path(&relative_path)?)?;
         if !is_png(&bytes) || hex::encode(Sha256::digest(&bytes)) != expected_sha {
             return Err(AppError::new(
@@ -612,7 +612,7 @@ impl ProjectSession {
                 |row| row.get::<_, String>(0),
             )
             .optional()?
-            .ok_or_else(|| AppError::new("not_found", "The sense image was not found."))?;
+            .ok_or_else(|| AppError::new("image_not_found", "The sense image was not found."))?;
         let transaction = self.connection.transaction()?;
         let updated = transaction.execute(
             "UPDATE lexical_entries
@@ -2240,7 +2240,7 @@ mod tests {
                 .list_sense_images(&sense_id)
                 .expect_err("removed sense")
                 .code,
-            "not_found"
+            "sense_not_found"
         );
     }
 

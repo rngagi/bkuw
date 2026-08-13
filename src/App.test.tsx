@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "./i18n";
 import type { LexicalEntry, ProjectSnapshot } from "./types/domain";
 
-const { backendMock } = vi.hoisted(() => ({
+const { backendMock, prepareImageMock } = vi.hoisted(() => ({
   backendMock: {
     chooseFolder: vi.fn(),
     createProject: vi.fn(),
@@ -30,6 +30,7 @@ const { backendMock } = vi.hoisted(() => ({
     openOverleaf: vi.fn(),
     openOverleafCompilerHelp: vi.fn(),
   },
+  prepareImageMock: vi.fn(),
 }));
 
 vi.mock("./lib/tauri", () => ({
@@ -43,6 +44,10 @@ vi.mock("./lib/tauri", () => ({
       this.details = details;
     }
   },
+}));
+vi.mock("./lib/imageCompression", () => ({
+  prepareSenseImage: prepareImageMock,
+  base64ToBytes: vi.fn(() => Uint8Array.from([137, 80, 78, 71])),
 }));
 
 import App from "./App";
@@ -91,6 +96,8 @@ describe("App keyboard and delete workflow", () => {
     backendMock.createEntry.mockResolvedValue(entry);
     backendMock.queryEntries.mockResolvedValue([]);
     backendMock.listSenseImages.mockResolvedValue([]);
+    backendMock.loadSenseImage.mockResolvedValue({ mimeType: "image/png", dataBase64: "iVBORw==" });
+    prepareImageMock.mockResolvedValue({ originalFilename: "field.jpg", pngBase64: "iVBORw==", width: 1200, height: 800 });
     backendMock.saveEntry.mockImplementation(async (draft: LexicalEntry) => ({ ...draft, revision: draft.revision + 1 }));
     backendMock.deleteEntry.mockResolvedValue({ id: entry.id, deletedAt: "2026-01-01T00:00:01Z" });
     backendMock.restoreEntry.mockResolvedValue({ ...entry, revision: 2 });
@@ -157,6 +164,43 @@ describe("App keyboard and delete workflow", () => {
 
     await waitFor(() => expect(backendMock.saveEntry).toHaveBeenCalled());
     await waitFor(() => expect(screen.getByText("Saved")).toBeInTheDocument(), { timeout: 500 });
+  });
+
+  it("uploads a sense photo with the persisted sense id rather than the field-array key", async () => {
+    backendMock.attachSenseImage.mockImplementation(async (request: {
+      entryId: string; senseId: string; expectedRevision: number;
+    }) => {
+      const savedDraft = backendMock.saveEntry.mock.calls.at(-1)?.[0] as LexicalEntry;
+      return {
+        entry: { ...savedDraft, revision: request.expectedRevision + 1 },
+        image: {
+          id: "image-1", senseId: request.senseId, originalFilename: "field.jpg",
+          width: 1200, height: 800, byteSize: 120000, sortOrder: 0, createdAt: entry.createdAt,
+        },
+      };
+    });
+    const { container } = render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Create project" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
+    await waitFor(() => expect(screen.getByDisplayValue("/tmp")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("Project name"), { target: { value: "Test" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    const onboardingDialog = await screen.findByRole("dialog", { name: "Set up this project's writing systems" });
+    fireEvent.click(within(onboardingDialog).getByRole("button", { name: "Cancel" }));
+    fireEvent.click(await screen.findByRole("button", { name: "New entry" }));
+    await screen.findByRole("button", { name: "Delete entry" });
+    fireEvent.keyDown(window, { key: "Enter", ctrlKey: true });
+    await screen.findByText("Sense 1");
+
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [new File(["jpeg"], "field.jpg", { type: "image/jpeg" })] } });
+
+    await waitFor(() => expect(backendMock.attachSenseImage).toHaveBeenCalled());
+    const savedDraft = backendMock.saveEntry.mock.calls.at(-1)?.[0] as LexicalEntry;
+    expect(backendMock.attachSenseImage).toHaveBeenCalledWith(expect.objectContaining({
+      entryId: entry.id,
+      senseId: savedDraft.senses[0].id,
+    }));
   });
 
   it("recovers a manual-mode project whose layout was never initialized", async () => {

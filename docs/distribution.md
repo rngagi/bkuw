@@ -9,7 +9,7 @@
 
 Artifacts 保存 14 天。macOS Intel 不在支援與建置範圍內，也不會上傳任何使用者資料。
 
-推送與 app version 完全一致的 `v*` tag（例如 `v0.4.0`）時，`.github/workflows/release.yml` 不重新 build，而會：
+推送與 app version 完全一致的 `v*` tag（例如 `v0.4.1`）時，`.github/workflows/release.yml` 不重新 build，而會：
 
 1. 以 tag commit SHA 尋找完全相同 SHA 的 `main` push CI，最多等待 30 分鐘。
 2. 只有該 CI 的 portable-template、Windows x64 與 macOS Apple Silicon jobs 全數成功時，才下載其 artifacts；已失敗的 CI 必須先修正或 rerun。

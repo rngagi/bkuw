@@ -75,7 +75,7 @@ function ExampleEditor({ control, register, senseIndex, exampleIndex, writingSys
 }) {
   const { t } = useTranslation();
   const name = `senses.${senseIndex}.examples.${exampleIndex}.forms` as const;
-  const forms = useFieldArray({ control, name });
+  const forms = useFieldArray({ control, name, keyName: "fieldKey" });
   const watchedForms = useWatch({ control, name }) ?? [];
   const used = new Set(watchedForms.map((form) => form.writingSystemId));
   const nextSystem = writingSystems.find((system) => !used.has(system.id));
@@ -86,7 +86,7 @@ function ExampleEditor({ control, register, senseIndex, exampleIndex, writingSys
       {forms.fields.map((field, formIndex) => {
         const systemId = watchedForms[formIndex]?.writingSystemId ?? field.writingSystemId;
         const system = writingSystems.find((item) => item.id === systemId);
-        return <div className="form-row" key={field.id}><span className="form-system-label">{system?.name ?? t("entry.writingSystem")}</span><WritingSystemInput system={system} registration={register(`senses.${senseIndex}.examples.${exampleIndex}.forms.${formIndex}.text` as const)} /><Button type="button" size="icon" variant="ghost" onClick={() => forms.remove(formIndex)} aria-label={t("common.remove")}><Trash2 size={14} /></Button></div>;
+        return <div className="form-row" key={field.fieldKey}><span className="form-system-label">{system?.name ?? t("entry.writingSystem")}</span><WritingSystemInput system={system} registration={register(`senses.${senseIndex}.examples.${exampleIndex}.forms.${formIndex}.text` as const)} /><Button type="button" size="icon" variant="ghost" onClick={() => forms.remove(formIndex)} aria-label={t("common.remove")}><Trash2 size={14} /></Button></div>;
       })}
       <Button type="button" size="small" variant="ghost" disabled={!nextSystem} onClick={() => { if (nextSystem) forms.append({ id: createId(), writingSystemId: nextSystem.id, text: "", sortOrder: forms.fields.length }); }}><Plus size={14} />{t("entry.addExampleForm")}</Button>
       <div className="two-columns"><label className="field"><span>{t("entry.translation")}</span><input {...register(`senses.${senseIndex}.examples.${exampleIndex}.translation` as const)} /></label><label className="field"><span>{t("entry.exampleNotes")}</span><input {...register(`senses.${senseIndex}.examples.${exampleIndex}.notes` as const)} /></label></div>
@@ -105,7 +105,7 @@ function SenseEditor({ control, register, entryId, sense, index, writingSystems,
   onRemove(): void; onMove(from: number, to: number): void; count: number;
 }) {
   const { t } = useTranslation();
-  const examples = useFieldArray({ control, name: `senses.${index}.examples` as const });
+  const examples = useFieldArray({ control, name: `senses.${index}.examples` as const, keyName: "fieldKey" });
   const order = orderButtons(onMove, index, count);
   const primary = writingSystems.find((system) => system.displayRole === "primary") ?? writingSystems[0];
   return (
@@ -116,7 +116,7 @@ function SenseEditor({ control, register, entryId, sense, index, writingSystems,
       <label className="field"><span>{t("entry.semanticDomain")}</span><select {...register(`senses.${index}.semanticDomain` as const, { setValueAs: (value) => value || null })}><option value="">{t("common.none")}</option>{metadataChoices(semanticDomainOptions, sense.semanticDomain).map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
       <SenseImageEditor entryId={entryId} senseId={sense.id} onFlush={onFlush} onEntryMutated={onEntryMutated} />
       <div className="subsection-heading"><h4>{t("entry.examples")}</h4><Button type="button" size="small" onClick={() => examples.append({ id: createId(), translation: null, notes: null, sortOrder: examples.fields.length, forms: primary ? [{ id: createId(), writingSystemId: primary.id, text: "", sortOrder: 0 }] : [] })}><Plus size={14} />{t("entry.addExample")}</Button></div>
-      {examples.fields.map((example, exampleIndex) => <ExampleEditor key={example.id} control={control} register={register} senseIndex={index} exampleIndex={exampleIndex} writingSystems={writingSystems} onRemove={() => examples.remove(exampleIndex)} onMove={examples.move} count={examples.fields.length} />)}
+      {examples.fields.map((example, exampleIndex) => <ExampleEditor key={example.fieldKey} control={control} register={register} senseIndex={index} exampleIndex={exampleIndex} writingSystems={writingSystems} onRemove={() => examples.remove(exampleIndex)} onMove={examples.move} count={examples.fields.length} />)}
     </section>
   );
 }
@@ -147,8 +147,8 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
   const { t } = useTranslation();
   const sortSettings = entrySortSettings ?? { version: 1 as const, mode: "auto" as const, writingSystemId: writingSystems[0]?.id ?? "", alphabet: [] };
   const { control, register, reset, getValues, setValue, watch } = useForm<LexicalEntry>({ defaultValues: entry });
-  const senses = useFieldArray({ control, name: "senses" });
-  const relations = useFieldArray({ control, name: "relations" });
+  const senses = useFieldArray({ control, name: "senses", keyName: "fieldKey" });
+  const relations = useFieldArray({ control, name: "relations", keyName: "fieldKey" });
   const watchedForms = useWatch({ control, name: "forms" }) ?? [];
   const sectionOverride = useWatch({ control, name: "sectionOverride" });
   const [status, setStatus] = useState<"saved" | "dirty" | "saving" | "error">("saved");
@@ -274,8 +274,8 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
       <div className="editor-scroll">
         <section className="editor-section"><div className="section-heading"><h2>{t("entry.forms")}</h2></div>{watchedForms.map((form, index) => { const system = writingSystems.find((item) => item.id === form.writingSystemId); return <div className="form-row" key={form.id}><span className="form-system-label">{system?.name ?? t("entry.writingSystem")}</span><WritingSystemInput autoFocus={index === 0} system={system} registration={register(`forms.${index}.text`)} /><span /></div>; })}<label className="field"><span>{t("sorting.entrySection")}</span><select aria-label={t("sorting.entrySection")} value={sectionOverride ?? ""} disabled={sortSettings.mode === "manual"} onChange={(event) => setPendingSection(event.target.value || null)}><option value="">{t("sorting.automaticSection")}</option>{sortSettings.alphabet.map((item) => <option key={item} value={item.toUpperCase()}>{item.toUpperCase()}</option>)}</select><small>{t(sortSettings.mode === "manual" ? "sorting.overrideDisabled" : "sorting.entrySectionHelp")}</small></label><label className="field"><span>{t("entry.notes")}</span><textarea {...register("notes")} /></label></section>
         <div className="section-heading standalone"><h2>{t("entry.senses")}</h2><Button type="button" size="small" onClick={addSense}><Plus size={14} />{t("entry.addSense")}</Button></div>
-        {senses.fields.map((sense, index) => <SenseEditor key={sense.id} control={control} register={register} entryId={entry.id} sense={sense} index={index} writingSystems={writingSystems} partOfSpeechOptions={partOfSpeechOptions} semanticDomainOptions={semanticDomainOptions} onFlush={() => saveNow(true)} onEntryMutated={applyMediaMutation} onRemove={() => senses.remove(index)} onMove={senses.move} count={senses.fields.length} />)}
-        <section className="editor-section"><div className="section-heading"><h2>{t("entry.relations")}</h2><Button type="button" size="small" onClick={() => relations.append({ id: createId(), targetEntryId: null, relationType: "root", fallbackText: "", notes: null, sortOrder: relations.fields.length })}><Plus size={14} />{t("entry.addRelation")}</Button></div><p className="section-help">{t("entry.fallbackHelp")}</p>{relations.fields.map((relation, index) => <RelationEditor key={relation.id} control={control} register={register} setValue={setValue} index={index} entryId={entry.id} entryOptions={entryOptions} primaryWritingSystem={writingSystems.find((system) => system.displayRole === "primary")} onNavigate={onNavigate} onRemove={() => relations.remove(index)} />)}</section>
+        {senses.fields.map((sense, index) => <SenseEditor key={sense.fieldKey} control={control} register={register} entryId={entry.id} sense={sense} index={index} writingSystems={writingSystems} partOfSpeechOptions={partOfSpeechOptions} semanticDomainOptions={semanticDomainOptions} onFlush={() => saveNow(true)} onEntryMutated={applyMediaMutation} onRemove={() => senses.remove(index)} onMove={senses.move} count={senses.fields.length} />)}
+        <section className="editor-section"><div className="section-heading"><h2>{t("entry.relations")}</h2><Button type="button" size="small" onClick={() => relations.append({ id: createId(), targetEntryId: null, relationType: "root", fallbackText: "", notes: null, sortOrder: relations.fields.length })}><Plus size={14} />{t("entry.addRelation")}</Button></div><p className="section-help">{t("entry.fallbackHelp")}</p>{relations.fields.map((relation, index) => <RelationEditor key={relation.fieldKey} control={control} register={register} setValue={setValue} index={index} entryId={entry.id} entryOptions={entryOptions} primaryWritingSystem={writingSystems.find((system) => system.displayRole === "primary")} onNavigate={onNavigate} onRemove={() => relations.remove(index)} />)}</section>
       </div>
     </form>
     <AlertDialog.Root open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}><AlertDialog.Portal><AlertDialog.Overlay className="dialog-overlay" /><AlertDialog.Content className="dialog-content narrow"><AlertDialog.Title>{t("entry.deleteTitle")}</AlertDialog.Title><AlertDialog.Description>{t("entry.deleteBody")}</AlertDialog.Description><div className="dialog-actions"><AlertDialog.Cancel asChild><Button>{t("common.cancel")}</Button></AlertDialog.Cancel><AlertDialog.Action asChild><Button variant="danger" onClick={() => void onDelete()}>{t("entry.confirmDelete")}</Button></AlertDialog.Action></div></AlertDialog.Content></AlertDialog.Portal></AlertDialog.Root>
