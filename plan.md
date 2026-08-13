@@ -197,5 +197,6 @@
 - [x] 讓 LaTeX pronunciation 只顯示於主要詞頭右側。
   - 完成條件：pronunciation form 不再重複出現在其他表記 metadata；headword／pronunciation 不可選用相同 writing system；舊重複 profile 可安全 normalize。
   - 驗證：Rust renderer／settings contract tests、ExportDialog 重複選項測試與真實 XeLaTeX compile。
-- [ ] 人工檢查排序與 LaTeX 結果後，將四處版本一致升為 `0.3.0`。
-  - 完成條件：使用者確認後才 bump、commit、push 及建立 release。
+- [x] 人工檢查排序與 LaTeX 結果後，將四處版本一致升為 `0.3.0`。
+  - 完成條件：使用者確認後 bump、commit、push 並以 `v0.3.0` tag 建立 Windows x64／macOS Apple Silicon release。
+  - 驗證：版本一致性檢查、`pnpm check && pnpm test && pnpm test:rust && pnpm tauri build --no-bundle`、真實 XeLaTeX compile；遠端 installer 與 release 由 tag workflow 驗收。

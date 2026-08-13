@@ -9,7 +9,7 @@
 
 Artifacts 保存 14 天。macOS Intel 不在支援與建置範圍內，也不會上傳任何使用者資料。
 
-推送與 app version 完全一致的 `v*` tag（例如 `v0.2.3`）時，同一 workflow 會在 portable-template、Windows x64 與 macOS Apple Silicon jobs 全數成功後：
+推送與 app version 完全一致的 `v*` tag（例如 `v0.3.0`）時，同一 workflow 會在 portable-template、Windows x64 與 macOS Apple Silicon jobs 全數成功後：
 
 1. 驗證 tag、`package.json`、Cargo 與 Tauri version 一致。
 2. 收集一個 NSIS `.exe` 與一個 Apple Silicon `.dmg`。

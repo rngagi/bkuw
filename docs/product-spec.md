@@ -121,4 +121,4 @@ PDF 只在本機偵測到 XeLaTeX 時產生。bkuw 在隔離 build directory 中
 
 ## 明確排除
 
-v0.2 不包含 accounts、authentication、cloud sync、team collaboration、permissions、server backend、audio、CSV import、mobile、AI transcription、ASR、ELAN-style timeline、waveform segmentation、Git syncing、code signing、notarization、auto-update 或自動上傳 lexical data。v0.2.3 可透過受信任 version tag 建立 unsigned Draft GitHub Release；正式發布前須人工確認安裝包、checksums 與警告內容。
+v0.3 不包含 accounts、authentication、cloud sync、team collaboration、permissions、server backend、audio、CSV import、mobile、AI transcription、ASR、ELAN-style timeline、waveform segmentation、Git syncing、code signing、notarization、auto-update 或自動上傳 lexical data。v0.3.0 可透過受信任 version tag 建立 unsigned Draft GitHub Release；正式發布前須人工確認安裝包、checksums 與警告內容。

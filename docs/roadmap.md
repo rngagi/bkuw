@@ -14,6 +14,10 @@ v0.2.2 加入 tag-gated GitHub Release pipeline：全部 CI jobs 通過後自動
 
 v0.2.3 加入 bkuw-managed portable font packs：固定官方來源與 SHA-256、app-private cache、匯出內含 fonts/licenses、TeX Gyre Termes fatal requirement，並將 IPA 固定為 Charis SIL。
 
+## v0.3 / Dictionary ordering and LaTeX refresh
+
+Project-defined alphabet、entry section override 與 opt-in manual drag ordering；workspace 與匯出辭典共用順序及小標。XeLaTeX template 改善行距、詞條註解、IPA 詞頭、例句與 optional direct root/base related entries。Export snapshot 使用 bulk loading，長時間工作移至 background executor 並顯示階段進度。
+
 ## 後續候選
 
 - Audio import/playback 與 optional recording。
