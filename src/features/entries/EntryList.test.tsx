@@ -25,6 +25,8 @@ const entry: EntrySummary = {
   senses: [
     { partOfSpeech: "名詞", gloss: "父親" },
     { partOfSpeech: "動詞", gloss: "稱作父親" },
+    { partOfSpeech: "動詞", gloss: "敬稱" },
+    { partOfSpeech: null, gloss: null },
   ],
   revision: 1,
   sectionLabel: "A",
@@ -47,6 +49,7 @@ describe("EntryList", () => {
     const summaries = item.querySelectorAll(".entry-sense-summary");
     expect(summaries).toHaveLength(2);
     expect(summaries[0]).toHaveTextContent("名詞父親");
-    expect(summaries[1]).toHaveTextContent("動詞稱作父親");
+    expect(summaries[1]).toHaveTextContent("動詞稱作父親…等 3 個語義");
+    expect(item).not.toHaveTextContent("敬稱");
   });
 });

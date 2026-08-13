@@ -24,7 +24,7 @@ const resources = {
       workspace: {
         newEntry: "New entry", search: "Search every lexical form…", noEntries: "No entries yet",
         noMatch: "No matching entries", selectEntry: "Select an entry or create a new one.",
-        closeProject: "Close project", untitled: "Untitled entry", saved: "Saved", saving: "Saving…",
+        closeProject: "Close project", untitled: "Untitled entry", moreSenses: "…{{count}} senses total", saved: "Saved", saving: "Saving…",
         unsaved: "Unsaved changes", saveFailed: "Save failed", deleted: "Entry deleted",
       },
       entry: {
@@ -164,7 +164,7 @@ const resources = {
       },
       workspace: {
         newEntry: "新增詞條", search: "搜尋所有詞彙表記…", noEntries: "尚無詞條", noMatch: "找不到符合的詞條",
-        selectEntry: "選取詞條或建立新詞條。", closeProject: "關閉專案", untitled: "未命名詞條", saved: "已儲存",
+        selectEntry: "選取詞條或建立新詞條。", closeProject: "關閉專案", untitled: "未命名詞條", moreSenses: "…等 {{count}} 個語義", saved: "已儲存",
         saving: "儲存中…", unsaved: "尚未儲存", saveFailed: "儲存失敗", deleted: "已刪除詞條",
       },
       entry: {

@@ -7,6 +7,10 @@ import type { EntrySummary, WritingSystem } from "../../types/domain";
 
 interface Props { entries: EntrySummary[]; writingSystems: WritingSystem[]; selectedId: string | null; hasQuery: boolean; onSelect(id: string): void; }
 
+function summarizedSenses(entry: EntrySummary) {
+  return entry.senses.filter((sense) => sense.partOfSpeech || sense.gloss);
+}
+
 export function EntryList({ entries, writingSystems, selectedId, hasQuery, onSelect }: Props) {
   const { t } = useTranslation();
   const parentRef = useRef<HTMLDivElement>(null);
@@ -26,7 +30,8 @@ export function EntryList({ entries, writingSystems, selectedId, hasQuery, onSel
       if (!row || row.kind === "heading") return 38;
       const hasDistinctSecondary = Boolean(row.entry.secondaryForm)
         && secondary?.id !== row.entry.pronunciationWritingSystemId;
-      return 62 + Math.max(0, row.entry.senses.length - 1) * 18 + (hasDistinctSecondary ? 18 : 0);
+      const senseRows = Math.min(summarizedSenses(row.entry).length, 2);
+      return 62 + Math.max(0, senseRows - 1) * 18 + (hasDistinctSecondary ? 18 : 0);
     },
     overscan: 8,
   });
@@ -43,10 +48,11 @@ export function EntryList({ entries, writingSystems, selectedId, hasQuery, onSel
           );
           const hasDistinctSecondary = Boolean(entry.secondaryForm)
             && secondary?.id !== entry.pronunciationWritingSystemId;
+          const senses = summarizedSenses(entry);
           return <button key={entry.id} className={cn("entry-list-item", selectedId === entry.id && "selected")} style={{ transform: `translateY(${row.start}px)`, height: row.size }} onClick={() => onSelect(entry.id)}>
             <div className="entry-list-headword"><strong>{entry.primaryForm ? displayWritingSystemText(entry.primaryForm, primary) : t("workspace.untitled")}{entry.manualOrderPending && <span className="pending-order" title={t("sorting.pendingHelp")}> •</span>}</strong>{entry.pronunciationForm && <span>{displayWritingSystemText(entry.pronunciationForm, pronunciationSystem)}</span>}</div>
             {hasDistinctSecondary && <span>{displayWritingSystemText(entry.secondaryForm!, secondary)}</span>}
-            {entry.senses.map((sense, index) => (sense.partOfSpeech || sense.gloss) && <small className="entry-sense-summary" key={`${entry.id}-sense-${index}`}>{sense.partOfSpeech && <span className="entry-sense-pos">{sense.partOfSpeech}</span>}{sense.gloss && <span className="entry-sense-gloss">{sense.gloss}</span>}</small>)}
+            {senses.slice(0, 2).map((sense, index) => <small className="entry-sense-summary" key={`${entry.id}-sense-${index}`}>{sense.partOfSpeech && <span className="entry-sense-pos">{sense.partOfSpeech}</span>}{sense.gloss && <span className="entry-sense-gloss">{sense.gloss}</span>}{senses.length > 2 && index === 1 && <span className="entry-sense-more">{t("workspace.moreSenses", { count: senses.length })}</span>}</small>)}
           </button>;
         })}
       </div>

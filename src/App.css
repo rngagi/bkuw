@@ -126,7 +126,8 @@ textarea { min-height: 72px; resize: vertical; }
 .entry-list-headword > span { font-size: 13px; }
 .entry-sense-summary { display: flex; align-items: baseline; gap: 6px; width: 100%; min-width: 0; }
 .entry-sense-pos { flex: 0 0 auto; font-weight: 650; color: var(--foreground) !important; }
-.entry-sense-gloss { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.entry-sense-gloss { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.entry-sense-more { flex: 0 0 auto; margin-left: auto; font-weight: 600; }
 .empty-list, .editor-empty { display: grid; place-items: center; min-height: 150px; height: 100%; padding: 24px; color: var(--muted-foreground); text-align: center; }
 .entry-editor { height: 100%; min-height: 0; display: flex; flex-direction: column; }
 .editor-toolbar { height: 48px; flex: 0 0 auto; display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 0 14px; border-bottom: 1px solid var(--border); background: #fbfaf9; }
