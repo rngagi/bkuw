@@ -64,7 +64,7 @@ Main window 的 close request 由 React 攔截，先 flush entry autosave、關�
 
 - `projects`：identity、name、ISO 639-3 language metadata、timestamps。
 - `projects.analysis_language`：nullable `zh-TW`／`en`；舊專案 migration 後仍為 null。
-- `export_settings`：project-owned versioned JSON profile；v0.2 固定 version 1。
+- `export_settings`：project-owned versioned JSON profile；目前 schema version 為 1。
 - `writing_systems`：project、name、type、script/language tags、display role、sort order、font。
 - `metadata_options`：project-owned POS／semantic-domain reusable values 與 sort order。
 - `lexical_entries`：project、notes、optional section override、revision、timestamps、soft-delete timestamp。
@@ -87,7 +87,7 @@ Owned children 使用 `ON DELETE CASCADE`。Relation target 被永久移除時�
 - `entry_forms.search_key` 與 `senses.search_key` 是可重建的衍生欄位：Unicode case fold、分解、移除 combining marks、再正規化。Sense key 只由 gloss＋definition 組成，不混入 POS 或 semantic domain。
 - query 使用同一演算法，對 form 或 sense search key 做 substring matching；Chinese、Tibetan、Thai、IPA 等未折疊內容仍保留並可搜尋。
 - 不假設 code point 等於 grapheme；character-level UI behavior 必須使用 grapheme-aware APIs。
-- Example forms 在 Milestone 1 保存同樣的正規化文字，但不納入 entry-list search。
+- Example forms 保存同樣的正規化文字，但目前不納入 entry-list search。
 
 ## Autosave 與刪除
 
@@ -147,7 +147,7 @@ src/
 └── types/
 ```
 
-React Hook Form 管理 entry aggregate draft，Zod 負責 frontend validation。React context 管理 active project/selection；Milestone 1 不引入 Zustand 或 TanStack Query。列表只 virtualize DOM，不在初版引入 server paging。
+React Hook Form 管理 entry aggregate draft，Zod 負責 frontend validation。React context 管理 active project/selection；目前不引入 Zustand 或 TanStack Query。列表只 virtualize DOM，不引入 server paging。
 
 ## Verification strategy
 

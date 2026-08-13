@@ -1,10 +1,12 @@
 # bkuw roadmap
 
-## v0.1 / Milestone 1
+## 已完成
+
+### v0.1 / Core editor
 
 Local-first project lifecycle、dynamic writing systems、lexical aggregates、multi-writing-system examples、Unicode search、autosave、soft delete／Undo、英文與台灣繁中 UI。
 
-## v0.2 / Export milestone
+### v0.2 / Export
 
 rngagi-corpus v0.3 九欄 CSV、versioned export profile、可編輯 XeLaTeX project、Overleaf-ready ZIP、optional local PDF、ICU4X sorting、reverse index 與 portable font presets。
 
@@ -14,13 +16,19 @@ v0.2.2 加入 tag-gated GitHub Release pipeline：全部 CI jobs 通過後自動
 
 v0.2.3 加入 bkuw-managed portable font packs：固定官方來源與 SHA-256、app-private cache、匯出內含 fonts/licenses、TeX Gyre Termes fatal requirement，並將 IPA 固定為 Charis SIL。
 
-## v0.3 / Dictionary ordering and LaTeX refresh
+### v0.3 / Dictionary ordering and LaTeX refresh
 
 Project-defined alphabet、entry section override 與 opt-in manual drag ordering；workspace 與匯出辭典共用順序及小標。XeLaTeX template 改善行距、詞條註解、IPA 詞頭、例句與 optional direct root/base related entries。Export snapshot 使用 bulk loading，長時間工作移至 background executor 並顯示階段進度。
 
 v0.3.1 新增 Chiron Sung HK／Chiron Hei HK managed portable fonts 與明體／黑體風格提示；詞表將 IPA 合併至主要表記同行，並依序呈現每個義項自己的詞性與簡釋。
 
-## 後續候選
+## 尚未發布
+
+- 詞表摘要最多顯示兩列，更多義項改顯示總數。
+- 工作區搜尋擴充至 sense gloss 與 definition，並以 migration 5 回填 Unicode-safe search keys。
+- LaTeX 辭典標題使用深紅粗體。
+
+## 候選 backlog
 
 - Audio import/playback 與 optional recording。
 - CSV import 與經雙方版本化的 bkuw → rngagi-corpus upload workflow。

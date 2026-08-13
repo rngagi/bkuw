@@ -1,6 +1,6 @@
 # rngagi-corpus v0.3 CSV 契約
 
-本文件固定 bkuw v0.2 的外部 CSV contract。輸出為 UTF-8、無 BOM、RFC 4180 quoting 與 CRLF record terminator，欄位順序不可變：
+本文件固定 bkuw 與 rngagi-corpus v0.3 之間的外部 CSV contract。輸出為 UTF-8、無 BOM、RFC 4180 quoting 與 CRLF record terminator，欄位順序不可變：
 
 ```text
 form,gloss_zh,word_root,example,example_translation_zh,ipa,part_of_speech,gloss_en,notes
@@ -15,9 +15,9 @@ form,gloss_zh,word_root,example,example_translation_zh,ipa,part_of_speech,gloss_
 | `word_root` | root target primary form或 fallback；多值以 `;` 連接 |
 | `example` | profile 指定 writing system 中第一個同時具有文字與翻譯的 example |
 | `example_translation_zh` | 被選 example 的單一 translation |
-| `ipa` | profile 指定 phonetic／phonemic form；不包含顯示用 `[]`／`//` |
+| `ipa` | profile 指定 phonetic／phonemic form；不包含顯示用 `[…]`／`/…/` |
 | `part_of_speech` | project POS mapping 對應的七種 corpus vocabulary |
-| `gloss_en` | v0.2 固定留空 |
+| `gloss_en` | 目前的單一 analysis-language 模型固定留空 |
 | `notes` | stable labels 合併 entry notes、sense definition、semantic domain、example notes |
 
 所有未 soft-delete entries 都會處理，每個 sense 一列。排序先使用 profile language tag 的 ICU4X collation 比較 primary form，再以 entry UUID 與 sense order 穩定決定次序。

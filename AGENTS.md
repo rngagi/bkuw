@@ -10,7 +10,7 @@
 - Examples belong to senses and may have multiple writing-system-specific forms.
 - Preserve user text in NFC. Derived search keys may fold case and diacritics but must never replace display text.
 - The UI must remain complete in both English (`en`) and Taiwan Traditional Chinese (`zh-TW`).
-- v0.2 includes corpus CSV and XeLaTeX/Overleaf/PDF export. Audio, cloud services, authentication, collaboration, mobile clients, production signing, notarization, and automatic upload remain excluded.
+- The current product includes corpus CSV and XeLaTeX/Overleaf/PDF export. Audio, cloud services, authentication, collaboration, mobile clients, production signing, notarization, and automatic upload remain excluded until explicitly planned.
 
 ## Architecture and security
 

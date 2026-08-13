@@ -12,7 +12,7 @@
 - Lexical-entry centered：entry 是抽象詞彙項目，表記另依 writing system 保存。
 - Unicode-native：支援 IPA、combining marks、中文、泰文、藏文、台灣原住民族語言及其他 Unicode scripts。
 - Keyboard-efficient：建立、搜尋與儲存等高頻操作提供快捷鍵與可預測 tab order。
-- Export-friendly：內部模型不綁定輸出格式；v0.2 提供 versioned corpus CSV 與通用 XeLaTeX/PDF 輸出。
+- Export-friendly：內部模型不綁定輸出格式；目前提供 versioned corpus CSV 與通用 XeLaTeX/PDF 輸出。
 - Data integrity first：複合更新使用 transaction，schema 使用 migrations，升級前備份。
 
 ## Project 與 writing systems
@@ -21,7 +21,7 @@
 
 每個 project 必須指定一個 primary display writing system，可選擇一個不同的 secondary display writing system。列表不假設 native orthography 必然是 primary。
 
-Writing system 可設定名稱、類型、script code、language tag、順序與顯示字型。Milestone 1 類型包含 orthography、romanization、transliteration、phonemic、phonetic、other。
+Writing system 可設定名稱、類型、script code、language tag、順序與顯示字型。類型包含 orthography、romanization、transliteration、phonemic、phonetic、other。
 
 Script code 明確採 ISO 15924 四字母 Title Case 代碼，UI 驗證格式並提供 Unicode 官方查詢頁的系統瀏覽器連結。Project 另可指定 `zh-TW` 或 `en` analysis language；舊專案保持未設定，直到使用者需要匯出。
 
@@ -43,7 +43,7 @@ Entry 可包含：
 
 Phonemic text 儲存時不包含 delimiter、顯示時加 `/…/`；phonetic text 顯示時加 `[…]`。使用者輸入原文不被改寫。
 
-## Milestone 1 使用流程
+## 核心使用流程
 
 使用者必須能夠：
 
@@ -82,7 +82,7 @@ Project 可指定排序使用的 writing system，並以一行一個元素定義
 
 - 主 workspace 使用穩定、可調整寬度的 two-pane layout：左側搜尋與 entry list，右側 entry editor。
 - 長表單與列表分別捲動，避免 modal-heavy workflow。
-- entry list 顯示共用排序小標、primary form、optional secondary form、senses 彙整的 POS，以及手動 layout 中尚未確認的新詞條狀態。
+- entry list 顯示共用排序小標、primary form、同行 pronunciation、最多兩列 sense-level POS＋簡釋，以及手動 layout 中尚未確認的新詞條狀態；更多義項以總數摘要，不撐高列表項目。
 - 使用 shadcn/ui 慣例、Radix primitives、Tailwind CSS、Lucide icons。
 - 使用 system UI font；lexical forms 可依 writing system 選擇字型。
 - primary accent 從 muted dark red `#b32b2b` 起始，僅作 semantic token。
@@ -95,7 +95,7 @@ App UI 必須完整支援 `en` 與 `zh-TW`。首次啟動依 OS locale 決定，
 
 所有 user-facing strings、validation、errors、empty states、confirmations 皆使用 translation keys。使用者輸入的 lexical data 與 examples 不做自動翻譯。
 
-## v0.2 匯出流程
+## 匯出流程
 
 Header 的 Export wizard 依「格式、profile、validation preview、目的地、結果」操作。Preview 前必須 flush autosave；preview token 綁定當下 project snapshot，資料變動後不得以舊 token 匯出。Blocking error 會禁止輸出，warning 會說明無法表示或被省略的資料，並可導覽到相關 entry。
 
@@ -115,12 +115,10 @@ PDF 只在本機偵測到 XeLaTeX 時產生。bkuw 在隔離 build directory 中
 
 關閉主視窗時必須先完成有效草稿的 autosave 並釋放 project lock，之後程式才結束；Windows 與 macOS 的標準關窗操作皆須可用。
 
-## 後續里程碑
+## 後續候選
 
-- v0.2：rngagi-corpus v0.3 CSV、XeLaTeX project、Overleaf ZIP 與 optional local PDF。
-- 後續：audio import/playback、optional recording。
-- 後續：IPA helper、tags、filters、duplicate detection、backup manager、進階搜尋與多 analysis-language translations。
+Audio、CSV import、跨 repository contract test、多 analysis-language translations、進階搜尋、IPA helper、tags、filters、duplicate detection、backup manager、簽章與自動更新尚未排入已承諾 milestone；以 `plan.md` 為準。
 
 ## 明確排除
 
-v0.3 不包含 accounts、authentication、cloud sync、team collaboration、permissions、server backend、audio、CSV import、mobile、AI transcription、ASR、ELAN-style timeline、waveform segmentation、Git syncing、code signing、notarization、auto-update 或自動上傳 lexical data。v0.3.x 可透過受信任 version tag 建立 unsigned Draft GitHub Release；正式發布前須人工確認安裝包、checksums 與警告內容。
+目前不包含 accounts、authentication、cloud sync、team collaboration、permissions、server backend、audio、CSV import、mobile、AI transcription、ASR、ELAN-style timeline、waveform segmentation、Git syncing、code signing、notarization、auto-update 或自動上傳 lexical data。受信任 version tag 可建立 unsigned Draft GitHub Release；正式發布前須人工確認安裝包、checksums 與警告內容。
