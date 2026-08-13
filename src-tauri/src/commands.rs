@@ -5,10 +5,11 @@ use tauri::{AppHandle, Manager, State};
 use crate::{
     database::ProjectSession,
     domain::{
-        CreateProjectRequest, DeleteEntryRequest, DeletedEntry, EntrySortSettingsV1, EntrySummary,
-        ExportKind, ExportPreview, ExportProjectRequest, ExportResult, ExportSettingsV1,
-        FontPackStatus, LexicalEntry, ManualSortLayoutV1, ProjectSnapshot, SaveEntryRequest,
-        TexEngineStatus, UpdateProjectSettingsRequest,
+        AttachSenseImageRequest, CreateProjectRequest, DeleteEntryRequest, DeletedEntry,
+        EntrySortSettingsV1, EntrySummary, ExportKind, ExportPreview, ExportProjectRequest,
+        ExportResult, ExportSettingsV1, FontPackStatus, LexicalEntry, ManualSortLayoutV1,
+        ProjectSnapshot, RemoveSenseImageRequest, SaveEntryRequest, SenseImage, SenseImageContent,
+        SenseImageMutation, TexEngineStatus, UpdateProjectSettingsRequest,
     },
     error::{AppError, AppResult},
 };
@@ -171,6 +172,54 @@ pub fn save_entry(
         .as_mut()
         .ok_or_else(|| AppError::new("no_project", "No project is currently open."))?
         .save_entry(request)
+}
+
+#[tauri::command]
+pub fn list_sense_images(
+    state: State<'_, AppState>,
+    sense_id: String,
+) -> AppResult<Vec<SenseImage>> {
+    let guard = active_session(&state)?;
+    guard
+        .as_ref()
+        .ok_or_else(|| AppError::new("no_project", "No project is currently open."))?
+        .list_sense_images(&sense_id)
+}
+
+#[tauri::command]
+pub fn attach_sense_image(
+    state: State<'_, AppState>,
+    request: AttachSenseImageRequest,
+) -> AppResult<SenseImageMutation> {
+    let mut guard = active_session(&state)?;
+    guard
+        .as_mut()
+        .ok_or_else(|| AppError::new("no_project", "No project is currently open."))?
+        .attach_sense_image(request)
+}
+
+#[tauri::command]
+pub fn load_sense_image(
+    state: State<'_, AppState>,
+    image_id: String,
+) -> AppResult<SenseImageContent> {
+    let guard = active_session(&state)?;
+    guard
+        .as_ref()
+        .ok_or_else(|| AppError::new("no_project", "No project is currently open."))?
+        .load_sense_image(&image_id)
+}
+
+#[tauri::command]
+pub fn remove_sense_image(
+    state: State<'_, AppState>,
+    request: RemoveSenseImageRequest,
+) -> AppResult<SenseImageMutation> {
+    let mut guard = active_session(&state)?;
+    guard
+        .as_mut()
+        .ok_or_else(|| AppError::new("no_project", "No project is currently open."))?
+        .remove_sense_image(request)
 }
 
 #[tauri::command]

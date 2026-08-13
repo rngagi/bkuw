@@ -16,6 +16,10 @@ const { backendMock } = vi.hoisted(() => ({
     saveEntry: vi.fn(),
     deleteEntry: vi.fn(),
     restoreEntry: vi.fn(),
+    listSenseImages: vi.fn(),
+    attachSenseImage: vi.fn(),
+    loadSenseImage: vi.fn(),
+    removeSenseImage: vi.fn(),
     saveEntrySortSettings: vi.fn(),
     saveManualSortLayout: vi.fn(),
     saveExportSettings: vi.fn(),
@@ -70,7 +74,7 @@ const snapshot: ProjectSnapshot = {
   semanticDomainOptions: ["Motion"],
   exportSettings: {
     version: 1, corpus: { partOfSpeechMappings: {} },
-    latex: { title: "Test", author: "", headwordWritingSystemId: "ws-1", pronunciationWritingSystemId: null, exampleWritingSystemId: "ws-1", collationLanguageTag: null, sectionMode: "auto", reverseIndex: "gloss", relatedEntries: "none", fontPresets: { "ws-1": "auto" } },
+    latex: { title: "Test", author: "", headwordWritingSystemId: "ws-1", pronunciationWritingSystemId: null, exampleWritingSystemId: "ws-1", collationLanguageTag: null, sectionMode: "auto", reverseIndex: "gloss", relatedEntries: "none", includeSenseImages: false, fontPresets: { "ws-1": "auto" } },
   },
   entrySortSettings: { version: 1, mode: "auto", writingSystemId: "ws-1", alphabet: [] },
   manualSortLayout: { version: 1, items: [] },
@@ -86,6 +90,7 @@ describe("App keyboard and delete workflow", () => {
     backendMock.createProject.mockResolvedValue(snapshot);
     backendMock.createEntry.mockResolvedValue(entry);
     backendMock.queryEntries.mockResolvedValue([]);
+    backendMock.listSenseImages.mockResolvedValue([]);
     backendMock.saveEntry.mockImplementation(async (draft: LexicalEntry) => ({ ...draft, revision: draft.revision + 1 }));
     backendMock.deleteEntry.mockResolvedValue({ id: entry.id, deletedAt: "2026-01-01T00:00:01Z" });
     backendMock.restoreEntry.mockResolvedValue({ ...entry, revision: 2 });

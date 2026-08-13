@@ -4,6 +4,7 @@
 \usepackage{fontspec}
 \usepackage{multicol}
 \usepackage{fancyhdr}
+\usepackage{graphicx}
 \usepackage[hidelinks]{hyperref}
 \usepackage{xcolor}
 \usepackage{needspace}
@@ -29,6 +30,7 @@
 }
 \newcommand{\BkuwMeta}[1]{\par\vspace{0.12em}\noindent\hangindent=1.4em{\bkuwanalysisfont\small\color{bkuwmuted}#1}}
 \newcommand{\BkuwExample}[1]{\par\vspace{0.38em}\noindent\hangindent=1.7em{\bkuwanalysisfont\small\ovalbox{\scriptsize\bfseries 例}\enspace #1}}
+\newcommand{\BkuwSenseImage}[1]{\par\smallskip\begin{center}\includegraphics[width=.94\linewidth,height=.28\textheight,keepaspectratio]{#1}\end{center}\smallskip}
 \newcommand{\BkuwRelatedStart}[1]{\par\vspace{0.55em}\begin{minipage}{\linewidth}{\bkuwanalysisfont\small\color{bkuwaccent}\bfseries #1}\par\vspace{0.15em}\begin{list}{\color{bkuwaccent}--}{\leftmargin=1.25em\itemsep=0.12em\topsep=0pt}}
 \newcommand{\BkuwRelated}[4]{\item\hyperlink{#1}{{\bfseries #2}\if\relax\detokenize{#3}\relax\else\enspace #3\fi}\if\relax\detokenize{#4}\relax\else\enspace{\bkuwanalysisfont #4}\fi}
 \newcommand{\BkuwRelatedEnd}{\end{list}\end{minipage}\par}

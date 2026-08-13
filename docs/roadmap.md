@@ -22,11 +22,11 @@ Project-defined alphabet、entry section override 與 opt-in manual drag orderin
 
 v0.3.1 新增 Chiron Sung HK／Chiron Hei HK managed portable fonts 與明體／黑體風格提示；詞表將 IPA 合併至主要表記同行，並依序呈現每個義項自己的詞性與簡釋。
 
-## 尚未發布
+### v0.4 / Sense photos and search refinement
 
-- 詞表摘要最多顯示兩列，更多義項改顯示總數。
-- 工作區搜尋擴充至 sense gloss 與 definition，並以 migration 5 回填 Unicode-safe search keys。
-- LaTeX 辭典標題使用深紅粗體。
+工作區搜尋擴充至 sense gloss 與 definition，並以 migration 5 回填 Unicode-safe search keys。詞表摘要最多顯示兩列，更多義項改顯示總數；LaTeX 辭典標題使用深紅粗體。
+
+Sense-level 相片接受 PNG／JPEG／WebP，在本機 Canvas 輕度縮圖後統一保存為 project-relative PNG。Migration 6 保存圖片 metadata 與 SHA-256；LaTeX／PDF profile 可選擇是否把相片加入來源資料夾、Overleaf ZIP 與成品。
 
 ## 候選 backlog
 

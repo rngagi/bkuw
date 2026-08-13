@@ -1,22 +1,26 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs::{self, File, OpenOptions},
     path::{Path, PathBuf},
     time::Duration,
 };
 
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use chrono::Utc;
 use fs2::FileExt;
 use rusqlite::{Connection, OpenFlags, OptionalExtension, Transaction, backup::Backup, params};
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::{
     domain::{
-        CorpusExportSettings, CreateProjectRequest, DeleteEntryRequest, DeletedEntry, EntryForm,
-        EntryRelation, EntrySenseSummary, EntrySortMode, EntrySortSettingsV1, EntrySummary,
-        Example, ExampleForm, ExportSettingsV1, FontPreset, LatexExportSettings, LexicalEntry,
-        ManualSortLayoutV1, Project, ProjectSnapshot, RelatedEntriesMode, ReverseIndexMode,
-        SaveEntryRequest, SectionMode, Sense, UpdateProjectSettingsRequest, WritingSystem,
+        AttachSenseImageRequest, CorpusExportSettings, CreateProjectRequest, DeleteEntryRequest,
+        DeletedEntry, EntryForm, EntryRelation, EntrySenseSummary, EntrySortMode,
+        EntrySortSettingsV1, EntrySummary, Example, ExampleForm, ExportSettingsV1, FontPreset,
+        LatexExportSettings, LexicalEntry, ManualSortLayoutV1, Project, ProjectSnapshot,
+        RelatedEntriesMode, RemoveSenseImageRequest, ReverseIndexMode, SaveEntryRequest,
+        SectionMode, Sense, SenseImage, SenseImageContent, SenseImageMutation,
+        UpdateProjectSettingsRequest, WritingSystem,
     },
     error::{AppError, AppResult},
     search::{normalize_text, search_key},
@@ -27,7 +31,8 @@ const METADATA_OPTIONS_MIGRATION: &str = include_str!("../migrations/002_metadat
 const EXPORT_SETTINGS_MIGRATION: &str = include_str!("../migrations/003_export_settings.sql");
 const ENTRY_ORDERING_MIGRATION: &str = include_str!("../migrations/004_entry_ordering.sql");
 const SENSE_SEARCH_MIGRATION: &str = include_str!("../migrations/005_sense_search.sql");
-const LATEST_SCHEMA_VERSION: i64 = 5;
+const SENSE_IMAGES_MIGRATION: &str = include_str!("../migrations/006_sense_images.sql");
+const LATEST_SCHEMA_VERSION: i64 = 6;
 
 pub struct ProjectSession {
     root: PathBuf,
@@ -65,6 +70,7 @@ impl ProjectSession {
         fs::create_dir(&root)?;
         let result = (|| {
             fs::create_dir(root.join("backups"))?;
+            ensure_media_directories(&root)?;
             let lock_file = acquire_lock(&root)?;
             let database_path = root.join("project.sqlite");
             let mut connection = connect(&database_path)?;
@@ -138,6 +144,7 @@ impl ProjectSession {
         validate_database_identity(&database_path)?;
         let mut connection = connect(&database_path)?;
         migrate(&mut connection, &root)?;
+        ensure_media_directories(&root)?;
         let project_count: i64 =
             connection.query_row("SELECT COUNT(*) FROM projects", [], |row| row.get(0))?;
         if project_count != 1 {
@@ -394,6 +401,7 @@ impl ProjectSession {
     pub fn save_entry(&mut self, request: SaveEntryRequest) -> AppResult<LexicalEntry> {
         validate_entry(&request.entry)?;
         let id = request.entry.id.clone();
+        let previous_images = load_entry_image_paths(&self.connection, &id)?;
         let timestamp = now();
         let transaction = self.connection.transaction()?;
         let updated = transaction.execute(
@@ -413,17 +421,233 @@ impl ProjectSession {
         }
 
         transaction.execute("DELETE FROM entry_forms WHERE entry_id = ?1", params![id])?;
-        transaction.execute("DELETE FROM senses WHERE entry_id = ?1", params![id])?;
         transaction.execute(
             "DELETE FROM entry_relations WHERE source_entry_id = ?1",
             params![id],
         )?;
 
         insert_forms(&transaction, &id, &request.entry.forms)?;
-        insert_senses(&transaction, &id, &request.entry.senses)?;
+        replace_senses(&transaction, &id, &request.entry.senses)?;
         insert_relations(&transaction, &id, &request.entry.relations)?;
         transaction.commit()?;
+        let current_images = load_entry_image_paths(&self.connection, &id)?;
+        for relative_path in previous_images.difference(&current_images) {
+            if let Ok(path) = self.media_path(relative_path) {
+                let _ = fs::remove_file(path);
+            }
+        }
         load_entry(&self.connection, &id, false)
+    }
+
+    pub fn list_sense_images(&self, sense_id: &str) -> AppResult<Vec<SenseImage>> {
+        let exists = self.connection.query_row(
+            "SELECT EXISTS(
+               SELECT 1 FROM senses s
+               JOIN lexical_entries e ON e.id = s.entry_id
+               WHERE s.id = ?1 AND e.deleted_at IS NULL
+             )",
+            params![sense_id],
+            |row| row.get::<_, bool>(0),
+        )?;
+        if !exists {
+            return Err(AppError::new("not_found", "The sense was not found."));
+        }
+        load_sense_images(&self.connection, sense_id)
+    }
+
+    pub fn attach_sense_image(
+        &mut self,
+        request: AttachSenseImageRequest,
+    ) -> AppResult<SenseImageMutation> {
+        let png_bytes = BASE64.decode(&request.png_base64).map_err(|error| {
+            AppError::with_details(
+                "image_invalid",
+                "The converted image payload is invalid.",
+                error.to_string(),
+            )
+        })?;
+        if png_bytes.is_empty() {
+            return Err(AppError::new(
+                "image_invalid",
+                "The converted image is empty.",
+            ));
+        }
+        if !is_png(&png_bytes) {
+            return Err(AppError::new(
+                "image_invalid",
+                "The converted image is not a PNG file.",
+            ));
+        }
+        let decoded = image::load_from_memory_with_format(&png_bytes, image::ImageFormat::Png)
+            .map_err(|error| {
+                AppError::with_details(
+                    "image_invalid",
+                    "The converted PNG image could not be decoded.",
+                    error.to_string(),
+                )
+            })?;
+        let original_filename = Path::new(request.original_filename.trim())
+            .file_name()
+            .and_then(|value| value.to_str())
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| AppError::new("image_invalid", "The image filename is invalid."))?
+            .to_owned();
+        let image_id = new_id();
+        let relative_path = format!("media/images/{image_id}.png");
+        let final_path = self.media_path(&relative_path)?;
+        let temporary_path = final_path.with_extension("png.tmp");
+        let mut file = OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&temporary_path)?;
+        std::io::Write::write_all(&mut file, &png_bytes)?;
+        file.sync_all()?;
+        drop(file);
+
+        let timestamp = now();
+        let sha256 = hex::encode(Sha256::digest(&png_bytes));
+        let width = i64::from(decoded.width());
+        let height = i64::from(decoded.height());
+        let byte_size = png_bytes.len() as i64;
+        let transaction = self.connection.transaction()?;
+        let updated = transaction.execute(
+            "UPDATE lexical_entries
+             SET revision = revision + 1, updated_at = ?1
+             WHERE id = ?2 AND revision = ?3 AND deleted_at IS NULL",
+            params![timestamp, request.entry_id, request.expected_revision],
+        )?;
+        if updated == 0 {
+            let _ = fs::remove_file(&temporary_path);
+            return Err(revision_or_not_found(&transaction, &request.entry_id)?);
+        }
+        let sense_exists = transaction.query_row(
+            "SELECT EXISTS(SELECT 1 FROM senses WHERE id = ?1 AND entry_id = ?2)",
+            params![request.sense_id, request.entry_id],
+            |row| row.get::<_, bool>(0),
+        )?;
+        if !sense_exists {
+            let _ = fs::remove_file(&temporary_path);
+            return Err(AppError::new("not_found", "The sense was not found."));
+        }
+        let sort_order = transaction.query_row(
+            "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM sense_images WHERE sense_id = ?1",
+            params![request.sense_id],
+            |row| row.get::<_, i64>(0),
+        )?;
+        transaction.execute(
+            "INSERT INTO sense_images
+             (id, sense_id, relative_path, original_filename, width, height,
+              byte_size, sha256, sort_order, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                image_id,
+                request.sense_id,
+                relative_path,
+                original_filename,
+                width,
+                height,
+                byte_size,
+                sha256,
+                sort_order,
+                timestamp
+            ],
+        )?;
+        if let Err(error) = fs::rename(&temporary_path, &final_path) {
+            let _ = fs::remove_file(&temporary_path);
+            return Err(error.into());
+        }
+        if let Err(error) = transaction.commit() {
+            let _ = fs::remove_file(&final_path);
+            return Err(error.into());
+        }
+        let image = load_sense_images(&self.connection, &request.sense_id)?
+            .into_iter()
+            .find(|image| image.id == image_id)
+            .ok_or_else(|| AppError::new("database", "The saved image could not be loaded."))?;
+        Ok(SenseImageMutation {
+            entry: load_entry(&self.connection, &request.entry_id, false)?,
+            image: Some(image),
+        })
+    }
+
+    pub fn load_sense_image(&self, image_id: &str) -> AppResult<SenseImageContent> {
+        let (relative_path, expected_sha): (String, String) = self
+            .connection
+            .query_row(
+                "SELECT i.relative_path, i.sha256
+                 FROM sense_images i
+                 JOIN senses s ON s.id = i.sense_id
+                 JOIN lexical_entries e ON e.id = s.entry_id
+                 WHERE i.id = ?1 AND e.deleted_at IS NULL",
+                params![image_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()?
+            .ok_or_else(|| AppError::new("not_found", "The sense image was not found."))?;
+        let bytes = fs::read(self.media_path(&relative_path)?)?;
+        if !is_png(&bytes) || hex::encode(Sha256::digest(&bytes)) != expected_sha {
+            return Err(AppError::new(
+                "image_invalid",
+                "The stored sense image failed its integrity check.",
+            ));
+        }
+        Ok(SenseImageContent {
+            mime_type: "image/png".into(),
+            data_base64: BASE64.encode(bytes),
+        })
+    }
+
+    pub fn remove_sense_image(
+        &mut self,
+        request: RemoveSenseImageRequest,
+    ) -> AppResult<SenseImageMutation> {
+        let relative_path = self
+            .connection
+            .query_row(
+                "SELECT i.relative_path
+                 FROM sense_images i
+                 JOIN senses s ON s.id = i.sense_id
+                 WHERE i.id = ?1 AND s.entry_id = ?2",
+                params![request.image_id, request.entry_id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?
+            .ok_or_else(|| AppError::new("not_found", "The sense image was not found."))?;
+        let transaction = self.connection.transaction()?;
+        let updated = transaction.execute(
+            "UPDATE lexical_entries
+             SET revision = revision + 1, updated_at = ?1
+             WHERE id = ?2 AND revision = ?3 AND deleted_at IS NULL",
+            params![now(), request.entry_id, request.expected_revision],
+        )?;
+        if updated == 0 {
+            return Err(revision_or_not_found(&transaction, &request.entry_id)?);
+        }
+        transaction.execute(
+            "DELETE FROM sense_images WHERE id = ?1",
+            params![request.image_id],
+        )?;
+        transaction.commit()?;
+        if let Ok(path) = self.media_path(&relative_path) {
+            let _ = fs::remove_file(path);
+        }
+        Ok(SenseImageMutation {
+            entry: load_entry(&self.connection, &request.entry_id, false)?,
+            image: None,
+        })
+    }
+
+    fn media_path(&self, relative_path: &str) -> AppResult<PathBuf> {
+        let path = Path::new(relative_path);
+        let mut components = path.components();
+        let valid = matches!(components.next(), Some(std::path::Component::Normal(value)) if value == "media")
+            && matches!(components.next(), Some(std::path::Component::Normal(value)) if value == "images")
+            && matches!(components.next(), Some(std::path::Component::Normal(value)) if value.to_string_lossy().ends_with(".png"))
+            && components.next().is_none();
+        if !valid {
+            return Err(AppError::new("image_invalid", "The image path is invalid."));
+        }
+        Ok(self.root.join(path))
     }
 
     pub fn delete_entry(&mut self, request: DeleteEntryRequest) -> AppResult<DeletedEntry> {
@@ -514,11 +738,13 @@ impl ProjectSession {
             })
             .collect::<AppResult<Vec<_>>>()?;
         Ok(crate::export::ExportSnapshot {
+            root_path: self.root.clone(),
             project: snapshot.project,
             writing_systems: snapshot.writing_systems,
             settings: snapshot.export_settings,
             sections,
             entries,
+            sense_images: load_export_sense_images(&self.connection)?,
         })
     }
 }
@@ -810,8 +1036,94 @@ fn migrate(connection: &mut Connection, root: &Path) -> AppResult<()> {
             params![now()],
         )?;
     }
+    if current < 6 {
+        transaction.execute_batch(SENSE_IMAGES_MIGRATION)?;
+        transaction.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (6, ?1)",
+            params![now()],
+        )?;
+    }
     transaction.commit()?;
     Ok(())
+}
+
+fn ensure_media_directories(root: &Path) -> AppResult<()> {
+    fs::create_dir_all(root.join("media").join("images"))?;
+    Ok(())
+}
+
+fn is_png(bytes: &[u8]) -> bool {
+    bytes.starts_with(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a])
+}
+
+fn load_sense_images(connection: &Connection, sense_id: &str) -> AppResult<Vec<SenseImage>> {
+    let mut statement = connection.prepare(
+        "SELECT id, sense_id, original_filename, width, height, byte_size, sort_order, created_at
+         FROM sense_images WHERE sense_id = ?1 ORDER BY sort_order, id",
+    )?;
+    let rows = statement.query_map(params![sense_id], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, i64>(3)?,
+            row.get::<_, i64>(4)?,
+            row.get::<_, i64>(5)?,
+            row.get::<_, i64>(6)?,
+            row.get::<_, String>(7)?,
+        ))
+    })?;
+    rows.map(|row| {
+        let (id, sense_id, original_filename, width, height, byte_size, sort_order, created_at) =
+            row?;
+        Ok(SenseImage {
+            id,
+            sense_id,
+            original_filename,
+            width: u32::try_from(width)
+                .map_err(|_| AppError::new("database", "A stored image width is invalid."))?,
+            height: u32::try_from(height)
+                .map_err(|_| AppError::new("database", "A stored image height is invalid."))?,
+            byte_size: u64::try_from(byte_size)
+                .map_err(|_| AppError::new("database", "A stored image size is invalid."))?,
+            sort_order,
+            created_at,
+        })
+    })
+    .collect()
+}
+
+fn load_entry_image_paths(connection: &Connection, entry_id: &str) -> AppResult<HashSet<String>> {
+    let mut statement = connection.prepare(
+        "SELECT i.relative_path
+         FROM sense_images i
+         JOIN senses s ON s.id = i.sense_id
+         WHERE s.entry_id = ?1",
+    )?;
+    let rows = statement.query_map(params![entry_id], |row| row.get::<_, String>(0))?;
+    rows.collect::<Result<HashSet<_>, _>>().map_err(Into::into)
+}
+
+fn load_export_sense_images(
+    connection: &Connection,
+) -> AppResult<Vec<crate::export::ExportSenseImage>> {
+    let mut statement = connection.prepare(
+        "SELECT i.id, i.sense_id, i.relative_path, i.sha256
+         FROM sense_images i
+         JOIN senses s ON s.id = i.sense_id
+         JOIN lexical_entries e ON e.id = s.entry_id
+         WHERE e.deleted_at IS NULL
+         ORDER BY i.sense_id, i.sort_order, i.id",
+    )?;
+    let rows = statement.query_map([], |row| {
+        Ok(crate::export::ExportSenseImage {
+            id: row.get(0)?,
+            sense_id: row.get(1)?,
+            relative_path: row.get(2)?,
+            sha256: row.get(3)?,
+        })
+    })?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
 }
 
 fn backfill_sense_search_keys(transaction: &Transaction<'_>) -> AppResult<()> {
@@ -920,6 +1232,7 @@ fn default_export_settings(project: &Project, systems: &[WritingSystem]) -> Expo
             section_mode: SectionMode::Auto,
             reverse_index: ReverseIndexMode::Gloss,
             related_entries: RelatedEntriesMode::None,
+            include_sense_images: false,
             font_presets: systems
                 .iter()
                 .map(|system| (system.id.clone(), FontPreset::Auto))
@@ -1468,14 +1781,55 @@ fn insert_forms(
     Ok(())
 }
 
-fn insert_senses(transaction: &Transaction<'_>, entry_id: &str, senses: &[Sense]) -> AppResult<()> {
+fn replace_senses(
+    transaction: &Transaction<'_>,
+    entry_id: &str,
+    senses: &[Sense],
+) -> AppResult<()> {
+    let incoming = senses
+        .iter()
+        .map(|sense| sense.id.as_str())
+        .collect::<HashSet<_>>();
+    let existing = {
+        let mut statement = transaction.prepare("SELECT id FROM senses WHERE entry_id = ?1")?;
+        let rows = statement.query_map(params![entry_id], |row| row.get::<_, String>(0))?;
+        rows.collect::<Result<Vec<_>, _>>()?
+    };
+    for sense_id in existing {
+        if !incoming.contains(sense_id.as_str()) {
+            transaction.execute(
+                "DELETE FROM senses WHERE id = ?1 AND entry_id = ?2",
+                params![sense_id, entry_id],
+            )?;
+        }
+    }
     for sense in senses {
+        let owner = transaction
+            .query_row(
+                "SELECT entry_id FROM senses WHERE id = ?1",
+                params![sense.id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?;
+        if owner.as_deref().is_some_and(|owner| owner != entry_id) {
+            return Err(AppError::new(
+                "validation",
+                "A sense identifier belongs to another entry.",
+            ));
+        }
         let gloss = normalize_optional(sense.gloss.clone());
         let definition = normalize_optional(sense.definition.clone());
         transaction.execute(
             "INSERT INTO senses
              (id, entry_id, gloss, definition, part_of_speech, semantic_domain, sort_order, search_key)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+             ON CONFLICT(id) DO UPDATE SET
+               gloss = excluded.gloss,
+               definition = excluded.definition,
+               part_of_speech = excluded.part_of_speech,
+               semantic_domain = excluded.semantic_domain,
+               sort_order = excluded.sort_order,
+               search_key = excluded.search_key",
             params![
                 sense.id,
                 entry_id,
@@ -1486,6 +1840,10 @@ fn insert_senses(transaction: &Transaction<'_>, entry_id: &str, senses: &[Sense]
                 sense.sort_order,
                 sense_search_key(gloss.as_deref(), definition.as_deref())
             ],
+        )?;
+        transaction.execute(
+            "DELETE FROM examples WHERE sense_id = ?1",
+            params![sense.id],
         )?;
         for example in &sense.examples {
             transaction.execute(
@@ -1745,14 +2103,16 @@ fn now() -> String {
 
 #[cfg(test)]
 mod tests {
+    use base64::Engine as _;
     use tempfile::tempdir;
 
-    use super::ProjectSession;
+    use super::{BASE64, ProjectSession};
     use crate::domain::{
-        CorpusPartOfSpeech, CreateProjectRequest, DeleteEntryRequest, EntryForm, EntryRelation,
-        EntrySortMode, EntrySortSettingsV1, Example, ExampleForm, ExportKind, ExportProjectRequest,
-        FontPreset, ManualSortItem, ManualSortLayoutV1, RelatedEntriesMode, SaveEntryRequest,
-        Sense, UpdateProjectSettingsRequest, WritingSystem,
+        AttachSenseImageRequest, CorpusPartOfSpeech, CreateProjectRequest, DeleteEntryRequest,
+        EntryForm, EntryRelation, EntrySortMode, EntrySortSettingsV1, Example, ExampleForm,
+        ExportKind, ExportProjectRequest, FontPreset, ManualSortItem, ManualSortLayoutV1,
+        RelatedEntriesMode, RemoveSenseImageRequest, SaveEntryRequest, Sense,
+        UpdateProjectSettingsRequest, WritingSystem,
     };
     use crate::font_manager::FontManager;
 
@@ -1766,6 +2126,122 @@ mod tests {
         })
         .expect("project creation");
         (directory, session)
+    }
+
+    fn sample_png() -> Vec<u8> {
+        let image = image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
+            4,
+            3,
+            image::Rgba([143, 41, 41, 255]),
+        ));
+        let mut output = std::io::Cursor::new(Vec::new());
+        image
+            .write_to(&mut output, image::ImageFormat::Png)
+            .expect("encode test PNG");
+        output.into_inner()
+    }
+
+    #[test]
+    fn sense_images_survive_aggregate_saves_and_reopen_and_clean_up_with_the_sense() {
+        let (_directory, mut session) = create_session();
+        let root = std::path::PathBuf::from(session.snapshot().expect("snapshot").root_path);
+        let mut entry = session.create_entry().expect("entry");
+        let sense_id = super::new_id();
+        entry.senses.push(Sense {
+            id: sense_id.clone(),
+            gloss: Some("bridge".into()),
+            definition: None,
+            part_of_speech: None,
+            semantic_domain: None,
+            sort_order: 0,
+            examples: vec![],
+        });
+        let entry = session
+            .save_entry(SaveEntryRequest {
+                expected_revision: 0,
+                entry,
+            })
+            .expect("save sense");
+        let attached = session
+            .attach_sense_image(AttachSenseImageRequest {
+                entry_id: entry.id.clone(),
+                sense_id: sense_id.clone(),
+                expected_revision: entry.revision,
+                original_filename: "field-photo.jpg".into(),
+                png_base64: BASE64.encode(sample_png()),
+            })
+            .expect("attach image");
+        let metadata = attached.image.expect("image metadata");
+        assert_eq!((metadata.width, metadata.height), (4, 3));
+        assert_eq!(metadata.original_filename, "field-photo.jpg");
+        let image_path = root
+            .join("media")
+            .join("images")
+            .join(format!("{}.png", metadata.id));
+        assert!(image_path.is_file());
+
+        let mut changed = attached.entry;
+        changed.senses[0].gloss = Some("arched bridge".into());
+        let changed = session
+            .save_entry(SaveEntryRequest {
+                expected_revision: changed.revision,
+                entry: changed,
+            })
+            .expect("aggregate save");
+        assert_eq!(
+            session.list_sense_images(&sense_id).expect("images").len(),
+            1
+        );
+        session.close().expect("close");
+
+        let mut reopened = ProjectSession::open(&root).expect("reopen");
+        let content = reopened
+            .load_sense_image(&metadata.id)
+            .expect("load image content");
+        assert_eq!(content.mime_type, "image/png");
+        assert_eq!(
+            BASE64.decode(content.data_base64).expect("decode content"),
+            sample_png()
+        );
+        let removed = reopened
+            .remove_sense_image(RemoveSenseImageRequest {
+                entry_id: changed.id.clone(),
+                image_id: metadata.id,
+                expected_revision: changed.revision,
+            })
+            .expect("remove image");
+        assert!(!image_path.exists());
+
+        let attached_again = reopened
+            .attach_sense_image(AttachSenseImageRequest {
+                entry_id: changed.id.clone(),
+                sense_id: sense_id.clone(),
+                expected_revision: removed.entry.revision,
+                original_filename: "second.webp".into(),
+                png_base64: BASE64.encode(sample_png()),
+            })
+            .expect("attach second image");
+        let second_id = attached_again.image.expect("second metadata").id;
+        let second_path = root
+            .join("media")
+            .join("images")
+            .join(format!("{second_id}.png"));
+        let mut without_sense = attached_again.entry;
+        without_sense.senses.clear();
+        reopened
+            .save_entry(SaveEntryRequest {
+                expected_revision: without_sense.revision,
+                entry: without_sense,
+            })
+            .expect("remove sense");
+        assert!(!second_path.exists());
+        assert_eq!(
+            reopened
+                .list_sense_images(&sense_id)
+                .expect_err("removed sense")
+                .code,
+            "not_found"
+        );
     }
 
     #[test]
@@ -3063,6 +3539,7 @@ mod tests {
         settings.latex.title = "Field #1 & notes".into();
         settings.latex.author = "A_B".into();
         settings.latex.pronunciation_writing_system_id = Some(ipa_id.clone());
+        settings.latex.include_sense_images = true;
         settings
             .latex
             .font_presets
@@ -3090,8 +3567,9 @@ mod tests {
             notes: None,
             sort_order: 1,
         });
+        let sense_id = super::new_id();
         entry.senses.push(Sense {
-            id: super::new_id(),
+            id: sense_id.clone(),
             gloss: Some("通過 & 經歷".into()),
             definition: Some("\\test {value}".into()),
             part_of_speech: Some("verb".into()),
@@ -3110,12 +3588,23 @@ mod tests {
                 }],
             }],
         });
-        session
+        let entry = session
             .save_entry(SaveEntryRequest {
                 expected_revision: 0,
                 entry,
             })
             .expect("save");
+        let image = session
+            .attach_sense_image(AttachSenseImageRequest {
+                entry_id: entry.id,
+                sense_id,
+                expected_revision: entry.revision,
+                original_filename: "crossing.jpg".into(),
+                png_base64: BASE64.encode(sample_png()),
+            })
+            .expect("attach export image")
+            .image
+            .expect("export image metadata");
 
         let fonts = FontManager::seeded_for_tests(
             directory.path().join("font-cache"),
@@ -3150,6 +3639,7 @@ mod tests {
         ] {
             assert!(project.join(name).is_file(), "missing {name}");
         }
+        assert!(project.join(format!("images/{}.png", image.id)).is_file());
         let main = std::fs::read_to_string(project.join("main.tex")).expect("main.tex");
         assert!(main.contains("Field \\#1 \\& notes"));
         assert!(main.contains("A\\_B"));
@@ -3162,6 +3652,7 @@ mod tests {
         assert!(entries.contains("kuo˥˩"));
         assert!(!entries.contains("IPA:"));
         assert!(!entries.contains("(他過河了。)"));
+        assert!(entries.contains(&format!("\\BkuwSenseImage{{images/{}.png}}", image.id)));
         let entry_position = entries.find("\\BkuwEntry").expect("entry heading");
         let note_position = entries.find("[註] 詞條備註").expect("entry note");
         let sense_position = entries.find("\\BkuwSense").expect("sense");
@@ -3183,6 +3674,7 @@ mod tests {
         assert!(names.contains(&"fonts/chiron-sung-hk/ChironSungHK-R.otf".into()));
         assert!(names.contains(&"fonts/chiron-sung-hk/ChironSungHK-B.otf".into()));
         assert!(names.contains(&"fonts/chiron-sung-hk/LICENSE.txt".into()));
+        assert!(names.contains(&format!("images/{}.png", image.id)));
         assert_eq!(result.pdf_status, crate::domain::PdfStatus::NotRequested);
     }
 

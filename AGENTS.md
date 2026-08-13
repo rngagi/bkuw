@@ -8,6 +8,7 @@
 - Keep lexical entries separate from their writing-system-specific forms.
 - Store POS on senses only.
 - Examples belong to senses and may have multiple writing-system-specific forms.
+- Photos belong to senses. Accept PNG/JPEG/WebP input, lightly resize oversized images in the frontend, and store only validated project-local PNG files plus database metadata.
 - Preserve user text in NFC. Derived search keys may fold case and diacritics but must never replace display text.
 - The UI must remain complete in both English (`en`) and Taiwan Traditional Chinese (`zh-TW`).
 - The current product includes corpus CSV and XeLaTeX/Overleaf/PDF export. Audio, cloud services, authentication, collaboration, mobile clients, production signing, notarization, and automatic upload remain excluded until explicitly planned.
@@ -15,6 +16,7 @@
 ## Architecture and security
 
 - Put project lifecycle, validation, migrations, backups, filesystem access, and SQLite transactions behind the Rust project/database module.
+- Keep sense-photo binary storage behind the Rust project/database module. Database paths must remain project-relative `media/images/<uuid>.png`; verify PNG decoding and SHA-256 before use or export.
 - Expose typed Tauri commands through the single frontend adapter in `src/lib/tauri.ts`; do not scatter `invoke` calls through UI modules.
 - Save a lexical entry as one aggregate transaction, including forms, senses, examples, example forms, and relations.
 - Keep Tauri capabilities narrow. Do not add shell, frontend HTTP, or broad filesystem access without a reviewed requirement. The Rust font manager may download only fixed catalog URLs and must verify SHA-256 before activation.

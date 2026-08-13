@@ -70,7 +70,7 @@ impl Downloader for HttpDownloader {
     fn download(&self, url: &str) -> AppResult<Vec<u8>> {
         let client = reqwest::blocking::Client::builder()
             .timeout(Duration::from_secs(120))
-            .user_agent("bkuw/0.3.1 font-manager")
+            .user_agent(concat!("bkuw/", env!("CARGO_PKG_VERSION"), " font-manager"))
             .build()
             .map_err(|error| font_error("font_download", "create HTTP client", error))?;
         let response = client

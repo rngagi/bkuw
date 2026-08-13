@@ -36,6 +36,7 @@ Entry 可包含：
 - 依 project writing systems 自動產生的 forms；每個 writing system 一個一般輸入欄位，避免重複新增相同表記。
 - 任意數量的 ordered senses；POS 只保存在 sense。
 - 每個 sense 下任意數量的 ordered examples。
+- 每個 sense 可加入多張相片；接受 PNG、JPEG、WebP，過大來源在裝置上輕度縮圖後統一保存為 project-local PNG。
 - root/base relations，可連到另一 entry；尚未建立 target 時可填「未連結詞形」，target 日後移除時也保留這段可讀 label。
 - entry-level notes。
 
@@ -51,10 +52,11 @@ Phonemic text 儲存時不包含 delimiter、顯示時加 `/…/`；phonetic tex
 2. 設定 project 資訊與 writing systems。
 3. 在 two-pane workspace 搜尋、建立及選取 entries。
 4. 編輯 forms、senses、sense-level POS、examples 與 root/base relations。
-5. 以 autosave 或 `Ctrl/Cmd+S` 原子地保存完整 entry。
-6. 軟刪除 entry 並立即 Undo。
-7. 關閉並重新開啟 project，確認資料完全保存。
-8. 在 English 與台灣繁中介面間即時切換。
+5. 為 sense 加入或移除相片，關閉並重開 project 後仍可顯示。
+6. 以 autosave 或 `Ctrl/Cmd+S` 原子地保存完整 entry。
+7. 軟刪除 entry 並立即 Undo。
+8. 關閉並重新開啟 project，確認資料完全保存。
+9. 在 English 與台灣繁中介面間即時切換。
 
 所有 text inputs 與 textareas 關閉作業系統 autocorrect、autocapitalize 與 spellcheck，避免 macOS 等平台改寫語料。新增 entry 後 focus primary form；新增 example 後立即出現 primary form。
 
@@ -106,6 +108,8 @@ Corpus CSV 固定輸出 rngagi-corpus v0.3 的九欄簡版，每個未刪除 ent
 LaTeX 匯出包含可編輯來源資料夾與不含 PDF／aux／log 的 Overleaf-ready ZIP。辭典詞條順序與小標直接使用 project ordering；不另設會互相矛盾的 export collation。通用 template 使用 `fontspec`、雙欄、1.34 倍行距、懸掛縮排、頁眉、橢圓例句標記、欄內小標與 Rust 產生的 reverse index，不依賴日文專用套件或 makeindex。詞條 notes 以 `[註]` 標示並緊接詞頭下方、義項之前；例句原文後以空格直接接續翻譯，不加括號；同一 metadata 行內的多項內容以全型 `；` 分隔。Profile 選定的 pronunciation（包含 IPA）只顯示在主要詞頭右側，不再以 `IPA: …` 或其他表記重複列出；headword 與 pronunciation 不得選用同一 writing system。所有 user text 完整 TeX escape。
 
 LaTeX profile 可選擇不顯示關聯詞，或顯示 root、base、兩者。對每個 target entry 只收集直接指向它的 incoming live relations，最多一層、不遞迴，同一 source entry 去重；摘要顯示 headword、optional pronunciation 與第一個 sense gloss，並連回完整詞條。
+
+LaTeX profile 另可選擇是否包含義項相片。開啟時，preview 必須驗證每張 project-local PNG 的路徑與 SHA-256，來源資料夾與 Overleaf ZIP 加入 `images/`，並在相應 sense 下以欄寬內、保持比例的方式排版；關閉時不得把相片放入匯出內容。Corpus CSV 不表示相片。
 
 bkuw 自行管理 portable font packs，不依賴 OS 已安裝字型，也不把字型安裝進系統。首次需要時，由使用者在 Export wizard 下載官方固定版本；Rust 必須先驗證 SHA-256 與 pack manifest，才寫入 app-private cache。匯出資料夾與 ZIP 必須包含實際需要的字型及授權檔。TeX Gyre Termes 是所有 LaTeX/PDF 匯出的必要 base；缺少或 invalid 時屬 fatal validation error。Phonemic／phonetic writing systems 固定使用 Charis SIL。Hant 可選 Noto Serif CJK TC、明體／宋體風格的 Chiron Sung HK，或黑體／無襯線風格的 Chiron Hei HK；UI 必須在選項下明示風格，不要求使用者只靠字型名稱判斷。其他 scripts 使用一般 Noto Serif fallback。現階段不提供 Thai／Tibetan 專用 managed font packs 或 presets。
 

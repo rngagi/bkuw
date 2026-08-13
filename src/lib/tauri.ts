@@ -12,6 +12,7 @@ import {
   lexicalEntrySchema,
   projectSnapshotSchema,
   texEngineStatusSchema, fontPackStatusSchema,
+  senseImageSchema, senseImageContentSchema, senseImageMutationSchema,
   type ExportKind,
   type ExportSettings,
   type EntrySortSettings, type ManualSortLayout,
@@ -179,6 +180,32 @@ export const backend = {
       { request: { entry, expectedRevision: entry.revision } },
       lexicalEntrySchema,
     );
+  },
+
+  listSenseImages(senseId: string) {
+    return call("list_sense_images", { senseId }, z.array(senseImageSchema));
+  },
+
+  attachSenseImage(request: {
+    entryId: string;
+    senseId: string;
+    expectedRevision: number;
+    originalFilename: string;
+    pngBase64: string;
+  }) {
+    return call("attach_sense_image", { request }, senseImageMutationSchema);
+  },
+
+  loadSenseImage(imageId: string) {
+    return call("load_sense_image", { imageId }, senseImageContentSchema);
+  },
+
+  removeSenseImage(request: {
+    entryId: string;
+    imageId: string;
+    expectedRevision: number;
+  }) {
+    return call("remove_sense_image", { request }, senseImageMutationSchema);
   },
 
   deleteEntry(id: string, expectedRevision: number) {

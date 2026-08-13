@@ -11,21 +11,10 @@
 - [x] Unicode-safe autosave、IME composition handling、soft delete／Undo 與英文／台灣繁中 UI。
 - [x] Project alphabet、entry section override、opt-in manual ordering 與 virtualized entry list。
 - [x] rngagi-corpus v0.3 CSV、portable XeLaTeX／Overleaf ZIP／PDF 與 managed font packs。
+- [x] Form／sense 搜尋、精簡詞表摘要、sense-level 相片與 optional LaTeX／PDF photo export。
 - [x] Windows x64／macOS Apple Silicon CI、NSIS／DMG artifacts 與 tag-gated Draft Release。
 
-最新公開版本為 `v0.3.1`。macOS Intel 不在支援或建置範圍內。
-
-## 尚未發布的已完成變更
-
-- [x] 詞表摘要最多顯示兩列 sense-level POS＋簡釋，更多義項顯示總數。
-  - 驗證：EntryList component test、`pnpm check`、`pnpm test`、`pnpm test:rust`。
-- [x] 工作區搜尋擴充至 sense gloss 與 definition。
-  - 完成條件：migration 5 先備份舊專案並回填 Unicode-safe search key；form／gloss／definition 共用 case／diacritic-insensitive substring search；POS、semantic domain 與 examples 不納入。
-  - 驗證：migration backup/backfill、save/update/query integration tests、`pnpm check`、`pnpm test`、`pnpm test:rust`。
-- [x] LaTeX 辭典標題改為深紅粗體。
-  - 驗證：template diff review。
-
-上述變更尚未 bump version、push 或建立 release。
+最新公開版本為 `v0.4.0`。macOS Intel 不在支援或建置範圍內。
 
 ## 候選 backlog
 

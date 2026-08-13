@@ -38,6 +38,10 @@ query_entry_summaries(query) -> EntrySummary[]
 load_entry(id) -> LexicalEntry
 create_entry() -> LexicalEntry
 save_entry(aggregate, expectedRevision) -> LexicalEntry
+list_sense_images(senseId) -> SenseImage[]
+attach_sense_image(request) -> SenseImageMutation
+load_sense_image(imageId) -> SenseImageContent
+remove_sense_image(request) -> SenseImageMutation
 delete_entry(id, expectedRevision) -> DeletedEntry
 restore_entry(id) -> LexicalEntry
 save_export_settings(settings) -> ExportSettingsV1
@@ -54,7 +58,9 @@ Errors 使用 `{ code, message, details? }`，其中 export 另穩定區分 `exp
 
 Main window 的 close request 由 React 攔截，先 flush entry autosave、關閉 active project session，再呼叫 Tauri `destroy()` 完成真正關窗。Capability 僅對 `main` window 額外授權 `core:window:allow-destroy`；這是 `core:default` 未包含、Windows 會強制檢查的必要權限。
 
-`save_entry` 接收 forms、senses、examples、example forms 與 relations 的完整 aggregate，在單一 transaction 內以 replace-diff strategy 寫入。`revision` 使用 optimistic concurrency 防止較舊 autosave 覆蓋新資料。
+`save_entry` 接收 forms、senses、examples、example forms 與 relations 的完整 aggregate，在單一 transaction 內以 replace-diff strategy 寫入。Sense rows 使用 upsert／delete diff，而不是全部刪除重建，避免一般 autosave cascade 掉仍存在 sense 的相片。`revision` 使用 optimistic concurrency 防止較舊 autosave 覆蓋新資料。
+
+相片二進位不放進 entry aggregate。Frontend `imageCompression` adapter 依指定的 Canvas 流程解碼 PNG／JPEG／WebP，只有長邊超過 2560px 時等比例縮圖，再輸出 PNG；這是輕度尺寸處理，不承諾固定 byte 上限。Attach／remove command 會先 flush entry，使用同一 entry revision 做 optimistic concurrency。Rust 重新解碼 PNG、取得可信尺寸、計算 SHA-256，先寫 temporary sibling，再於 DB transaction 內更新 revision 與 metadata；load 只接受 DB 中由 active project 指向的固定 `media/images/<uuid>.png`。刪除 sense 成功後清理失去 DB reference 的檔案。
 
 ## SQLite schema
 
@@ -72,6 +78,7 @@ Main window 的 close request 由 React 攔截，先 flush entry autosave、關�
 - `manual_sort_layouts`：project-owned versioned JSON；保存 headings 與 entry IDs 的線性 layout。
 - `entry_forms`：entry、writing system、NFC text、derived search key、metadata、sort order。
 - `senses`：entry、gloss、definition、POS、semantic domain、sort order。
+- `sense_images`：sense、project-relative PNG path、原始檔名、尺寸、byte size、SHA-256、sort order、created timestamp。
 - `examples`：sense、translation、notes、sort order。
 - `example_forms`：example、writing system、NFC text、sort order。
 - `entry_relations`：source、optional target、relation type、fallback text、notes、sort order。
@@ -102,7 +109,7 @@ Frontend adapter 對 Rust unit response 接受 Tauri JSON `null`，再映射為 
 
 Entry forms 在 frontend 依 writing-system settings 自動補齊並固定排序；example 先建立 primary form，再允許加入尚未使用的 writing system。Phonemic／phonetic delimiter 是 presentation concern，不寫回 lexical text。Document-level input policy 透過既有及動態 controls 統一關閉 autocorrect、autocapitalize、autocomplete 與 spellcheck。
 
-Migration 2 新增 `metadata_options`。Migration 3 新增 `projects.analysis_language` 與 `export_settings`。Migration 4 新增 entry section override、versioned sort settings 與 manual layout。Migration 5 新增並以 Rust Unicode folding 回填 `senses.search_key`。舊 schema 開啟時仍遵守先建立一致性 SQLite backup、再於 transaction 套用 migration 的規則。
+Migration 2 新增 `metadata_options`。Migration 3 新增 `projects.analysis_language` 與 `export_settings`。Migration 4 新增 entry section override、versioned sort settings 與 manual layout。Migration 5 新增並以 Rust Unicode folding 回填 `senses.search_key`。Migration 6 新增 `sense_images`，媒體檔則放在 project 的 `media/images/`。舊 schema 開啟時仍遵守先建立一致性 SQLite backup、再於 transaction 套用 migration 的規則。
 
 ## Ordering module
 
@@ -114,7 +121,7 @@ Manual layout 把 heading 與 entry 當作同一線性序列。已刪除 entry �
 
 ## Export architecture
 
-`ProjectSession` 依 `ProjectSnapshot.entries` 的既定順序建立只含 live entries 的完整 `ExportSnapshot`，並附上每個 entry 的 section label；LaTeX renderer 不再自行排序。完整 aggregate 以固定組數的 bulk queries 載入 forms、senses、examples、example forms 與 relations，再於 Rust 組裝，避免資料量增加時出現巢狀 N+1 queries。Preview 以 snapshot + format 的 SHA-256 token 綁定資料；真正匯出前重新建立 snapshot，token 不同即回傳 `export_stale`。React 不讀 SQL 或 filesystem，所有 DTO 由 `src/types/domain.ts` 的 Zod schema 驗證。
+`ProjectSession` 依 `ProjectSnapshot.entries` 的既定順序建立只含 live entries 的完整 `ExportSnapshot`，並附上每個 entry 的 section label、active project root 與 live sense-image metadata；LaTeX renderer 不再自行排序。完整 aggregate 以固定組數的 bulk queries 載入 forms、senses、examples、example forms、relations 與 image metadata，再於 Rust 組裝，避免資料量增加時出現巢狀 N+1 queries。Preview 以 snapshot + format 的 SHA-256 token 綁定資料；真正匯出前重新建立 snapshot，token 不同即回傳 `export_stale`。React 不讀 SQL 或 filesystem，所有 DTO 由 `src/types/domain.ts` 的 Zod schema 驗證。
 
 Preview、font integrity scan、XeLaTeX detection 與 export 都透過 Tauri async command 將 blocking 工作移到 background executor。Project mutex 只持有到一致的 `ExportSnapshot` 建立完成，render、ZIP、font copy 與 XeLaTeX 執行期間不持鎖，因此不會阻塞 webview repaint，project close 也不必等待最長 120 秒的 PDF compile。Frontend adapter interface 維持單一 typed invoke seam。
 
@@ -122,13 +129,15 @@ CSV renderer 固定 rngagi-corpus v0.3 九欄。ICU4X 依 profile language tag �
 
 LaTeX renderer 從零建立通用 XeLaTeX source，不複製 `docs/main.tex` 的授權巨集。所有 user text 經集中 escaping；writing-system font macros 使用純字母 control sequence 與 project-relative font paths。Pronunciation writing system 的 form 只傳入詞頭 macro 的右側參數，並從其他 forms metadata 排除。Export settings 的 Rust validation 保證 headword／pronunciation IDs 不同，frontend 同時過濾重複選項；舊 profile 若重複則 normalize 為未指定 pronunciation。Related-entry renderer 依 profile 選擇 root/base/both，掃描 export snapshot 中直接指向 target 的 relations；snapshot 已排除 soft-deleted entries，source 以 entry 為單位去重且不遞迴。Reverse index 由 Rust 排序並直接產生 `hyperlink`／`pageref`，不使用 makeindex。
 
+`includeSenseImages` 預設為 false，以 serde default 相容舊 export profile。啟用時，preview 與 render 都只讀 `media/images/<uuid>.png`，驗證 PNG signature 與 DB SHA-256，然後以 `images/<uuid>.png` 加入 source tree；template 使用 `graphicx` 限制欄寬與最大高度並保持比例。未啟用時不讀或打包媒體，CSV renderer 永遠不表示相片。
+
 Font manager 是另一個 deep module。固定 catalog 包含 TeX Gyre Termes、Charis SIL、Noto Serif、Noto Serif CJK TC、Chiron Sung HK 與 Chiron Hei HK，並記錄 pack ID、上游固定 commit/release、HTTPS URL、archive members、逐檔與 archive SHA-256、版本、LaTeX faces 與授權檔。兩個 Chiron packs 使用上游 fixed tag 的 static OTF Regular／Bold 與 SIL OFL 1.1 授權；不從浮動 branch 下載。下載先進 app-local staging directory；只有 archive 與每個 extracted/downloaded file 全部通過雜湊驗證，才以 manifest 啟用 cache。cache 每次使用前依 manifest 重驗，損毀 pack 視為 invalid。React 不接觸網路或 filesystem，只能列出狀態與請求安裝；Rust HTTP client 只能使用 catalog 內建 URL。
 
 TeX Gyre Termes 是所有 LaTeX/PDF export 的 mandatory base pack，缺少或 invalid 時 preview 產生 fatal blocking issue。分析語言與每個 writing system 依 profile/script 決定其他必要 packs；phonemic／phonetic 類型不接受 preset override，固定解析為 Charis SIL。需要的字型檔與相應 license 都放進 `fonts/<pack-id>/`，LaTeX folder 與 Overleaf ZIP 因此不依賴 OS font registry。
 
 Entry list 的 read model 由 database 一次載入 forms，再以固定的一個 bulk query 載入 ordered sense summaries。每個 summary 保存自己的 POS 與 gloss，禁止先各自彙整後再嘗試配對。Pronunciation form 依 phonetic 優先、phonemic 次之選出，連同 writing-system ID 回傳；React 使用該系統的 `/…/`／`[…]` 顯示規則，並在它也是 secondary 時抑制重複行。
 
-ZIP 打包 `main.tex`、`entries.tex`、`reverse-index.tex`、`.latexmkrc`、bilingual `README.md` 以及 `fonts/` 下的必要 font/license files，不含 PDF/log/aux。PDF runner 從 PATH、macOS TeX path 與 Windows 常見路徑找 XeLaTeX，把完整 sources tree 複製到 temporary build directory，兩次執行 `-no-shell-escape -interaction=nonstopmode -halt-on-error -file-line-error`，每次最多 120 秒。成功只複製 PDF；失敗/timeout 保留 source project 與 `diagnostic.log`。
+ZIP 打包 `main.tex`、`entries.tex`、`reverse-index.tex`、`.latexmkrc`、bilingual `README.md`、`fonts/` 下的必要 font/license files，以及 profile 啟用時的 `images/`，不含 PDF/log/aux。PDF runner 從 PATH、macOS TeX path 與 Windows 常見路徑找 XeLaTeX，把完整 sources tree 複製到 temporary build directory，兩次執行 `-no-shell-escape -interaction=nonstopmode -halt-on-error -file-line-error`，每次最多 120 秒。成功只複製 PDF；失敗/timeout 保留 source project 與 `diagnostic.log`。
 
 CSV 的外部相容契約見 `docs/corpus-csv-contract.md`。目前沒有跨 repository 自動 contract test；`rngagi-corpus` 版本變更必須人工重驗與更新 golden fixture。
 

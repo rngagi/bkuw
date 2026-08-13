@@ -1,6 +1,6 @@
 [package]
 name = "bkuw"
-version = "0.3.1"
+version = "0.4.0"
 description = "A local-first lexical fieldwork database"
 authors = ["bkuw contributors"]
 edition = "2024"
@@ -26,9 +26,11 @@ tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }
+base64 = "0.22"
 csv = "1.4"
 fs2 = "0.4"
 hex = "0.4"
+image = { version = "0.25", default-features = false, features = ["png"] }
 icu_collator = "2.2"
 icu_locale = "2.2"
 rusqlite = { version = "0.37", features = ["backup", "bundled"] }

@@ -15,6 +15,7 @@ import { Button } from "../../components/ui/Button";
 import { CommandError } from "../../lib/tauri";
 import { displayWritingSystemText } from "../../lib/writingSystems";
 import { createId, type EntrySortSettings, type EntrySummary, type LexicalEntry, type Sense, type WritingSystem } from "../../types/domain";
+import { SenseImageEditor } from "./SenseImageEditor";
 
 export interface EntryEditorHandle {
   flush(): Promise<LexicalEntry | undefined>;
@@ -97,8 +98,9 @@ function metadataChoices(configured: string[], current?: string | null) {
   return current && !configured.includes(current) ? [current, ...configured] : configured;
 }
 
-function SenseEditor({ control, register, sense, index, writingSystems, partOfSpeechOptions, semanticDomainOptions, onRemove, onMove, count }: {
+function SenseEditor({ control, register, entryId, sense, index, writingSystems, partOfSpeechOptions, semanticDomainOptions, onFlush, onEntryMutated, onRemove, onMove, count }: {
   control: Control<LexicalEntry>; register: Register; sense: Sense & { id: string }; index: number;
+  entryId: string; onFlush(): Promise<LexicalEntry | undefined>; onEntryMutated(entry: LexicalEntry): void;
   writingSystems: WritingSystem[]; partOfSpeechOptions: string[]; semanticDomainOptions: string[];
   onRemove(): void; onMove(from: number, to: number): void; count: number;
 }) {
@@ -112,6 +114,7 @@ function SenseEditor({ control, register, sense, index, writingSystems, partOfSp
       <div className="two-columns"><label className="field"><span>{t("entry.gloss")}</span><input {...register(`senses.${index}.gloss` as const)} /></label><label className="field"><span>{t("entry.partOfSpeech")}</span><select {...register(`senses.${index}.partOfSpeech` as const, { setValueAs: (value) => value || null })}><option value="">{t("common.none")}</option>{metadataChoices(partOfSpeechOptions, sense.partOfSpeech).map((value) => <option key={value} value={value}>{value}</option>)}</select></label></div>
       <label className="field"><span>{t("entry.definition")}</span><textarea {...register(`senses.${index}.definition` as const)} /></label>
       <label className="field"><span>{t("entry.semanticDomain")}</span><select {...register(`senses.${index}.semanticDomain` as const, { setValueAs: (value) => value || null })}><option value="">{t("common.none")}</option>{metadataChoices(semanticDomainOptions, sense.semanticDomain).map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+      <SenseImageEditor entryId={entryId} senseId={sense.id} onFlush={onFlush} onEntryMutated={onEntryMutated} />
       <div className="subsection-heading"><h4>{t("entry.examples")}</h4><Button type="button" size="small" onClick={() => examples.append({ id: createId(), translation: null, notes: null, sortOrder: examples.fields.length, forms: primary ? [{ id: createId(), writingSystemId: primary.id, text: "", sortOrder: 0 }] : [] })}><Plus size={14} />{t("entry.addExample")}</Button></div>
       {examples.fields.map((example, exampleIndex) => <ExampleEditor key={example.id} control={control} register={register} senseIndex={index} exampleIndex={exampleIndex} writingSystems={writingSystems} onRemove={() => examples.remove(exampleIndex)} onMove={examples.move} count={examples.fields.length} />)}
     </section>
@@ -232,6 +235,19 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
   }, [getValues, onSave, setValue, status]);
 
   useEffect(() => { saveNowRef.current = saveNow; }, [saveNow]);
+
+  const applyMediaMutation = useCallback((saved: LexicalEntry) => {
+    latestCommitted.current = saved;
+    applyingSavedValue.current = true;
+    setValue("revision", saved.revision, { shouldDirty: false });
+    setValue("updatedAt", saved.updatedAt, { shouldDirty: false });
+    applyingSavedValue.current = false;
+    if (dirty.current) {
+      setStatus("dirty");
+    } else {
+      setStatus("saved");
+    }
+  }, [setValue]);
   useEffect(() => {
     const subscription = watch(() => {
       if (applyingSavedValue.current) return;
@@ -258,7 +274,7 @@ export const EntryEditor = forwardRef<EntryEditorHandle, Props>(function EntryEd
       <div className="editor-scroll">
         <section className="editor-section"><div className="section-heading"><h2>{t("entry.forms")}</h2></div>{watchedForms.map((form, index) => { const system = writingSystems.find((item) => item.id === form.writingSystemId); return <div className="form-row" key={form.id}><span className="form-system-label">{system?.name ?? t("entry.writingSystem")}</span><WritingSystemInput autoFocus={index === 0} system={system} registration={register(`forms.${index}.text`)} /><span /></div>; })}<label className="field"><span>{t("sorting.entrySection")}</span><select aria-label={t("sorting.entrySection")} value={sectionOverride ?? ""} disabled={sortSettings.mode === "manual"} onChange={(event) => setPendingSection(event.target.value || null)}><option value="">{t("sorting.automaticSection")}</option>{sortSettings.alphabet.map((item) => <option key={item} value={item.toUpperCase()}>{item.toUpperCase()}</option>)}</select><small>{t(sortSettings.mode === "manual" ? "sorting.overrideDisabled" : "sorting.entrySectionHelp")}</small></label><label className="field"><span>{t("entry.notes")}</span><textarea {...register("notes")} /></label></section>
         <div className="section-heading standalone"><h2>{t("entry.senses")}</h2><Button type="button" size="small" onClick={addSense}><Plus size={14} />{t("entry.addSense")}</Button></div>
-        {senses.fields.map((sense, index) => <SenseEditor key={sense.id} control={control} register={register} sense={sense} index={index} writingSystems={writingSystems} partOfSpeechOptions={partOfSpeechOptions} semanticDomainOptions={semanticDomainOptions} onRemove={() => senses.remove(index)} onMove={senses.move} count={senses.fields.length} />)}
+        {senses.fields.map((sense, index) => <SenseEditor key={sense.id} control={control} register={register} entryId={entry.id} sense={sense} index={index} writingSystems={writingSystems} partOfSpeechOptions={partOfSpeechOptions} semanticDomainOptions={semanticDomainOptions} onFlush={() => saveNow(true)} onEntryMutated={applyMediaMutation} onRemove={() => senses.remove(index)} onMove={senses.move} count={senses.fields.length} />)}
         <section className="editor-section"><div className="section-heading"><h2>{t("entry.relations")}</h2><Button type="button" size="small" onClick={() => relations.append({ id: createId(), targetEntryId: null, relationType: "root", fallbackText: "", notes: null, sortOrder: relations.fields.length })}><Plus size={14} />{t("entry.addRelation")}</Button></div><p className="section-help">{t("entry.fallbackHelp")}</p>{relations.fields.map((relation, index) => <RelationEditor key={relation.id} control={control} register={register} setValue={setValue} index={index} entryId={entry.id} entryOptions={entryOptions} primaryWritingSystem={writingSystems.find((system) => system.displayRole === "primary")} onNavigate={onNavigate} onRemove={() => relations.remove(index)} />)}</section>
       </div>
     </form>

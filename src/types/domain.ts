@@ -57,6 +57,17 @@ export const senseSchema = z.object({
   examples: z.array(exampleSchema),
 });
 
+export const senseImageSchema = z.object({
+  id: z.string(),
+  senseId: z.string(),
+  originalFilename: z.string(),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  byteSize: z.number().int().positive(),
+  sortOrder: z.number().int(),
+  createdAt: z.string(),
+});
+
 export const relationSchema = z.object({
   id: z.string(),
   targetEntryId: nullableText,
@@ -130,6 +141,7 @@ export const exportSettingsSchema = z.object({
     sectionMode: z.enum(["auto", "firstGrapheme", "none"]),
     reverseIndex: z.enum(["gloss", "none"]),
     relatedEntries: z.enum(["none", "root", "base", "both"]),
+    includeSenseImages: z.boolean(),
     fontPresets: z.record(z.string(), fontPresetSchema),
   }),
 });
@@ -176,6 +188,16 @@ export const texEngineStatusSchema = z.object({
   path: nullableText,
 });
 
+export const senseImageMutationSchema = z.object({
+  entry: lexicalEntrySchema,
+  image: senseImageSchema.nullable(),
+});
+
+export const senseImageContentSchema = z.object({
+  mimeType: z.literal("image/png"),
+  dataBase64: z.string(),
+});
+
 export const projectSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -209,6 +231,7 @@ export type EntryForm = z.infer<typeof entryFormSchema>;
 export type ExampleForm = z.infer<typeof exampleFormSchema>;
 export type Example = z.infer<typeof exampleSchema>;
 export type Sense = z.infer<typeof senseSchema>;
+export type SenseImage = z.infer<typeof senseImageSchema>;
 export type EntryRelation = z.infer<typeof relationSchema>;
 export type LexicalEntry = z.infer<typeof lexicalEntrySchema>;
 export type EntrySummary = z.infer<typeof entrySummarySchema>;

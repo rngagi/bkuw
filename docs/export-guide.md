@@ -4,11 +4,11 @@
 
 1. 在專案設定確認 analysis language；rngagi-corpus CSV 必須選「繁體中文（台灣）」。
 2. 從 header 開啟「匯出」，選 CSV、LaTeX 或 PDF。
-3. 設定 POS mapping、書寫系統、逆向索引、關聯詞與 portable font presets。LaTeX 的詞條順序及小標使用「專案設定 → 詞條排序」。
+3. 設定 POS mapping、書寫系統、逆向索引、關聯詞、是否包含義項相片與 portable font presets。LaTeX 的詞條順序及小標使用「專案設定 → 詞條排序」。
 4. 按「預覽」。bkuw 會先完成 autosave；阻擋錯誤必須修正，warnings 則說明格式無法表示的資料。
 5. 選擇目的地。既有 CSV 需要二次確認，寫入採 temporary sibling file 與 atomic replacement。
 
-LaTeX 輸出資料夾包含 `main.tex`、`entries.tex`、`reverse-index.tex`、`.latexmkrc`、本 README 內容，以及本機成功時的 `dictionary.pdf`。同層 `*-overleaf.zip` 包含來源檔、需要的 portable fonts 與授權檔，不包含 PDF、log 或 aux files。可選的關聯詞只顯示直接 incoming root／base links 一層，並連回完整詞條。
+LaTeX 輸出資料夾包含 `main.tex`、`entries.tex`、`reverse-index.tex`、`.latexmkrc`、本 README 內容，以及本機成功時的 `dictionary.pdf`。勾選「包含義項相片」時，project-local PNG 會放在 `images/` 並於相應義項下保持比例排版；關閉時不打包任何相片。同層 `*-overleaf.zip` 包含來源檔、需要的 portable fonts／授權檔與選用相片，不包含 PDF、log 或 aux files。可選的關聯詞只顯示直接 incoming root／base links 一層，並連回完整詞條。
 
 找不到 XeLaTeX 時，來源與 ZIP 仍會正常建立。到 Overleaf 建立 Upload Project、上傳 ZIP，並將 compiler 設為 XeLaTeX。bkuw 不會自動上傳詞彙資料。
 
@@ -20,11 +20,11 @@ LaTeX 輸出資料夾包含 `main.tex`、`entries.tex`、`reverse-index.tex`、`
 
 1. Confirm the project analysis language. The rngagi-corpus CSV requires Taiwan Traditional Chinese (`zh-TW`).
 2. Open Export from the app header and choose CSV, LaTeX, or PDF.
-3. Configure POS mappings, writing systems, reverse index, related entries, and portable font presets. LaTeX entry order and headings come from Project Settings → Entry ordering.
+3. Configure POS mappings, writing systems, reverse index, related entries, whether to include sense photos, and portable font presets. LaTeX entry order and headings come from Project Settings → Entry ordering.
 4. Select Preview. bkuw flushes autosave first. Blocking errors must be fixed; warnings identify data the target format cannot represent.
 5. Choose a destination. Replacing an existing CSV requires confirmation and uses a temporary sibling plus atomic replacement.
 
-The LaTeX folder contains `main.tex`, `entries.tex`, `reverse-index.tex`, `.latexmkrc`, a bilingual README, and `dictionary.pdf` when local compilation succeeds. The sibling `*-overleaf.zip` contains source files, required portable fonts, and licenses—never PDF, logs, or auxiliary files. Optional related entries include one level of direct incoming root/base links and link back to each full entry.
+The LaTeX folder contains `main.tex`, `entries.tex`, `reverse-index.tex`, `.latexmkrc`, a bilingual README, and `dictionary.pdf` when local compilation succeeds. When “Include sense photos” is enabled, project-local PNG files are copied under `images/` and placed proportionally below their senses; when disabled, no photos are packaged. The sibling `*-overleaf.zip` contains source files, required portable fonts/licenses, and selected photos—never PDF, logs, or auxiliary files. Optional related entries include one level of direct incoming root/base links and link back to each full entry.
 
 If XeLaTeX is unavailable, source and ZIP generation still succeeds. In Overleaf, create an Upload Project, upload the ZIP, and select XeLaTeX. bkuw never uploads lexical data automatically.
 

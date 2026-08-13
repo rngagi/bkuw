@@ -45,11 +45,22 @@ pub(crate) const CORPUS_HEADERS: [&str; 9] = [
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ExportSnapshot {
+    pub root_path: PathBuf,
     pub project: Project,
     pub writing_systems: Vec<WritingSystem>,
     pub settings: ExportSettingsV1,
     pub sections: BTreeMap<String, Option<String>>,
     pub entries: Vec<LexicalEntry>,
+    pub sense_images: Vec<ExportSenseImage>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ExportSenseImage {
+    pub id: String,
+    pub sense_id: String,
+    pub relative_path: String,
+    pub sha256: String,
 }
 
 #[derive(Debug, Clone)]
@@ -218,6 +229,20 @@ fn latex_issues(
             None,
             None,
         ));
+    }
+    if snapshot.settings.latex.include_sense_images {
+        for image in &snapshot.sense_images {
+            if read_export_image(snapshot, image).is_err() {
+                issues.push(issue(
+                    ExportIssueSeverity::Error,
+                    "latex.image_unavailable",
+                    None,
+                    Some(&image.sense_id),
+                    Some("images"),
+                    Some(&image.id),
+                ));
+            }
+        }
     }
     issues
 }
@@ -502,6 +527,14 @@ fn render_latex_sources(
         ),
     ];
     sources.extend(fonts.export_files(&required_ids)?);
+    if snapshot.settings.latex.include_sense_images {
+        for image in &snapshot.sense_images {
+            sources.push((
+                format!("images/{}.png", image.id),
+                read_export_image(snapshot, image)?,
+            ));
+        }
+    }
     Ok(sources)
 }
 
@@ -576,6 +609,15 @@ fn render_entries(snapshot: &ExportSnapshot) -> AppResult<String> {
                     "\\BkuwMeta{{Semantic domain: {}}}\n",
                     tex_escape(domain)
                 ));
+            }
+            if snapshot.settings.latex.include_sense_images {
+                for image in snapshot
+                    .sense_images
+                    .iter()
+                    .filter(|image| image.sense_id == sense.id)
+                {
+                    output.push_str(&format!("\\BkuwSenseImage{{images/{}.png}}\n", image.id));
+                }
             }
             for example in &sense.examples {
                 let mut forms = example.forms.iter().collect::<Vec<_>>();
@@ -893,6 +935,26 @@ fn tex_escape(value: &str) -> String {
         }
     }
     escaped
+}
+
+fn read_export_image(snapshot: &ExportSnapshot, image: &ExportSenseImage) -> AppResult<Vec<u8>> {
+    let expected_relative = format!("media/images/{}.png", image.id);
+    if image.relative_path != expected_relative {
+        return Err(AppError::new(
+            "export_validation",
+            "A sense image path is invalid.",
+        ));
+    }
+    let bytes = fs::read(snapshot.root_path.join(&image.relative_path))
+        .map_err(|error| export_io(error, "read sense image"))?;
+    let png_signature = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a];
+    if !bytes.starts_with(&png_signature) || hex::encode(Sha256::digest(&bytes)) != image.sha256 {
+        return Err(AppError::new(
+            "export_validation",
+            "A sense image failed its integrity check.",
+        ));
+    }
+    Ok(bytes)
 }
 
 fn encode_source_zip(sources: &[(String, Vec<u8>)]) -> AppResult<Vec<u8>> {

@@ -82,6 +82,8 @@ pub struct LatexExportSettings {
     pub reverse_index: ReverseIndexMode,
     #[serde(default)]
     pub related_entries: RelatedEntriesMode,
+    #[serde(default)]
+    pub include_sense_images: bool,
     pub font_presets: BTreeMap<String, FontPreset>,
 }
 
@@ -259,6 +261,51 @@ pub struct Sense {
     pub semantic_domain: Option<String>,
     pub sort_order: i64,
     pub examples: Vec<Example>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SenseImage {
+    pub id: String,
+    pub sense_id: String,
+    pub original_filename: String,
+    pub width: u32,
+    pub height: u32,
+    pub byte_size: u64,
+    pub sort_order: i64,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AttachSenseImageRequest {
+    pub entry_id: String,
+    pub sense_id: String,
+    pub expected_revision: i64,
+    pub original_filename: String,
+    pub png_base64: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoveSenseImageRequest {
+    pub entry_id: String,
+    pub image_id: String,
+    pub expected_revision: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SenseImageMutation {
+    pub entry: LexicalEntry,
+    pub image: Option<SenseImage>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SenseImageContent {
+    pub mime_type: String,
+    pub data_base64: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
