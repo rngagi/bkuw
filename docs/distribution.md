@@ -2,22 +2,25 @@
 
 ## GitHub Actions 產物
 
-`.github/workflows/ci.yml` 會在每次 push 與 pull request 執行驗證。各平台通過 checks、tests 與 Tauri build 後，會在該次 Actions run 的 **Artifacts** 區域提供：
+`.github/workflows/ci.yml` 只在 `main` push 與 pull request 執行驗證；version tag 不會再重跑同一套 CI。各平台通過 checks、tests、release-mode desktop E2E 與 Tauri build 後，會在該次 Actions run 的 **Artifacts** 區域提供：
 
 - `bkuw-macos-apple-silicon`：Apple Silicon 的 `.app` 與 `.dmg`。
 - `bkuw-windows-x64`：Windows x64 的 NSIS installer。
 
 Artifacts 保存 14 天。macOS Intel 不在支援與建置範圍內，也不會上傳任何使用者資料。
 
-推送與 app version 完全一致的 `v*` tag（例如 `v0.4.0`）時，同一 workflow 會在 portable-template、Windows x64 與 macOS Apple Silicon jobs 全數成功後：
+推送與 app version 完全一致的 `v*` tag（例如 `v0.4.0`）時，`.github/workflows/release.yml` 不重新 build，而會：
 
-1. 驗證 tag、`package.json`、Cargo 與 Tauri version 一致。
-2. 收集一個 NSIS `.exe` 與一個 Apple Silicon `.dmg`。
-3. 產生 `SHA256SUMS.txt`。
-4. 建立 Draft GitHub Release、上傳三個 assets，並以 `.github/release.yml` 產生 categorized changelog。
-5. Draft 經人工確認 assets 與說明後才發布；任一必要 job 失敗都不會建立 Release。
+1. 以 tag commit SHA 尋找完全相同 SHA 的 `main` push CI，最多等待 30 分鐘。
+2. 只有該 CI 的 portable-template、Windows x64 與 macOS Apple Silicon jobs 全數成功時，才下載其 artifacts；已失敗的 CI 必須先修正或 rerun。
+3. 驗證 tag、`package.json`、Cargo 與 Tauri version 一致。
+4. 收集一個 NSIS `.exe` 與一個 Apple Silicon `.dmg`，並產生 `SHA256SUMS.txt`。
+5. 建立 Draft GitHub Release、上傳三個 assets，並以 `.github/release.yml` 產生 categorized changelog。
+6. Draft 經人工確認 assets 與說明後才發布；找不到相同 SHA、CI 失敗、artifact 過期或版本不一致都不會建立 Release。
 
-Release job 只取得 `contents: write`，一般 CI jobs 不取得發布權限。這個流程不會自動簽章。
+Release job 只取得讀取 Actions artifacts 與 `contents: write` 的權限，一般 CI jobs 不取得發布權限。為避免 tag 與 `main` 對同一 commit 重複測試、下載字型及打包，發布順序應為「push version commit 到 `main` → 等 CI 成功 → push 該 commit 的 version tag」。這個流程不會自動簽章。
+
+Desktop E2E 使用 release-mode app，而非未最佳化的 debug app。這可使包含 portable fonts 與 ZIP 的 LaTeX export 保持在 WebdriverIO Tauri direct-eval 的時間限制內；Rust integration tests 仍負責完整 export failure／rollback coverage。
 
 ## 目前的信任狀態
 

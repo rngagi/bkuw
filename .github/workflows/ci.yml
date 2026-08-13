@@ -2,6 +2,8 @@ name: ci
 
 on:
   push:
+    branches:
+      - main
   pull_request:
 
 jobs:
@@ -58,8 +60,10 @@ jobs:
       - run: pnpm check
       - run: pnpm test
       - run: pnpm test:rust
-      - run: pnpm test:e2e:build
+      - run: pnpm tauri build --no-bundle --features e2e --config src-tauri/tauri.e2e.conf.json --target ${{ matrix.target }}
       - run: pnpm test:e2e
+        env:
+          BKUW_E2E_APPLICATION: ./src-tauri/target/${{ matrix.target }}/release/bkuw
       - run: pnpm tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
       - uses: actions/upload-artifact@v4
         with:
@@ -67,75 +71,3 @@ jobs:
           path: src-tauri/target/${{ matrix.target }}/release/bundle/**/*
           if-no-files-found: error
           retention-days: 14
-
-  publish-release:
-    name: Prepare GitHub Release
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs:
-      - portable-xelatex-template
-      - verify-and-bundle
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: bkuw-*
-          path: downloaded-artifacts
-      - name: Verify tag and application versions
-        shell: bash
-        run: |
-          set -euo pipefail
-          release_version="${GITHUB_REF_NAME#v}"
-          package_version="$(jq -r '.version' package.json)"
-          tauri_version="$(jq -r '.version' src-tauri/tauri.conf.json)"
-          cargo_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' src-tauri/Cargo.toml | head -n 1)"
-          test "$package_version" = "$release_version"
-          test "$tauri_version" = "$release_version"
-          test "$cargo_version" = "$release_version"
-      - name: Collect installers and generate checksums
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir release-files
-          find downloaded-artifacts -type f \( -name '*.dmg' -o -name '*.exe' \) -exec cp '{}' release-files/ \;
-          test "$(find release-files -maxdepth 1 -type f -name '*.dmg' | wc -l)" -eq 1
-          test "$(find release-files -maxdepth 1 -type f -name '*.exe' | wc -l)" -eq 1
-          cd release-files
-          sha256sum -- *.dmg *.exe > SHA256SUMS.txt
-      - name: Create draft release and upload installers
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_HEADER: |
-            ## Downloads / 下載
-
-            - Windows x64: download the NSIS `setup.exe` installer.
-            - macOS Apple Silicon: download the `.dmg` image. macOS Intel is not supported.
-            - Verify downloads with `SHA256SUMS.txt` when needed.
-
-            ## Unsigned build notice / 未簽署版本提醒
-
-            These installers are not yet code-signed or notarized. Windows SmartScreen and macOS Gatekeeper may show a warning.
-
-            這些安裝包尚未進行程式碼簽章或 Apple notarization，Windows SmartScreen 與 macOS Gatekeeper 可能顯示警告。
-
-            If a trusted macOS download reports that `bkuw.app` is damaged, first try **System Settings → Privacy & Security → Open Anyway**. If necessary, verify the download checksum and then run:
-
-            ```bash
-            sudo xattr -dr com.apple.quarantine /Applications/bkuw.app
-            ```
-
-            Only remove quarantine after confirming that the app came from this repository and its checksum matches.
-        shell: bash
-        run: |
-          set -euo pipefail
-          gh release create "$GITHUB_REF_NAME" \
-            release-files/*.dmg \
-            release-files/*.exe \
-            release-files/SHA256SUMS.txt \
-            --verify-tag \
-            --draft \
-            --generate-notes \
-            --title "bkuw $GITHUB_REF_NAME" \
-            --notes "$RELEASE_HEADER"

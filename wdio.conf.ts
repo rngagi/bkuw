@@ -8,7 +8,7 @@ export const config: Options.Testrunner = {
     browserName: "tauri",
     timeouts: { script: 300_000 },
     "tauri:options": {
-      application: "./src-tauri/target/debug/bkuw",
+      application: process.env.BKUW_E2E_APPLICATION ?? "./src-tauri/target/release/bkuw",
     },
   }],
   services: [["tauri", { driverProvider: "embedded", autoInstallTauriDriver: false }]],

@@ -12,7 +12,7 @@
 - [x] Project alphabet、entry section override、opt-in manual ordering 與 virtualized entry list。
 - [x] rngagi-corpus v0.3 CSV、portable XeLaTeX／Overleaf ZIP／PDF 與 managed font packs。
 - [x] Form／sense 搜尋、精簡詞表摘要、sense-level 相片與 optional LaTeX／PDF photo export。
-- [x] Windows x64／macOS Apple Silicon CI、NSIS／DMG artifacts 與 tag-gated Draft Release。
+- [x] Windows x64／macOS Apple Silicon CI、NSIS／DMG artifacts 與 same-SHA artifact promotion Draft Release；version tag 不重跑 CI。
 
 最新公開版本為 `v0.4.0`。macOS Intel 不在支援或建置範圍內。
 

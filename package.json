@@ -10,7 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
-    "test:e2e:build": "tauri build --debug --no-bundle --features e2e --config src-tauri/tauri.e2e.conf.json",
+    "test:e2e:build": "tauri build --no-bundle --features e2e --config src-tauri/tauri.e2e.conf.json",
     "test:e2e": "wdio run wdio.conf.ts",
     "preview": "vite preview",
     "tauri": "tauri"
