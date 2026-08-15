@@ -125,4 +125,4 @@ Audio、CSV import、跨 repository contract test、多 analysis-language transl
 
 ## 明確排除
 
-目前不包含 accounts、authentication、cloud sync、team collaboration、permissions、server backend、audio、CSV import、mobile、AI transcription、ASR、ELAN-style timeline、waveform segmentation、Git syncing、code signing、notarization、auto-update 或自動上傳 lexical data。受信任 version tag 可建立 unsigned Draft GitHub Release；正式發布前須人工確認安裝包、checksums 與警告內容。
+目前不包含 accounts、authentication、cloud sync、team collaboration、permissions、server backend、audio、CSV import、mobile、AI transcription、ASR、ELAN-style timeline、waveform segmentation、Git syncing、code signing、notarization、auto-update 或自動上傳 lexical data。受信任的 `main` version commit 通過 exact-SHA CI 後可自動建立 unsigned Draft GitHub Release；正式發布前須人工確認安裝包、checksums 與警告內容。

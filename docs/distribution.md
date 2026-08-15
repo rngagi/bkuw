@@ -4,17 +4,29 @@
 
 `.github/workflows/ci.yml` 在 `main` push 與 pull request 執行 checks、tests、release-mode desktop E2E 與 no-bundle app build。一般 CI 不建立 NSIS／DMG，也不呼叫 `actions/upload-artifact`；因此每次 push 不會留下安裝包 artifacts。macOS Intel 不在支援與建置範圍內，也不會上傳任何使用者資料。
 
-推送與 app version 完全一致的 `v*` tag（例如 `v0.4.2`）時，`.github/workflows/release.yml` 才會：
+準備新版本時只使用單一命令，不手動逐檔改版本或 push tag：
 
-1. 以 tag commit SHA 尋找完全相同 SHA 的 `main` push CI，最多等待 30 分鐘。
-2. 只有該 CI 的 portable-template、Windows x64 與 macOS Apple Silicon jobs 全數成功時才繼續；已失敗的 CI 必須先修正或 rerun。
-3. 驗證 tag、`package.json`、Cargo 與 Tauri version 一致。
-4. 在 release workflow 的 macOS Apple Silicon runner 建置 `.app`／`.dmg`，並在 Windows x64 runner 建置 NSIS installer。
-5. 僅在這次 release run 上傳 `bkuw-macos-apple-silicon` 與 `bkuw-windows-x64` 暫存 artifacts，保存 14 天。
-6. Final job 收集一個 `.dmg` 與一個 `.exe`、產生 `SHA256SUMS.txt`，再建立含三個 assets 與 categorized changelog 的 Draft GitHub Release。
-7. Draft 經人工確認 assets 與說明後才發布；找不到相同 SHA、CI 失敗、build 失敗或版本不一致都不會建立 Release。
+```bash
+pnpm release:prepare -- 0.4.3
+git diff --check
+git commit -am "chore: prepare v0.4.3"
+git push origin main
+```
 
-一般 CI jobs 不取得發布權限；只有 release final job 取得 `contents: write`。發布順序為「逐功能完成驗證並 commit → push version commit 到 `main` → 等 CI 成功 → push 同一 commit 的 version tag」。Release 不重跑整套 tests，但會在 tag workflow 重新執行平台 packaging。這個流程不會自動簽章。
+`release:prepare` 要求乾淨的 `main` worktree，確認新版本是遞增的 stable semantic version，並一起更新 `package.json`、`Cargo.toml`、`Cargo.lock` 與 Tauri config。版本一致性也可獨立以 `pnpm release:check -- 0.4.3` 驗證。
+
+version commit 的 `main` CI 成功後，`.github/workflows/release.yml` 自動：
+
+1. 確認來源是本 repository 的 trusted `main` push，且 portable-template、Windows x64 與 macOS Apple Silicon jobs 全數成功。
+2. 比較 exact CI commit 與其 parent；只有 package version 確實遞增、四個 canonical version 一致且對應 tag 尚不存在時才繼續。一般功能／文件 commit 會正常結束，不打包。
+3. 在 release workflow 的 macOS Apple Silicon runner 建置 `.app`／`.dmg`，並在 Windows x64 runner 建置 NSIS installer。
+4. 僅在這次 release run 上傳 `bkuw-macos-apple-silicon` 與 `bkuw-windows-x64` 暫存 artifacts，保存 7 天供失敗恢復。
+5. Final job 收集一個 `.dmg` 與一個 `.exe`、產生並重驗 `SHA256SUMS.txt`；兩個平台都成功後，才在 exact commit 建立 tag 與含三個 assets、categorized changelog 的 Draft GitHub Release。
+6. Draft 經人工確認 assets 與說明後才發布；來源不可信、CI 失敗、build 失敗、版本不一致或 checksum 錯誤都不會建立 Release。
+
+一般 CI jobs 不取得發布權限；只有 release final job 取得 `contents: write`。發布順序為「逐功能完成驗證並 commit → `release:prepare` → push version commit 到 `main` → GitHub 自動建立 Draft → 人工 Publish」。Release 不重跑整套 tests，只利用 Rust cache 執行平台 packaging。這個流程不會自動簽章。
+
+一般失敗使用 GitHub 的 **Re-run failed jobs**，已成功的 installer jobs 不需重跑。若必須先修正 workflow，可在 Actions 手動執行 `release` recovery，輸入 version、通過 CI 的 exact target SHA，以及仍在 7 天保存期內的失敗 release run ID；workflow 會驗證 run path 與 SHA，再下載既有 artifacts，跳過兩個平台 packaging，重新建立或更新同一 Draft。`publish-draft` 只允許更新仍為 draft、且 tag 指向相同 commit 的版本，已公開 Release 不可覆寫。
 
 Desktop E2E 使用 release-mode app，而非未最佳化的 debug app。這可使包含 portable fonts 與 ZIP 的 LaTeX export 保持在 WebdriverIO Tauri direct-eval 的時間限制內；Rust integration tests 仍負責完整 export failure／rollback coverage。
 
@@ -80,7 +92,7 @@ Release workflow 使用這個設定，成功後會將 DMG 放進該次 release r
 ## 啟用正式簽章前的驗收
 
 - Fork 或 pull request 不得取得 production secrets。
-- 簽章只在受保護 branch 或 version tag 的 trusted workflow 啟用。
+- 簽章只在受保護 `main` version commit 的 trusted release workflow 啟用。
 - macOS 用 `codesign --verify`、`spctl` 與 notarization log 驗證。
 - Windows 用 `Get-AuthenticodeSignature` 或 SignTool 驗證 signer、timestamp 與 chain。
 - Unsigned Release 必須清楚顯示 SmartScreen／Gatekeeper 警告、checksums 與 quarantine 安全說明；production signing 完成後再移除警告。

@@ -12,14 +12,9 @@
 - [x] Project alphabet、entry section override、opt-in manual ordering 與 virtualized entry list。
 - [x] rngagi-corpus v0.3 CSV、portable XeLaTeX／Overleaf ZIP／PDF 與 managed font packs。
 - [x] Form／sense 搜尋、精簡詞表摘要、sense-level 相片與 optional LaTeX／PDF photo export。
-- [x] Windows x64／macOS Apple Silicon CI validation 不產生 artifacts；`v*` release 先驗證 exact-SHA `main` CI，再於 release workflow 建置 NSIS／DMG、checksums 與 Draft Release。
-
-預備發布版本為 `v0.4.2`；最新公開版本為 `v0.4.1`。macOS Intel 不在支援或建置範圍內。
-
-## 尚未發布
-
-- [x] 修正 sense 相片預覽與 LaTeX／PDF 圖片體積：editor 使用 CSP-compatible PNG data URL 並在失敗時結束 loading；匯出將來源縮入 `1000×900px`，不透明圖使用品質 82 JPEG、透明圖保留 PNG，且不修改 project-local PNG。完成條件：前端與 Rust 回歸測試、`pnpm check`、`pnpm test`、`pnpm test:rust`、`pnpm tauri build --no-bundle` 全部通過。
-- [x] 新增 Windows `Ctrl+-/=/0` 與 macOS `Cmd+-/=/0` WebView 縮放，包含持久化、bounded levels、IME／既有快捷鍵保護及 narrow Tauri capability。完成條件：shortcut unit tests、`pnpm check`、`pnpm test`、`pnpm test:rust` 全部通過。
+- [x] Sense 相片使用 CSP-compatible app preview；LaTeX／PDF 匯出產生適合雙欄版面的衍生 JPEG／PNG，且不修改 project-local PNG。
+- [x] Windows `Ctrl+-/=/0` 與 macOS `Cmd+-/=/0` WebView 縮放，包含持久化、bounded levels、IME／既有快捷鍵保護及 narrow Tauri capability。
+- [x] Windows x64／macOS Apple Silicon CI validation 不產生 artifacts；version commit 的 exact-SHA `main` CI 成功後自動建置 NSIS／DMG，完成才建立 tag、checksums 與 Draft Release，並支援 artifact recovery。macOS Intel 不在支援或建置範圍內。
 
 ## 候選 backlog
 
@@ -54,4 +49,4 @@ pnpm test:e2e
 pnpm tauri build --no-bundle
 ```
 
-Release tag 必須與 package、Cargo、Cargo lock、Tauri app version 一致；遠端僅驗收 Windows x64 與 macOS Apple Silicon。
+Release 前使用 `pnpm release:prepare -- <version>` 同步 package、Cargo、Cargo lock 與 Tauri app version；遠端僅驗收 Windows x64 與 macOS Apple Silicon，公開版本以 GitHub Releases 為準。
