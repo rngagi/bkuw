@@ -10,13 +10,13 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  publish-release:
-    name: Prepare GitHub Release
+  verify-release:
+    name: Verify tagged commit
     runs-on: ubuntu-latest
     timeout-minutes: 40
     permissions:
       actions: read
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - name: Wait for successful CI on the tagged commit
@@ -40,8 +40,7 @@ jobs:
             else
               IFS=$'\t' read -r run_id run_status run_conclusion <<< "$run_record"
               if [[ "$run_status" == "completed" && "$run_conclusion" == "success" ]]; then
-                echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
-                echo "Using successful main CI run $run_id for $GITHUB_SHA."
+                echo "Verified successful main CI run $run_id for $GITHUB_SHA."
                 exit 0
               fi
               if [[ "$run_status" == "completed" ]]; then
@@ -56,12 +55,6 @@ jobs:
 
           echo "Timed out waiting for successful main CI for $GITHUB_SHA." >&2
           exit 1
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: bkuw-*
-          path: downloaded-artifacts
-          github-token: ${{ github.token }}
-          run-id: ${{ steps.source-ci.outputs.run_id }}
       - name: Verify tag and application versions
         shell: bash
         run: |
@@ -73,6 +66,63 @@ jobs:
           test "$package_version" = "$release_version"
           test "$tauri_version" = "$release_version"
           test "$cargo_version" = "$release_version"
+
+  build-installers:
+    name: Build ${{ matrix.name }} installer
+    needs: verify-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS Apple Silicon
+            os: macos-15
+            target: aarch64-apple-darwin
+            bundles: app,dmg
+            artifact_name: bkuw-macos-apple-silicon
+          - name: Windows x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bundles: nsis
+            artifact_name: bkuw-windows-x64
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: src-tauri/target/${{ matrix.target }}/release/bundle/**/*
+          if-no-files-found: error
+          retention-days: 14
+
+  publish-release:
+    name: Prepare GitHub Release
+    needs: build-installers
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: bkuw-*
+          path: downloaded-artifacts
+          merge-multiple: true
       - name: Collect installers and generate checksums
         shell: bash
         run: |

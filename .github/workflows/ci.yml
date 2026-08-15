@@ -23,7 +23,7 @@ jobs:
       - name: Compile generated portable template with real XeLaTeX
         run: cargo test --manifest-path src-tauri/Cargo.toml portable_xelatex_template_compiles_with_the_real_engine -- --ignored
 
-  verify-and-bundle:
+  verify:
     name: ${{ matrix.name }}
     strategy:
       fail-fast: false
@@ -32,13 +32,9 @@ jobs:
           - name: macOS Apple Silicon
             os: macos-15
             target: aarch64-apple-darwin
-            bundles: app,dmg
-            artifact_name: bkuw-macos-apple-silicon
           - name: Windows x64
             os: windows-latest
             target: x86_64-pc-windows-msvc
-            bundles: nsis
-            artifact_name: bkuw-windows-x64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -64,10 +60,3 @@ jobs:
       - run: pnpm test:e2e
         env:
           BKUW_E2E_APPLICATION: ./src-tauri/target/${{ matrix.target }}/release/bkuw
-      - run: pnpm tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact_name }}
-          path: src-tauri/target/${{ matrix.target }}/release/bundle/**/*
-          if-no-files-found: error
-          retention-days: 14

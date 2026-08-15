@@ -163,4 +163,4 @@ React Hook Form 管理 entry aggregate draft，Zod 負責 frontend validation。
 - Rust integration tests 透過 project/database module interface 使用 temporary project 與真實 SQLite。
 - Vitest + React Testing Library 測互動、autosave、translations、validation 與 nested editors。
 - WebdriverIO Tauri service 執行主要 desktop workflow smoke test。
-- GitHub Actions 在 Windows x64 與 macOS Apple Silicon 執行 checks、tests、build，並上傳 unsigned installer/bundle artifacts；不建立 macOS Intel 產物。`v*` tag 通過全部 jobs 後，受限 `contents: write` 的 final job 驗證四處 version、產生 SHA-256 checksums，並建立含 NSIS／DMG 與自動 changelog 的 Draft Release；發布前保留人工確認閘門。
+- GitHub Actions 在 `main`／pull request 的 Windows x64 與 macOS Apple Silicon jobs 執行 checks、tests 與 release-mode desktop E2E，但不建立或上傳 installer artifacts，也不建立 macOS Intel 產物。`v*` tag workflow 必須先找到 exact-SHA 的成功 `main` CI，再於 release workflow 的 Windows／macOS jobs 建置並暫存 NSIS／DMG；受限 `contents: write` 的 final job 才下載這些 release-run artifacts、產生 SHA-256 checksums，並建立含自動 changelog 的 Draft Release。發布前保留人工確認閘門。

@@ -24,7 +24,7 @@
 - Portable LaTeX/PDF exports must use bkuw-managed fonts, include the used font files and licenses, and never depend on system-installed fonts. TeX Gyre Termes is mandatory; phonemic/phonetic writing systems always use Charis SIL.
 - Treat the rngagi-corpus v0.3 nine-column order as a versioned external contract. This repository currently has no cross-repository automated contract test; corpus changes require manual revalidation and a golden-fixture update.
 - CI and packaging support Windows x64 and macOS Apple Silicon only. Do not add macOS Intel targets.
-- Run validation and platform packaging on `main`; version-tag release workflows must promote artifacts from a successful `main` CI run for the exact same commit instead of rebuilding them.
+- Run validation only on `main` and pull requests; these workflows must not package or upload installer artifacts. A version-tag release must first require a successful `main` CI run for the exact same commit, then build Windows x64 and macOS Apple Silicon installers inside the release workflow.
 - Prefer a small module interface with substantial behavior behind it. Avoid pass-through modules and speculative seams.
 
 ## Development workflow
@@ -32,6 +32,7 @@
 - Use pnpm for JavaScript dependencies and commands. Do not add npm or yarn lockfiles.
 - Add a migration for every schema change; never edit an already-released migration.
 - Add or update tests with behavior changes. Test through public module interfaces rather than implementation details.
+- Commit each independently completed feature, fix, or workflow change after its required verification passes. Keep unrelated completed work in separate commits; do not commit incomplete work merely to satisfy this cadence.
 - Run `pnpm check`, `pnpm test`, and `pnpm test:rust` before marking an implementation checklist item complete.
 - Run `pnpm tauri build --no-bundle` before marking the milestone complete.
 - Update `plan.md`, `docs/product-spec.md`, and `docs/architecture.md` when their corresponding behavior changes.
