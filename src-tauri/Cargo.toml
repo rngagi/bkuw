@@ -1,6 +1,6 @@
 [package]
 name = "bkuw"
-version = "0.4.2"
+version = "0.4.3"
 description = "A local-first lexical fieldwork database"
 authors = ["bkuw contributors"]
 edition = "2024"
