@@ -14,7 +14,7 @@
 - [x] Form／sense 搜尋、精簡詞表摘要、sense-level 相片與 optional LaTeX／PDF photo export。
 - [x] Windows x64／macOS Apple Silicon CI validation 不產生 artifacts；`v*` release 先驗證 exact-SHA `main` CI，再於 release workflow 建置 NSIS／DMG、checksums 與 Draft Release。
 
-最新公開版本為 `v0.4.1`。macOS Intel 不在支援或建置範圍內。
+預備發布版本為 `v0.4.2`；最新公開版本為 `v0.4.1`。macOS Intel 不在支援或建置範圍內。
 
 ## 尚未發布
 

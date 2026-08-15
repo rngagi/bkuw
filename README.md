@@ -2,7 +2,7 @@
 
 `bkuw` 是一套為語言田野工作設計的 local-first 詞彙資料庫。它以 lexical entry 為核心，支援動態 writing systems、多義項、多表記例句、義項相片、root/base 關係、Unicode/IPA 搜尋，以及 corpus CSV、XeLaTeX、Overleaf ZIP 與 PDF 匯出。
 
-最新公開版本為 `0.4.1`。詞表會把 IPA 放在主要表記同一行，保留各義項自己的詞性與簡釋，最多顯示兩列摘要；搜尋同時涵蓋表記、簡釋與定義。義項相片上傳會在 autosave 後沿用持久化 ID，避免新義項被誤判為不存在。匯出可選 Chiron Sung HK／昭源宋體與 Chiron Hei HK／昭源黑體，並標示明體／宋體或黑體／無襯線風格。
+目前版本為 `0.4.2`。詞表會把 IPA 放在主要表記同一行，保留各義項自己的詞性與簡釋，最多顯示兩列摘要；搜尋同時涵蓋表記、簡釋與定義。義項相片可在 app 內預覽，LaTeX／PDF 匯出會使用適合雙欄印刷的衍生圖以減少檔案大小。Windows `Ctrl`／macOS `Cmd` 搭配 `-`、`=`、`0` 可調整或重設介面縮放。
 
 Project 可定義含 multigraph 的字母表，並提供自動／詞條小標覆寫／完整手動拖拉三種排序層級；工作區與匯出辭典共用同一排序結果。
 

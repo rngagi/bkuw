@@ -30,6 +30,8 @@ Sense-level 相片接受 PNG／JPEG／WebP，在本機 Canvas 輕度縮圖後統
 
 v0.4.1 修正 React field-array UI key 覆蓋持久化 sense ID，導致相片上傳誤報找不到義項的問題；同時細分詞條、義項與相片不存在的雙語錯誤訊息。CI／release 流程改為 version tag 重用完全相同 commit SHA 的成功 `main` artifacts，不再重複測試與平台打包。
 
+v0.4.2 修正 WebView CSP 阻擋 sense 相片預覽的問題，並在預覽失敗時顯示雙語錯誤；LaTeX／PDF 匯出將相片縮入 `1000×900px`，不透明圖使用品質 82 JPEG、透明圖保留 PNG，減少雙欄辭典 PDF 體積且不改寫 project-local PNG。另新增 Windows `Ctrl+-/=/0`、macOS `Cmd+-/=/0` 的持久化 app zoom。CI 流程調整為一般 push 只驗證、不產生安裝包 artifacts；version tag 才在 release workflow 建置 NSIS／DMG 與 Draft Release。
+
 ## 候選 backlog
 
 - Audio import/playback 與 optional recording。
