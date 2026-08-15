@@ -24,7 +24,7 @@
 - Portable LaTeX/PDF exports must use bkuw-managed fonts, include the used font files and licenses, and never depend on system-installed fonts. TeX Gyre Termes is mandatory; phonemic/phonetic writing systems always use Charis SIL.
 - Treat the rngagi-corpus v0.3 nine-column order as a versioned external contract. This repository currently has no cross-repository automated contract test; corpus changes require manual revalidation and a golden-fixture update.
 - CI and packaging support Windows x64 and macOS Apple Silicon only. Do not add macOS Intel targets.
-- Run validation only on `main` and pull requests; these workflows must not package or upload installer artifacts. A successful trusted `main` CI run may prepare a release only when that exact commit increases every canonical version together. The release workflow builds Windows x64 and macOS Apple Silicon installers, creates the tag only after both builds succeed, and stops at a Draft Release for human publication.
+- Run validation only on `main` and pull requests; these workflows must not package or upload installer artifacts. A successful trusted `main` CI run may prepare a release only when that exact commit increases every canonical version together. The release workflow builds Windows x64 and macOS Apple Silicon installers, prepares an exact-SHA Draft Release only after both builds succeed, and lets GitHub materialize the tag only when a human publishes the draft.
 - Prefer a small module interface with substantial behavior behind it. Avoid pass-through modules and speculative seams.
 
 ## Development workflow

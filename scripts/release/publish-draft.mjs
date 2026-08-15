@@ -68,12 +68,14 @@ export async function validateReleaseAssets(assetsDirectory, version) {
 }
 
 async function resolveTagCommit(repo, tag, runGh) {
-  let object = JSON.parse(
-    assertSuccessful(
-      runGh(["api", `repos/${repo}/git/ref/tags/${tag}`, "--jq", ".object"]),
-      `Reading ${tag}`,
-    ),
-  );
+  const reference = runGh(["api", `repos/${repo}/git/ref/tags/${tag}`, "--jq", ".object"]);
+  if (reference.status !== 0) {
+    if (/not found/i.test(`${reference.stderr}\n${reference.stdout}`)) {
+      return null;
+    }
+    throw new Error(`Reading ${tag} failed: ${reference.stderr.trim()}`);
+  }
+  let object = JSON.parse(reference.stdout);
   for (let depth = 0; object.type === "tag" && depth < 4; depth += 1) {
     object = JSON.parse(
       assertSuccessful(
@@ -112,7 +114,7 @@ export async function publishDraft(
     "--repo",
     repo,
     "--json",
-    "isDraft,url",
+    "isDraft,targetCommitish,url",
   ]);
   if (releaseView.status === 0) {
     const release = JSON.parse(releaseView.stdout);
@@ -120,8 +122,14 @@ export async function publishDraft(
       throw new Error(`Release ${tag} is already published and cannot be replaced`);
     }
     const tagCommit = await resolveTagCommit(repo, tag, runGh);
-    if (tagCommit !== sha) {
+    if (tagCommit && tagCommit !== sha) {
       throw new Error(`Release ${tag} points to ${tagCommit}, expected ${sha}`);
+    }
+    if (!tagCommit && release.targetCommitish !== sha) {
+      assertSuccessful(
+        runGh(["release", "edit", tag, "--target", sha, "--repo", repo]),
+        `Moving draft ${tag} to ${sha}`,
+      );
     }
     assertSuccessful(
       runGh(["release", "upload", tag, ...assets, "--clobber", "--repo", repo]),

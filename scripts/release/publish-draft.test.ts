@@ -68,7 +68,11 @@ describe("publish draft module", () => {
       if (args[0] === "release" && args[1] === "view") {
         return {
           status: 0,
-          stdout: JSON.stringify({ isDraft: true, url: "https://example.test/draft" }),
+          stdout: JSON.stringify({
+            isDraft: true,
+            targetCommitish: sha,
+            url: "https://example.test/draft",
+          }),
           stderr: "",
         };
       }
@@ -81,6 +85,42 @@ describe("publish draft module", () => {
     await expect(publishDraft(input, { runGh })).resolves.toMatchObject({ action: "updated" });
     expect(runGh).toHaveBeenCalledWith(
       expect.arrayContaining(["release", "upload", "v0.4.3", "--clobber", "--repo", "rngagi/bkuw"]),
+    );
+  });
+
+  it("moves an unmaterialized draft tag to the newly tested commit before updating assets", async () => {
+    const input = await releaseFixture();
+    const previousSha = "abcdef0123456789abcdef0123456789abcdef01";
+    const runGh = vi.fn((args: string[]) => {
+      if (args[0] === "release" && args[1] === "view") {
+        return {
+          status: 0,
+          stdout: JSON.stringify({
+            isDraft: true,
+            targetCommitish: previousSha,
+            url: "https://example.test/draft",
+          }),
+          stderr: "",
+        };
+      }
+      if (args[0] === "api") {
+        return { status: 1, stdout: "", stderr: "HTTP 404: Not Found" };
+      }
+      return { status: 0, stdout: "", stderr: "" };
+    });
+
+    await expect(publishDraft(input, { runGh })).resolves.toMatchObject({ action: "updated" });
+    expect(runGh).toHaveBeenCalledWith([
+      "release",
+      "edit",
+      "v0.4.3",
+      "--target",
+      sha,
+      "--repo",
+      "rngagi/bkuw",
+    ]);
+    expect(runGh).toHaveBeenCalledWith(
+      expect.arrayContaining(["release", "upload", "v0.4.3", "--clobber"]),
     );
   });
 

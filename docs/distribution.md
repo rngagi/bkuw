@@ -21,12 +21,12 @@ version commit 的 `main` CI 成功後，`.github/workflows/release.yml` 自動�
 2. 讀取 exact CI commit 的一致版本，並和 Git history 中前一個 package version 比較；只有版本確實遞增且對應 tag 尚不存在時才繼續。因此 version commit 後同一批 push 即使還有 workflow／文件修正，也不會漏掉 release candidate；一般未升版 commit 會正常結束，不打包。
 3. 在 release workflow 的 macOS Apple Silicon runner 建置 `.app`／`.dmg`，並在 Windows x64 runner 建置 NSIS installer。
 4. 僅在這次 release run 上傳 `bkuw-macos-apple-silicon` 與 `bkuw-windows-x64` 暫存 artifacts，保存 7 天供失敗恢復。
-5. Final job 收集一個 `.dmg` 與一個 `.exe`、產生並重驗 `SHA256SUMS.txt`；兩個平台都成功後，才在 exact commit 建立 tag 與含三個 assets、categorized changelog 的 Draft GitHub Release。
+5. Final job 收集一個 `.dmg` 與一個 `.exe`、產生並重驗 `SHA256SUMS.txt`；兩個平台都成功後，才建立以 exact commit 為 target、含三個 assets 與 categorized changelog 的 Draft GitHub Release。Draft 階段尚未 materialize Git tag，人工 Publish 時 GitHub 才建立 tag。
 6. Draft 經人工確認 assets 與說明後才發布；來源不可信、CI 失敗、build 失敗、版本不一致或 checksum 錯誤都不會建立 Release。
 
 一般 CI jobs 不取得發布權限；只有 release final job 取得 `contents: write`。發布順序為「逐功能完成驗證並 commit → `release:prepare` → push version commit 到 `main` → GitHub 自動建立 Draft → 人工 Publish」。Release 不重跑整套 tests，只利用 Rust cache 執行平台 packaging。這個流程不會自動簽章。
 
-一般失敗使用 GitHub 的 **Re-run failed jobs**，已成功的 installer jobs 不需重跑。若必須先修正 workflow，可在 Actions 手動執行 `release` recovery，輸入 version、通過 CI 的 exact target SHA，以及仍在 7 天保存期內的失敗 release run ID；workflow 會驗證 run path 與 SHA，再下載既有 artifacts，跳過兩個平台 packaging，重新建立或更新同一 Draft。`publish-draft` 只允許更新仍為 draft、且 tag 指向相同 commit 的版本，已公開 Release 不可覆寫。
+一般失敗使用 GitHub 的 **Re-run failed jobs**，已成功的 installer jobs 不需重跑。若必須先修正 workflow，可在 Actions 手動執行 `release` recovery，輸入 version、通過 CI 的 exact target SHA，以及仍在 7 天保存期內的失敗 release run ID；workflow 會驗證 run path 與 SHA，再下載既有 artifacts，跳過兩個平台 packaging，重新建立或更新同一 Draft。`publish-draft` 只允許移動尚未 materialize tag 的 Draft target，或更新 tag 已指向相同 commit 的 Draft；已公開 Release 不可覆寫。
 
 Desktop E2E 使用 release-mode app，而非未最佳化的 debug app。這可使包含 portable fonts 與 ZIP 的 LaTeX export 保持在 WebdriverIO Tauri direct-eval 的時間限制內；Rust integration tests 仍負責完整 export failure／rollback coverage。
 
