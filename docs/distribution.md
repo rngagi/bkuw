@@ -18,7 +18,7 @@ git push origin main
 version commit 的 `main` CI 成功後，`.github/workflows/release.yml` 自動：
 
 1. 確認來源是本 repository 的 trusted `main` push，且 portable-template、Windows x64 與 macOS Apple Silicon jobs 全數成功。
-2. 比較 exact CI commit 與其 parent；只有 package version 確實遞增、四個 canonical version 一致且對應 tag 尚不存在時才繼續。一般功能／文件 commit 會正常結束，不打包。
+2. 讀取 exact CI commit 的一致版本，並和 Git history 中前一個 package version 比較；只有版本確實遞增且對應 tag 尚不存在時才繼續。因此 version commit 後同一批 push 即使還有 workflow／文件修正，也不會漏掉 release candidate；一般未升版 commit 會正常結束，不打包。
 3. 在 release workflow 的 macOS Apple Silicon runner 建置 `.app`／`.dmg`，並在 Windows x64 runner 建置 NSIS installer。
 4. 僅在這次 release run 上傳 `bkuw-macos-apple-silicon` 與 `bkuw-windows-x64` 暫存 artifacts，保存 7 天供失敗恢復。
 5. Final job 收集一個 `.dmg` 與一個 `.exe`、產生並重驗 `SHA256SUMS.txt`；兩個平台都成功後，才在 exact commit 建立 tag 與含三個 assets、categorized changelog 的 Draft GitHub Release。

@@ -19,6 +19,8 @@ describe("release workflow invariants", () => {
     expect(release).not.toMatch(/push:\s*\n\s+tags:/);
     expect(release).toContain("github.event.workflow_run.conclusion == 'success'");
     expect(release).toContain("github.event.workflow_run.head_repository.full_name == github.repository");
+    expect(release).toContain("fetch-depth: 0");
+    expect(release).toContain("git log -2 --format=%H -- package.json");
   });
 
   it("builds only supported installers and creates a draft at the exact SHA", async () => {

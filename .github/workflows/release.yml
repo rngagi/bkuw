@@ -52,7 +52,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.target_sha }}
-          fetch-depth: 2
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -84,7 +84,9 @@ jobs:
           tag="v$version"
 
           if [[ "$EVENT_NAME" == "workflow_run" ]]; then
-            previous_version="$(git show "${target_sha}^:package.json" | jq -r '.version')"
+            mapfile -t version_commits < <(git log -2 --format=%H -- package.json)
+            test "${#version_commits[@]}" -eq 2
+            previous_version="$(git show "${version_commits[1]}:package.json" | jq -r '.version')"
             if [[ "$previous_version" == "$version" ]]; then
               echo "No version change in $target_sha; no release candidate is needed."
               echo "should_release=false" >> "$GITHUB_OUTPUT"
