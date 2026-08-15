@@ -76,6 +76,18 @@ function jsonVersion(contents, filename) {
   return parsed.version;
 }
 
+function replaceJsonVersion(contents, filename, version) {
+  jsonVersion(contents, filename);
+  const matches = contents.match(/^(\s*"version"\s*:\s*")[^"]+("\s*,?\s*)$/gm) ?? [];
+  if (matches.length !== 1) {
+    throw new Error(`${filename} must contain exactly one top-level version field`);
+  }
+  return contents.replace(
+    /^(\s*"version"\s*:\s*")[^"]+("\s*,?\s*)$/m,
+    `$1${version}$2`,
+  );
+}
+
 function cargoTomlVersion(contents) {
   const packageSection = contents.match(/(^\[package\]\n)([\s\S]*?)(?=^\[|(?![\s\S]))/m);
   const match = packageSection?.[2].match(/^version = "([^"]+)"$/m);
@@ -146,19 +158,18 @@ export async function prepareReleaseVersion(root, nextVersion) {
     throw new Error(`The release version must increase from ${currentVersion}; received ${nextVersion}`);
   }
 
-  const packageJson = JSON.parse(files["package.json"]);
-  packageJson.version = nextVersion;
-  const tauriConfig = JSON.parse(files["src-tauri/tauri.conf.json"]);
-  tauriConfig.version = nextVersion;
-
   await writeVersionFiles(root, {
-    "package.json": `${JSON.stringify(packageJson, null, 2)}\n`,
+    "package.json": replaceJsonVersion(files["package.json"], "package.json", nextVersion),
     "src-tauri/Cargo.toml": replaceCargoPackageVersion(
       files["src-tauri/Cargo.toml"],
       nextVersion,
     ),
     "src-tauri/Cargo.lock": replaceCargoLockVersion(files["src-tauri/Cargo.lock"], nextVersion),
-    "src-tauri/tauri.conf.json": `${JSON.stringify(tauriConfig, null, 2)}\n`,
+    "src-tauri/tauri.conf.json": replaceJsonVersion(
+      files["src-tauri/tauri.conf.json"],
+      "src-tauri/tauri.conf.json",
+      nextVersion,
+    ),
   });
 
   return { currentVersion, nextVersion, files: VERSION_FILES };

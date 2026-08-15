@@ -37,6 +37,11 @@ afterEach(async () => {
 describe("release version module", () => {
   it("updates every canonical version file together", async () => {
     const root = await fixture();
+    const tauriPath = join(root, "src-tauri/tauri.conf.json");
+    await writeFile(
+      tauriPath,
+      '{\n  "productName": "bkuw",\n  "version": "0.4.2",\n  "capabilities": ["default"]\n}\n',
+    );
 
     const result = await prepareReleaseVersion(root, "0.4.3");
 
@@ -48,6 +53,7 @@ describe("release version module", () => {
     expect(await readFile(join(root, "src-tauri/Cargo.lock"), "utf8")).toContain(
       'name = "bkuw"\nversion = "0.4.3"',
     );
+    expect(await readFile(tauriPath, "utf8")).toContain('"capabilities": ["default"]');
   });
 
   it("rejects inconsistent source versions before writing", async () => {
