@@ -84,9 +84,15 @@ jobs:
           tag="v$version"
 
           if [[ "$EVENT_NAME" == "workflow_run" ]]; then
-            mapfile -t version_commits < <(git log -2 --format=%H -- package.json)
-            test "${#version_commits[@]}" -eq 2
-            previous_version="$(git show "${version_commits[1]}:package.json" | jq -r '.version')"
+            previous_version=""
+            while IFS= read -r version_commit; do
+              candidate_version="$(git show "${version_commit}:package.json" | jq -r '.version')"
+              if [[ "$candidate_version" != "$version" ]]; then
+                previous_version="$candidate_version"
+                break
+              fi
+            done < <(git log --format=%H -- package.json)
+            test -n "$previous_version"
             if [[ "$previous_version" == "$version" ]]; then
               echo "No version change in $target_sha; no release candidate is needed."
               echo "should_release=false" >> "$GITHUB_OUTPUT"
