@@ -13,9 +13,9 @@ const { backendMock, prepareMock } = vi.hoisted(() => ({
   prepareMock: vi.fn(),
 }));
 
-vi.mock("../../lib/imageCompression", () => ({
+vi.mock("../../lib/imageCompression", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../lib/imageCompression")>(),
   prepareSenseImage: prepareMock,
-  base64ToBytes: vi.fn(() => Uint8Array.from([137, 80, 78, 71])),
 }));
 vi.mock("../../lib/tauri", () => ({
   backend: backendMock,
@@ -39,10 +39,8 @@ describe("SenseImageEditor", () => {
   beforeEach(async () => {
     await i18n.changeLanguage("en");
     vi.clearAllMocks();
-    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:test") });
-    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
     backendMock.listSenseImages.mockResolvedValue([]);
-    backendMock.loadSenseImage.mockResolvedValue({ mimeType: "image/png", dataBase64: "iVBORw==" });
+    backendMock.loadSenseImage.mockResolvedValue({ mimeType: "image/png", dataBase64: "iVBORw0KGgo=" });
     prepareMock.mockResolvedValue({ originalFilename: "field.jpg", pngBase64: "iVBORw==", width: 1600, height: 1200 });
   });
 
@@ -65,11 +63,28 @@ describe("SenseImageEditor", () => {
     }));
     expect(onEntryMutated).toHaveBeenCalledWith(updated);
     expect(await screen.findByText("field.jpg")).toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: "field.jpg" })).toHaveAttribute(
+      "src",
+      "data:image/png;base64,iVBORw0KGgo=",
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Remove photo" }));
     await waitFor(() => expect(backendMock.removeSenseImage).toHaveBeenCalledWith({
       entryId: "entry-1", imageId: "image-1", expectedRevision: 2,
     }));
     expect(onEntryMutated).toHaveBeenLastCalledWith(removed);
+  });
+
+  it.each([
+    ["a backend failure", "en", "Photo preview unavailable.", () => Promise.reject(new Error("read failed"))],
+    ["an invalid payload", "zh-TW", "無法載入相片預覽。", () => Promise.resolve({ mimeType: "image/png" as const, dataBase64: "aGVsbG8=" })],
+  ])("shows an explicit preview error for %s", async (_case, locale, message, response) => {
+    await i18n.changeLanguage(locale);
+    backendMock.listSenseImages.mockResolvedValue([image]);
+    backendMock.loadSenseImage.mockImplementation(response);
+    render(<SenseImageEditor entryId="entry-1" senseId="sense-1" onFlush={vi.fn()} onEntryMutated={vi.fn()} />);
+
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(screen.queryByText(locale === "en" ? "Loading…" : "載入中…")).not.toBeInTheDocument();
   });
 });

@@ -3639,7 +3639,7 @@ mod tests {
         ] {
             assert!(project.join(name).is_file(), "missing {name}");
         }
-        assert!(project.join(format!("images/{}.png", image.id)).is_file());
+        assert!(project.join(format!("images/{}.jpg", image.id)).is_file());
         let main = std::fs::read_to_string(project.join("main.tex")).expect("main.tex");
         assert!(main.contains("Field \\#1 \\& notes"));
         assert!(main.contains("A\\_B"));
@@ -3652,7 +3652,7 @@ mod tests {
         assert!(entries.contains("kuo˥˩"));
         assert!(!entries.contains("IPA:"));
         assert!(!entries.contains("(他過河了。)"));
-        assert!(entries.contains(&format!("\\BkuwSenseImage{{images/{}.png}}", image.id)));
+        assert!(entries.contains(&format!("\\BkuwSenseImage{{images/{}.jpg}}", image.id)));
         let entry_position = entries.find("\\BkuwEntry").expect("entry heading");
         let note_position = entries.find("[註] 詞條備註").expect("entry note");
         let sense_position = entries.find("\\BkuwSense").expect("sense");
@@ -3674,7 +3674,7 @@ mod tests {
         assert!(names.contains(&"fonts/chiron-sung-hk/ChironSungHK-R.otf".into()));
         assert!(names.contains(&"fonts/chiron-sung-hk/ChironSungHK-B.otf".into()));
         assert!(names.contains(&"fonts/chiron-sung-hk/LICENSE.txt".into()));
-        assert!(names.contains(&format!("images/{}.png", image.id)));
+        assert!(names.contains(&format!("images/{}.jpg", image.id)));
         assert_eq!(result.pdf_status, crate::domain::PdfStatus::NotRequested);
     }
 

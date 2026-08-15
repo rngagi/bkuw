@@ -60,7 +60,7 @@ Main window 的 close request 由 React 攔截，先 flush entry autosave、關�
 
 `save_entry` 接收 forms、senses、examples、example forms 與 relations 的完整 aggregate，在單一 transaction 內以 replace-diff strategy 寫入。Sense rows 使用 upsert／delete diff，而不是全部刪除重建，避免一般 autosave cascade 掉仍存在 sense 的相片。`revision` 使用 optimistic concurrency 防止較舊 autosave 覆蓋新資料。
 
-相片二進位不放進 entry aggregate。Frontend `imageCompression` adapter 依指定的 Canvas 流程解碼 PNG／JPEG／WebP，只有長邊超過 2560px 時等比例縮圖，再輸出 PNG；這是輕度尺寸處理，不承諾固定 byte 上限。Attach／remove command 會先 flush entry，使用同一 entry revision 做 optimistic concurrency。Rust 重新解碼 PNG、取得可信尺寸、計算 SHA-256，先寫 temporary sibling，再於 DB transaction 內更新 revision 與 metadata；load 只接受 DB 中由 active project 指向的固定 `media/images/<uuid>.png`。刪除 sense 成功後清理失去 DB reference 的檔案。
+相片二進位不放進 entry aggregate。Frontend `imageCompression` adapter 依指定的 Canvas 流程解碼 PNG／JPEG／WebP，只有長邊超過 2560px 時等比例縮圖，再輸出 PNG；這是輕度尺寸處理，不承諾固定 byte 上限。Attach／remove command 會先 flush entry，使用同一 entry revision 做 optimistic concurrency。Rust 重新解碼 PNG、取得可信尺寸、計算 SHA-256，先寫 temporary sibling，再於 DB transaction 內更新 revision 與 metadata；load 只接受 DB 中由 active project 指向的固定 `media/images/<uuid>.png`。Frontend 驗證回傳內容的 PNG signature，使用 CSP 已允許的 `data:image/png;base64,...` 顯示，不需 `blob:` 或 filesystem capability；失敗以明確 preview error 結束 loading。刪除 sense 成功後清理失去 DB reference 的檔案。
 
 ## SQLite schema
 
@@ -129,7 +129,7 @@ CSV renderer 固定 rngagi-corpus v0.3 九欄。ICU4X 依 profile language tag �
 
 LaTeX renderer 從零建立通用 XeLaTeX source，不複製 `docs/main.tex` 的授權巨集。所有 user text 經集中 escaping；writing-system font macros 使用純字母 control sequence 與 project-relative font paths。Pronunciation writing system 的 form 只傳入詞頭 macro 的右側參數，並從其他 forms metadata 排除。Export settings 的 Rust validation 保證 headword／pronunciation IDs 不同，frontend 同時過濾重複選項；舊 profile 若重複則 normalize 為未指定 pronunciation。Related-entry renderer 依 profile 選擇 root/base/both，掃描 export snapshot 中直接指向 target 的 relations；snapshot 已排除 soft-deleted entries，source 以 entry 為單位去重且不遞迴。Reverse index 由 Rust 排序並直接產生 `hyperlink`／`pageref`，不使用 makeindex。
 
-`includeSenseImages` 預設為 false，以 serde default 相容舊 export profile。啟用時，preview 與 render 都只讀 `media/images/<uuid>.png`，驗證 PNG signature 與 DB SHA-256，然後以 `images/<uuid>.png` 加入 source tree；template 使用 `graphicx` 限制欄寬與最大高度並保持比例。未啟用時不讀或打包媒體，CSV renderer 永遠不表示相片。
+`includeSenseImages` 預設為 false，以 serde default 相容舊 export profile。啟用時，preview 與 render 都只讀 `media/images/<uuid>.png` 並驗證 PNG signature 與 DB SHA-256。Render 在記憶體中以 Lanczos3 將來源等比例縮入 `1000×900px` 且不放大；實際不透明圖使用品質 82 JPEG，含有效透明像素的圖使用 best-compression PNG，再以對應的 `.jpg`／`.png` 路徑加入 source tree。LaTeX folder、Overleaf ZIP 與隔離 PDF build 共用同一組衍生 bytes，project-local PNG 不被改寫；template 使用 `graphicx` 限制欄寬與最大高度並保持比例。未啟用時不讀或打包媒體，CSV renderer 永遠不表示相片。
 
 Font manager 是另一個 deep module。固定 catalog 包含 TeX Gyre Termes、Charis SIL、Noto Serif、Noto Serif CJK TC、Chiron Sung HK 與 Chiron Hei HK，並記錄 pack ID、上游固定 commit/release、HTTPS URL、archive members、逐檔與 archive SHA-256、版本、LaTeX faces 與授權檔。兩個 Chiron packs 使用上游 fixed tag 的 static OTF Regular／Bold 與 SIL OFL 1.1 授權；不從浮動 branch 下載。下載先進 app-local staging directory；只有 archive 與每個 extracted/downloaded file 全部通過雜湊驗證，才以 manifest 啟用 cache。cache 每次使用前依 manifest 重驗，損毀 pack 視為 invalid。React 不接觸網路或 filesystem，只能列出狀態與請求安裝；Rust HTTP client 只能使用 catalog 內建 URL。
 

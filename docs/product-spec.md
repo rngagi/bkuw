@@ -36,7 +36,7 @@ Entry 可包含：
 - 依 project writing systems 自動產生的 forms；每個 writing system 一個一般輸入欄位，避免重複新增相同表記。
 - 任意數量的 ordered senses；POS 只保存在 sense。
 - 每個 sense 下任意數量的 ordered examples。
-- 每個 sense 可加入多張相片；接受 PNG、JPEG、WebP，過大來源在裝置上輕度縮圖後統一保存為 project-local PNG。
+- 每個 sense 可加入多張相片；接受 PNG、JPEG、WebP，過大來源在裝置上輕度縮圖後統一保存為 project-local PNG。Editor 必須顯示相片預覽，讀取或內容驗證失敗時顯示明確的本地化錯誤，不得永久停在載入狀態。
 - root/base relations，可連到另一 entry；尚未建立 target 時可填「未連結詞形」，target 日後移除時也保留這段可讀 label。
 - entry-level notes。
 
@@ -109,7 +109,7 @@ LaTeX 匯出包含可編輯來源資料夾與不含 PDF／aux／log 的 Overleaf
 
 LaTeX profile 可選擇不顯示關聯詞，或顯示 root、base、兩者。對每個 target entry 只收集直接指向它的 incoming live relations，最多一層、不遞迴，同一 source entry 去重；摘要顯示 headword、optional pronunciation 與第一個 sense gloss，並連回完整詞條。
 
-LaTeX profile 另可選擇是否包含義項相片。開啟時，preview 必須驗證每張 project-local PNG 的路徑與 SHA-256，來源資料夾與 Overleaf ZIP 加入 `images/`，並在相應 sense 下以欄寬內、保持比例的方式排版；關閉時不得把相片放入匯出內容。Corpus CSV 不表示相片。
+LaTeX profile 另可選擇是否包含義項相片。開啟時，preview 必須驗證每張 project-local PNG 的路徑與 SHA-256；render 將圖片等比例縮入 `1000×900px` 且不放大，不透明圖以品質 82 JPEG、含透明像素的圖以 PNG 加入來源資料夾與 Overleaf ZIP，再於相應 sense 下以欄寬內、保持比例的方式排版。衍生圖只存在匯出結果，不得改寫專案內保存的 PNG；關閉時不得讀取或匯出相片。Corpus CSV 不表示相片。
 
 bkuw 自行管理 portable font packs，不依賴 OS 已安裝字型，也不把字型安裝進系統。首次需要時，由使用者在 Export wizard 下載官方固定版本；Rust 必須先驗證 SHA-256 與 pack manifest，才寫入 app-private cache。匯出資料夾與 ZIP 必須包含實際需要的字型及授權檔。TeX Gyre Termes 是所有 LaTeX/PDF 匯出的必要 base；缺少或 invalid 時屬 fatal validation error。Phonemic／phonetic writing systems 固定使用 Charis SIL。Hant 可選 Noto Serif CJK TC、明體／宋體風格的 Chiron Sung HK，或黑體／無襯線風格的 Chiron Hei HK；UI 必須在選項下明示風格，不要求使用者只靠字型名稱判斷。其他 scripts 使用一般 Noto Serif fallback。現階段不提供 Thai／Tibetan 專用 managed font packs 或 presets。
 

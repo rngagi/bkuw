@@ -16,6 +16,10 @@
 
 最新公開版本為 `v0.4.1`。macOS Intel 不在支援或建置範圍內。
 
+## 尚未發布
+
+- [x] 修正 sense 相片預覽與 LaTeX／PDF 圖片體積：editor 使用 CSP-compatible PNG data URL 並在失敗時結束 loading；匯出將來源縮入 `1000×900px`，不透明圖使用品質 82 JPEG、透明圖保留 PNG，且不修改 project-local PNG。完成條件：前端與 Rust 回歸測試、`pnpm check`、`pnpm test`、`pnpm test:rust`、`pnpm tauri build --no-bundle` 全部通過。
+
 ## 候選 backlog
 
 以下尚未承諾版本或優先順序；開始實作前須先確認 scope 與 acceptance criteria。

@@ -30,7 +30,7 @@ base64 = "0.22"
 csv = "1.4"
 fs2 = "0.4"
 hex = "0.4"
-image = { version = "0.25", default-features = false, features = ["png"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 icu_collator = "2.2"
 icu_locale = "2.2"
 rusqlite = { version = "0.37", features = ["backup", "bundled"] }

@@ -162,6 +162,7 @@ textarea { min-height: 72px; resize: vertical; }
 .sense-image-card { position: relative; min-width: 0; margin: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 6px; background: var(--background); }
 .sense-image-card img, .image-placeholder { display: block; width: 100%; height: 150px; object-fit: contain; background: var(--muted); }
 .image-placeholder { display: grid; place-items: center; color: var(--muted-foreground); font-size: 12px; }
+.image-preview-error { padding: 12px; color: var(--destructive); text-align: center; }
 .sense-image-card figcaption { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 8px 40px 8px 9px; }
 .sense-image-card figcaption span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .sense-image-card figcaption small { color: var(--muted-foreground); font-size: 11px; }

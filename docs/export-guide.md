@@ -20,7 +20,7 @@ LaTeX 輸出資料夾包含 `main.tex`、`entries.tex`、`reverse-index.tex`、`
 
 1. Confirm the project analysis language. The rngagi-corpus CSV requires Taiwan Traditional Chinese (`zh-TW`).
 2. Open Export from the app header and choose CSV, LaTeX, or PDF.
-3. Configure POS mappings, writing systems, reverse index, related entries, whether to include sense photos, and portable font presets. LaTeX entry order and headings come from Project Settings → Entry ordering.
+3. Configure POS mappings, writing systems, reverse index, related entries, whether to include sense photos, and portable font presets. Included photos are exported as print-sized JPEG/PNG derivatives while project PNGs stay unchanged. LaTeX entry order and headings come from Project Settings → Entry ordering.
 4. Select Preview. bkuw flushes autosave first. Blocking errors must be fixed; warnings identify data the target format cannot represent.
 5. Choose a destination. Replacing an existing CSV requires confirmation and uses a temporary sibling plus atomic replacement.
 

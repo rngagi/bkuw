@@ -11,6 +11,7 @@ use chrono::Utc;
 use csv::{Terminator, WriterBuilder};
 use icu_collator::{Collator, options::CollatorOptions};
 use icu_locale::Locale;
+use image::ImageEncoder;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -41,6 +42,10 @@ pub(crate) const CORPUS_HEADERS: [&str; 9] = [
     "gloss_en",
     "notes",
 ];
+
+const LATEX_IMAGE_MAX_WIDTH: u32 = 1000;
+const LATEX_IMAGE_MAX_HEIGHT: u32 = 900;
+const LATEX_JPEG_QUALITY: u8 = 82;
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -76,6 +81,13 @@ struct CorpusRow {
     notes: String,
     entry_id: String,
     sense_order: i64,
+}
+
+#[derive(Debug)]
+struct LatexImageAsset {
+    id: String,
+    relative_path: String,
+    bytes: Vec<u8>,
 }
 
 pub(crate) fn preview(
@@ -499,6 +511,19 @@ fn render_latex_sources(
 ) -> AppResult<Vec<(String, Vec<u8>)>> {
     let required_ids = required_font_pack_ids(snapshot);
     let font_definitions = font_definitions(snapshot, fonts)?;
+    let image_assets = if snapshot.settings.latex.include_sense_images {
+        snapshot
+            .sense_images
+            .iter()
+            .map(|image| prepare_latex_image(snapshot, image))
+            .collect::<AppResult<Vec<_>>>()?
+    } else {
+        Vec::new()
+    };
+    let image_paths = image_assets
+        .iter()
+        .map(|asset| (asset.id.as_str(), asset.relative_path.as_str()))
+        .collect::<BTreeMap<_, _>>();
     let mut main = include_str!("../templates/latex/main.tex").to_owned();
     main = main.replace("{{FONT_DEFINITIONS}}", &font_definitions);
     main = main.replace("{{TITLE}}", &tex_escape(&snapshot.settings.latex.title));
@@ -511,7 +536,7 @@ fn render_latex_sources(
             ""
         },
     );
-    let entries = render_entries(snapshot)?;
+    let entries = render_entries(snapshot, &image_paths)?;
     let reverse = render_reverse_index(snapshot)?;
     let mut sources = vec![
         ("main.tex".into(), main.into_bytes()),
@@ -527,18 +552,18 @@ fn render_latex_sources(
         ),
     ];
     sources.extend(fonts.export_files(&required_ids)?);
-    if snapshot.settings.latex.include_sense_images {
-        for image in &snapshot.sense_images {
-            sources.push((
-                format!("images/{}.png", image.id),
-                read_export_image(snapshot, image)?,
-            ));
-        }
-    }
+    sources.extend(
+        image_assets
+            .into_iter()
+            .map(|asset| (asset.relative_path, asset.bytes)),
+    );
     Ok(sources)
 }
 
-fn render_entries(snapshot: &ExportSnapshot) -> AppResult<String> {
+fn render_entries(
+    snapshot: &ExportSnapshot,
+    image_paths: &BTreeMap<&str, &str>,
+) -> AppResult<String> {
     let headword_id = snapshot.settings.latex.headword_writing_system_id.as_str();
     let pronunciation_id = snapshot
         .settings
@@ -616,7 +641,13 @@ fn render_entries(snapshot: &ExportSnapshot) -> AppResult<String> {
                     .iter()
                     .filter(|image| image.sense_id == sense.id)
                 {
-                    output.push_str(&format!("\\BkuwSenseImage{{images/{}.png}}\n", image.id));
+                    let path = image_paths.get(image.id.as_str()).ok_or_else(|| {
+                        AppError::new(
+                            "export_validation",
+                            "A rendered sense image is missing from the LaTeX project.",
+                        )
+                    })?;
+                    output.push_str(&format!("\\BkuwSenseImage{{{path}}}\n"));
                 }
             }
             for example in &sense.examples {
@@ -955,6 +986,86 @@ fn read_export_image(snapshot: &ExportSnapshot, image: &ExportSenseImage) -> App
         ));
     }
     Ok(bytes)
+}
+
+fn prepare_latex_image(
+    snapshot: &ExportSnapshot,
+    image: &ExportSenseImage,
+) -> AppResult<LatexImageAsset> {
+    let source = read_export_image(snapshot, image)?;
+    encode_latex_image(&image.id, &source)
+}
+
+fn encode_latex_image(image_id: &str, source: &[u8]) -> AppResult<LatexImageAsset> {
+    let decoded = image::load_from_memory_with_format(source, image::ImageFormat::Png)
+        .map_err(export_image_error)?;
+    let source_rgba = decoded.to_rgba8();
+    let has_transparency = source_rgba.pixels().any(|pixel| pixel.0[3] < u8::MAX);
+    let (width, height) = latex_image_dimensions(source_rgba.width(), source_rgba.height());
+    let resized = if (width, height) == source_rgba.dimensions() {
+        image::DynamicImage::ImageRgba8(source_rgba)
+    } else {
+        image::DynamicImage::ImageRgba8(source_rgba).resize_exact(
+            width,
+            height,
+            image::imageops::FilterType::Lanczos3,
+        )
+    };
+    let mut bytes = Vec::new();
+    let extension = if has_transparency {
+        let rgba = resized.to_rgba8();
+        image::codecs::png::PngEncoder::new_with_quality(
+            &mut bytes,
+            image::codecs::png::CompressionType::Best,
+            image::codecs::png::FilterType::Adaptive,
+        )
+        .write_image(
+            rgba.as_raw(),
+            rgba.width(),
+            rgba.height(),
+            image::ExtendedColorType::Rgba8,
+        )
+        .map_err(export_image_error)?;
+        "png"
+    } else {
+        let rgb = resized.to_rgb8();
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut bytes, LATEX_JPEG_QUALITY)
+            .encode(
+                rgb.as_raw(),
+                rgb.width(),
+                rgb.height(),
+                image::ExtendedColorType::Rgb8,
+            )
+            .map_err(export_image_error)?;
+        "jpg"
+    };
+    Ok(LatexImageAsset {
+        id: image_id.to_owned(),
+        relative_path: format!("images/{image_id}.{extension}"),
+        bytes,
+    })
+}
+
+fn latex_image_dimensions(width: u32, height: u32) -> (u32, u32) {
+    let scale = f64::min(
+        1.0,
+        f64::min(
+            f64::from(LATEX_IMAGE_MAX_WIDTH) / f64::from(width),
+            f64::from(LATEX_IMAGE_MAX_HEIGHT) / f64::from(height),
+        ),
+    );
+    (
+        (f64::from(width) * scale).round().max(1.0) as u32,
+        (f64::from(height) * scale).round().max(1.0) as u32,
+    )
+}
+
+fn export_image_error(error: image::ImageError) -> AppError {
+    AppError::with_details(
+        "export_validation",
+        "A sense image could not be prepared for LaTeX export.",
+        error.to_string(),
+    )
 }
 
 fn encode_source_zip(sources: &[(String, Vec<u8>)]) -> AppResult<Vec<u8>> {
@@ -1427,6 +1538,30 @@ fn export_io(error: std::io::Error, phase: &str) -> AppError {
 mod font_selection_tests {
     use super::*;
 
+    fn test_png(width: u32, height: u32, transparent: bool) -> Vec<u8> {
+        let pixels = image::RgbaImage::from_fn(width, height, |x, y| {
+            let mixed = x
+                .wrapping_mul(37)
+                .wrapping_add(y.wrapping_mul(73))
+                .wrapping_add(x.wrapping_mul(y));
+            image::Rgba([
+                mixed as u8,
+                mixed.rotate_left(7) as u8,
+                mixed.rotate_left(13) as u8,
+                if transparent && (x + y) % 11 == 0 {
+                    96
+                } else {
+                    u8::MAX
+                },
+            ])
+        });
+        let mut output = Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgba8(pixels)
+            .write_to(&mut output, image::ImageFormat::Png)
+            .expect("encode source PNG");
+        output.into_inner()
+    }
+
     #[test]
     fn phonemic_and_phonetic_systems_always_use_charis_sil() {
         for kind in ["phonemic", "phonetic"] {
@@ -1459,5 +1594,35 @@ mod font_selection_tests {
             ),
             CHIRON_HEI_HK_PACK_ID,
         );
+    }
+
+    #[test]
+    fn latex_image_dimensions_fit_the_print_box_without_upscaling() {
+        assert_eq!(latex_image_dimensions(2000, 1200), (1000, 600));
+        assert_eq!(latex_image_dimensions(1200, 2000), (540, 900));
+        assert_eq!(latex_image_dimensions(320, 240), (320, 240));
+    }
+
+    #[test]
+    fn opaque_latex_images_become_smaller_print_sized_jpegs() {
+        let source = test_png(1200, 1000, false);
+        let asset = encode_latex_image("opaque", &source).expect("JPEG derivative");
+        assert_eq!(asset.relative_path, "images/opaque.jpg");
+        assert!(asset.bytes.len() < source.len());
+        let decoded = image::load_from_memory_with_format(&asset.bytes, image::ImageFormat::Jpeg)
+            .expect("decode JPEG derivative");
+        assert_eq!((decoded.width(), decoded.height()), (1000, 833));
+    }
+
+    #[test]
+    fn transparent_latex_images_remain_transparent_pngs() {
+        let source = test_png(600, 1000, true);
+        let asset = encode_latex_image("transparent", &source).expect("PNG derivative");
+        assert_eq!(asset.relative_path, "images/transparent.png");
+        let decoded = image::load_from_memory_with_format(&asset.bytes, image::ImageFormat::Png)
+            .expect("decode PNG derivative")
+            .to_rgba8();
+        assert_eq!(decoded.dimensions(), (540, 900));
+        assert!(decoded.pixels().any(|pixel| pixel.0[3] < u8::MAX));
     }
 }

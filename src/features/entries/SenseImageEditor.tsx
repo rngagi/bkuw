@@ -2,7 +2,7 @@ import { ImagePlus, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/Button";
-import { base64ToBytes, prepareSenseImage } from "../../lib/imageCompression";
+import { pngDataUrl, prepareSenseImage } from "../../lib/imageCompression";
 import { backend, CommandError } from "../../lib/tauri";
 import type { LexicalEntry, SenseImage } from "../../types/domain";
 
@@ -87,22 +87,26 @@ export function SenseImageEditor({ entryId, senseId, onFlush, onEntryMutated }: 
 
 function SenseImageCard({ image, busy, onRemove }: { image: SenseImage; busy: boolean; onRemove(): void }) {
   const { t } = useTranslation();
-  const [url, setUrl] = useState<string | null>(null);
+  const [preview, setPreview] = useState<
+    { status: "loading" } | { status: "ready"; url: string } | { status: "error" }
+  >({ status: "loading" });
   useEffect(() => {
     let active = true;
-    let objectUrl: string | null = null;
+    setPreview({ status: "loading" });
     void backend.loadSenseImage(image.id).then((content) => {
       if (!active) return;
-      objectUrl = URL.createObjectURL(new Blob([base64ToBytes(content.dataBase64)], { type: content.mimeType }));
-      setUrl(objectUrl);
+      setPreview({ status: "ready", url: pngDataUrl(content.dataBase64) });
+    }).catch(() => {
+      if (active) setPreview({ status: "error" });
     });
     return () => {
       active = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [image.id]);
   return <figure className="sense-image-card">
-    {url ? <img src={url} alt={image.originalFilename} /> : <div className="image-placeholder">{t("common.loading")}</div>}
+    {preview.status === "ready" && <img src={preview.url} alt={image.originalFilename} onError={() => setPreview({ status: "error" })} />}
+    {preview.status === "loading" && <div className="image-placeholder">{t("common.loading")}</div>}
+    {preview.status === "error" && <div className="image-placeholder image-preview-error" role="status">{t("entry.imagePreviewFailed")}</div>}
     <figcaption><span title={image.originalFilename}>{image.originalFilename}</span><small>{image.width}×{image.height} · {formatBytes(image.byteSize)}</small></figcaption>
     <Button type="button" size="icon" variant="danger" disabled={busy} onClick={onRemove} aria-label={t("entry.removeImage")}><Trash2 size={14} /></Button>
   </figure>;

@@ -66,6 +66,15 @@ export function base64ToBytes(value: string): Uint8Array<ArrayBuffer> {
   return bytes;
 }
 
+export function pngDataUrl(value: string): string {
+  const bytes = base64ToBytes(value);
+  const signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+  if (bytes.length < signature.length || signature.some((byte, index) => bytes[index] !== byte)) {
+    throw new Error("image_invalid");
+  }
+  return `data:image/png;base64,${value}`;
+}
+
 async function canvasToPng(canvas: HTMLCanvasElement): Promise<Blob> {
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
   if (!blob || blob.type !== "image/png") throw new Error("image_processing");
