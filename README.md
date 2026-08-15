@@ -37,6 +37,10 @@ pnpm tauri build --no-bundle
 pnpm tauri build
 ```
 
+## 介面縮放
+
+Windows 可使用 `Ctrl+-`／`Ctrl+=` 縮小或放大，`Ctrl+0` 回到 100%；macOS 使用對應的 `Cmd` 快捷鍵。bkuw 會在這台裝置保存縮放比例，方便配合 Windows 顯示縮放與不同 DPI 的螢幕。
+
 ## 文件
 
 - [產品規格](docs/product-spec.md)

@@ -58,6 +58,8 @@ Errors 使用 `{ code, message, details? }`，其中 export 另穩定區分 `exp
 
 Main window 的 close request 由 React 攔截，先 flush entry autosave、關閉 active project session，再呼叫 Tauri `destroy()` 完成真正關窗。Capability 僅對 `main` window 額外授權 `core:window:allow-destroy`；這是 `core:default` 未包含、Windows 會強制檢查的必要權限。
 
+App-level zoom shortcut controller 使用 Tauri WebView `setZoom`，只額外授權 `core:webview:allow-set-webview-zoom`。Windows `Ctrl` 與 macOS `Cmd` 搭配 `-`／`=` 依序使用 67%、80%、90%、100%、110%、125%、150% 的 bounded levels，`0` 回到 100%；同時處理 shifted `+` 與 numpad key variants。比例保存於 device-local `localStorage`，啟動時套用；IME composition、AltGr 與其他 app shortcuts 不被攔截。
+
 `save_entry` 接收 forms、senses、examples、example forms 與 relations 的完整 aggregate，在單一 transaction 內以 replace-diff strategy 寫入。Sense rows 使用 upsert／delete diff，而不是全部刪除重建，避免一般 autosave cascade 掉仍存在 sense 的相片。`revision` 使用 optimistic concurrency 防止較舊 autosave 覆蓋新資料。
 
 相片二進位不放進 entry aggregate。Frontend `imageCompression` adapter 依指定的 Canvas 流程解碼 PNG／JPEG／WebP，只有長邊超過 2560px 時等比例縮圖，再輸出 PNG；這是輕度尺寸處理，不承諾固定 byte 上限。Attach／remove command 會先 flush entry，使用同一 entry revision 做 optimistic concurrency。Rust 重新解碼 PNG、取得可信尺寸、計算 SHA-256，先寫 temporary sibling，再於 DB transaction 內更新 revision 與 metadata；load 只接受 DB 中由 active project 指向的固定 `media/images/<uuid>.png`。Frontend 驗證回傳內容的 PNG signature，使用 CSP 已允許的 `data:image/png;base64,...` 顯示，不需 `blob:` 或 filesystem capability；失敗以明確 preview error 結束 loading。刪除 sense 成功後清理失去 DB reference 的檔案。

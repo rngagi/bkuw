@@ -11,7 +11,7 @@
 - Local-first：不需帳號、雲端、遠端資料庫或網路。
 - Lexical-entry centered：entry 是抽象詞彙項目，表記另依 writing system 保存。
 - Unicode-native：支援 IPA、combining marks、中文、泰文、藏文、台灣原住民族語言及其他 Unicode scripts。
-- Keyboard-efficient：建立、搜尋與儲存等高頻操作提供快捷鍵與可預測 tab order。
+- Keyboard-efficient：建立、搜尋與儲存等高頻操作提供快捷鍵與可預測 tab order。Windows 使用 `Ctrl+-`／`Ctrl+=` 縮放、`Ctrl+0` 重設；macOS 使用對應的 `Cmd` 組合，讓不同 DPI／系統縮放環境可調整整個 app 顯示比例。
 - Export-friendly：內部模型不綁定輸出格式；目前提供 versioned corpus CSV 與通用 XeLaTeX/PDF 輸出。
 - Data integrity first：複合更新使用 transaction，schema 使用 migrations，升級前備份。
 

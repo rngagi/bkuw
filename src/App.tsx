@@ -11,6 +11,7 @@ import { LocaleSelect } from "./features/projects/LocaleSelect";
 import { ProjectStart } from "./features/projects/ProjectStart";
 import { SettingsDialog } from "./features/settings/SettingsDialog";
 import { SortOrderDialog } from "./features/settings/SortOrderDialog";
+import { installTauriZoomShortcuts } from "./lib/appZoom";
 import { backend, CommandError } from "./lib/tauri";
 import type { EntrySortSettings, EntrySummary, LexicalEntry, ManualSortItem, ProjectSnapshot, WritingSystem } from "./types/domain";
 
@@ -65,6 +66,8 @@ function App() {
     if (value instanceof CommandError) setError({ key: `error.${value.code}`, detail: value.details });
     else setError({ key: "error.generic" });
   }, []);
+
+  useEffect(() => installTauriZoomShortcuts(() => setError({ key: "error.zoom_failed" })), []);
 
   const refreshEntries = useCallback(async (query: string) => {
     try {

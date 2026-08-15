@@ -19,6 +19,7 @@
 ## 尚未發布
 
 - [x] 修正 sense 相片預覽與 LaTeX／PDF 圖片體積：editor 使用 CSP-compatible PNG data URL 並在失敗時結束 loading；匯出將來源縮入 `1000×900px`，不透明圖使用品質 82 JPEG、透明圖保留 PNG，且不修改 project-local PNG。完成條件：前端與 Rust 回歸測試、`pnpm check`、`pnpm test`、`pnpm test:rust`、`pnpm tauri build --no-bundle` 全部通過。
+- [x] 新增 Windows `Ctrl+-/=/0` 與 macOS `Cmd+-/=/0` WebView 縮放，包含持久化、bounded levels、IME／既有快捷鍵保護及 narrow Tauri capability。完成條件：shortcut unit tests、`pnpm check`、`pnpm test`、`pnpm test:rust` 全部通過。
 
 ## 候選 backlog
 
