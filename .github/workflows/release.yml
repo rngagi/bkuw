@@ -1,75 +1,137 @@
 name: release
 
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_run:
+    workflows:
+      - ci
+    types:
+      - completed
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Stable version without the v prefix (recovery only)
+        required: true
+        type: string
+      target_sha:
+        description: Exact tested main commit (recovery only)
+        required: true
+        type: string
+      source_run_id:
+        description: Failed release run whose installer artifacts should be reused
+        required: false
+        type: string
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: bkuw-release
   cancel-in-progress: false
 
+permissions:
+  contents: read
+
 jobs:
-  verify-release:
-    name: Verify tagged commit
+  plan-release:
+    name: Plan draft release
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
-    timeout-minutes: 40
     permissions:
       actions: read
       contents: read
+    outputs:
+      should_release: ${{ steps.plan.outputs.should_release }}
+      version: ${{ steps.plan.outputs.version }}
+      tag: ${{ steps.plan.outputs.tag }}
+      target_sha: ${{ steps.plan.outputs.target_sha }}
+      artifact_run_id: ${{ steps.plan.outputs.artifact_run_id }}
     steps:
-      - uses: actions/checkout@v4
-      - name: Wait for successful CI on the tagged commit
-        id: source-ci
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.target_sha }}
+          fetch-depth: 2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Resolve and validate release candidate
+        id: plan
         env:
           GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          AUTOMATIC_SHA: ${{ github.event.workflow_run.head_sha }}
+          RECOVERY_VERSION: ${{ inputs.version }}
+          RECOVERY_SHA: ${{ inputs.target_sha }}
+          RECOVERY_RUN_ID: ${{ inputs.source_run_id }}
         shell: bash
         run: |
           set -euo pipefail
-          for attempt in $(seq 1 60); do
-            run_record="$(gh api --method GET \
+
+          if [[ "$EVENT_NAME" == "workflow_run" ]]; then
+            target_sha="$AUTOMATIC_SHA"
+            version="$(node -p "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version")"
+            artifact_run_id=""
+          else
+            target_sha="$RECOVERY_SHA"
+            version="$RECOVERY_VERSION"
+            artifact_run_id="$RECOVERY_RUN_ID"
+          fi
+
+          test "$(git rev-parse HEAD)" = "$target_sha"
+          node scripts/release/version.mjs check "$version"
+          tag="v$version"
+
+          if [[ "$EVENT_NAME" == "workflow_run" ]]; then
+            previous_version="$(git show "${target_sha}^:package.json" | jq -r '.version')"
+            if [[ "$previous_version" == "$version" ]]; then
+              echo "No version change in $target_sha; no release candidate is needed."
+              echo "should_release=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            node -e '
+              const [before, after] = process.argv.slice(1).map((value) => value.split(".").map(Number));
+              const increased = after.some((part, index) => part > before[index] && after.slice(0, index).every((value, prefix) => value === before[prefix]));
+              if (!increased) throw new Error(`Release version must increase from ${process.argv[1]} to ${process.argv[2]}`);
+            ' "$previous_version" "$version"
+
+            if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null 2>&1; then
+              echo "$tag already exists; skipping duplicate release preparation."
+              echo "should_release=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          else
+            ci_record="$(gh api --method GET \
               "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs" \
               -f branch=main \
               -f event=push \
-              -f head_sha="$GITHUB_SHA" \
+              -f head_sha="$target_sha" \
               -f per_page=1 \
-              --jq '.workflow_runs[0] | if . == null then empty else [.id, .status, (.conclusion // "")] | @tsv end')"
+              --jq '.workflow_runs[0] | if . == null then empty else [.status, (.conclusion // "")] | @tsv end')"
+            test "$ci_record" = $'completed\tsuccess'
 
-            if [[ -z "$run_record" ]]; then
-              echo "Waiting for a main CI run for $GITHUB_SHA ($attempt/60)."
-            else
-              IFS=$'\t' read -r run_id run_status run_conclusion <<< "$run_record"
-              if [[ "$run_status" == "completed" && "$run_conclusion" == "success" ]]; then
-                echo "Verified successful main CI run $run_id for $GITHUB_SHA."
-                exit 0
-              fi
-              if [[ "$run_status" == "completed" ]]; then
-                echo "Main CI run $run_id completed with conclusion: $run_conclusion." >&2
-                echo "Fix or rerun that CI before retrying this release workflow." >&2
-                exit 1
-              fi
-              echo "Main CI run $run_id is $run_status ($attempt/60)."
+            if [[ -n "$artifact_run_id" ]]; then
+              recovery_record="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$artifact_run_id" \
+                --jq '[.head_sha, .path] | @tsv')"
+              test "$recovery_record" = "$target_sha"$'\t.github/workflows/release.yml'
             fi
-            sleep 30
-          done
+          fi
 
-          echo "Timed out waiting for successful main CI for $GITHUB_SHA." >&2
-          exit 1
-      - name: Verify tag and application versions
-        shell: bash
-        run: |
-          set -euo pipefail
-          release_version="${GITHUB_REF_NAME#v}"
-          package_version="$(jq -r '.version' package.json)"
-          tauri_version="$(jq -r '.version' src-tauri/tauri.conf.json)"
-          cargo_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' src-tauri/Cargo.toml | head -n 1)"
-          test "$package_version" = "$release_version"
-          test "$tauri_version" = "$release_version"
-          test "$cargo_version" = "$release_version"
+          {
+            echo "should_release=true"
+            echo "version=$version"
+            echo "tag=$tag"
+            echo "target_sha=$target_sha"
+            echo "artifact_run_id=$artifact_run_id"
+          } >> "$GITHUB_OUTPUT"
 
   build-installers:
     name: Build ${{ matrix.name }} installer
-    needs: verify-release
+    needs: plan-release
+    if: >-
+      needs.plan-release.outputs.should_release == 'true' &&
+      needs.plan-release.outputs.artifact_run_id == ''
     strategy:
       fail-fast: false
       matrix:
@@ -79,20 +141,24 @@ jobs:
             target: aarch64-apple-darwin
             bundles: app,dmg
             artifact_name: bkuw-macos-apple-silicon
+            artifact_path: src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
           - name: Windows x64
             os: windows-latest
             target: x86_64-pc-windows-msvc
             bundles: nsis
             artifact_name: bkuw-windows-x64
+            artifact_path: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.plan-release.outputs.target_sha }}
+      - uses: pnpm/action-setup@v6
         with:
           version: 11.1.0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -104,26 +170,51 @@ jobs:
           workspaces: src-tauri
       - run: pnpm install --frozen-lockfile
       - run: pnpm tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundles }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact_name }}
-          path: src-tauri/target/${{ matrix.target }}/release/bundle/**/*
+          path: ${{ matrix.artifact_path }}
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 7
 
   publish-release:
-    name: Prepare GitHub Release
-    needs: build-installers
+    name: Prepare GitHub Draft Release
+    needs:
+      - plan-release
+      - build-installers
+    if: >-
+      always() &&
+      needs.plan-release.result == 'success' &&
+      needs.plan-release.outputs.should_release == 'true' &&
+      (needs.build-installers.result == 'success' || needs.build-installers.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.plan-release.outputs.target_sha }}
+      - name: Download installers from this run
+        if: needs.plan-release.outputs.artifact_run_id == ''
+        uses: actions/download-artifact@v8
         with:
           pattern: bkuw-*
           path: downloaded-artifacts
           merge-multiple: true
+      - name: Recover installers from an earlier release run
+        if: needs.plan-release.outputs.artifact_run_id != ''
+        uses: actions/download-artifact@v8
+        with:
+          pattern: bkuw-*
+          path: downloaded-artifacts
+          merge-multiple: true
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ needs.plan-release.outputs.artifact_run_id }}
       - name: Collect installers and generate checksums
+        env:
+          VERSION: ${{ needs.plan-release.outputs.version }}
         shell: bash
         run: |
           set -euo pipefail
@@ -131,41 +222,17 @@ jobs:
           find downloaded-artifacts -type f \( -name '*.dmg' -o -name '*.exe' \) -exec cp '{}' release-files/ \;
           test "$(find release-files -maxdepth 1 -type f -name '*.dmg' | wc -l)" -eq 1
           test "$(find release-files -maxdepth 1 -type f -name '*.exe' | wc -l)" -eq 1
+          test -f "release-files/bkuw_${VERSION}_aarch64.dmg"
+          test -f "release-files/bkuw_${VERSION}_x64-setup.exe"
           cd release-files
-          sha256sum -- *.dmg *.exe > SHA256SUMS.txt
-      - name: Create draft release and upload installers
+          sha256sum -- "bkuw_${VERSION}_aarch64.dmg" "bkuw_${VERSION}_x64-setup.exe" > SHA256SUMS.txt
+      - name: Create or update draft release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_HEADER: |
-            ## Downloads / 下載
-
-            - Windows x64: download the NSIS `setup.exe` installer.
-            - macOS Apple Silicon: download the `.dmg` image. macOS Intel is not supported.
-            - Verify downloads with `SHA256SUMS.txt` when needed.
-
-            ## Unsigned build notice / 未簽署版本提醒
-
-            These installers are not yet code-signed or notarized. Windows SmartScreen and macOS Gatekeeper may show a warning.
-
-            這些安裝包尚未進行程式碼簽章或 Apple notarization，Windows SmartScreen 與 macOS Gatekeeper 可能顯示警告。
-
-            If a trusted macOS download reports that `bkuw.app` is damaged, first try **System Settings → Privacy & Security → Open Anyway**. If necessary, verify the download checksum and then run:
-
-            ```bash
-            sudo xattr -dr com.apple.quarantine /Applications/bkuw.app
-            ```
-
-            Only remove quarantine after confirming that the app came from this repository and its checksum matches.
-        shell: bash
-        run: |
-          set -euo pipefail
-          gh release create "$GITHUB_REF_NAME" \
-            release-files/*.dmg \
-            release-files/*.exe \
-            release-files/SHA256SUMS.txt \
-            --repo "$GITHUB_REPOSITORY" \
-            --verify-tag \
-            --draft \
-            --generate-notes \
-            --title "bkuw $GITHUB_REF_NAME" \
-            --notes "$RELEASE_HEADER"
+        run: >-
+          node scripts/release/publish-draft.mjs
+          --repo "${{ github.repository }}"
+          --tag "${{ needs.plan-release.outputs.tag }}"
+          --sha "${{ needs.plan-release.outputs.target_sha }}"
+          --assets-dir release-files
+          --notes-file .github/release-header.md

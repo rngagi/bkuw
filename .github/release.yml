@@ -3,21 +3,19 @@ changelog:
     labels:
       - ignore-for-release
   categories:
-    - title: Breaking changes
-      labels:
-        - breaking-change
-        - semver-major
-    - title: Features
+    - title: Features / 新功能
       labels:
         - enhancement
-        - semver-minor
-    - title: Fixes
+        - feature
+    - title: Fixes / 修正
       labels:
         - bug
-        - semver-patch
-    - title: Documentation
+        - fix
+    - title: Maintenance / 維護
       labels:
+        - dependencies
         - documentation
-    - title: Other changes
+        - ci
+    - title: Other changes / 其他變更
       labels:
         - "*"
