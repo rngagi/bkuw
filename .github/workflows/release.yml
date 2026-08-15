@@ -163,6 +163,7 @@ jobs:
             release-files/*.dmg \
             release-files/*.exe \
             release-files/SHA256SUMS.txt \
+            --repo "$GITHUB_REPOSITORY" \
             --verify-tag \
             --draft \
             --generate-notes \
