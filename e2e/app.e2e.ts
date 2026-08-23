@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -8,10 +8,80 @@ describe("bkuw desktop shell", () => {
   it("renders the detected locale and opens the project dialog", async () => {
     const heading = await $("h1");
     await expect(heading).toBeDisplayed();
-    const chinese = (await heading.getText()).includes("詞彙專案");
+    const initialHeading = await heading.getText();
+    if (initialHeading.includes("可攜字型") || initialHeading.includes("portable fonts")) {
+      const chineseFonts = initialHeading.includes("可攜字型");
+      await $(chineseFonts ? "button=下載全部字型" : "button=Download all fonts").click();
+      await browser.waitUntil(async () => !(await $("h1").getText()).includes(chineseFonts ? "可攜字型" : "portable fonts"), { timeout: 180_000, timeoutMsg: "portable font setup did not finish" });
+    }
+    const chinese = (await $("h1").getText()).includes("詞彙專案");
     await $(chinese ? "button=建立專案" : "button=Create project").click();
     await expect($("[role=dialog]")).toBeDisplayed();
     await expect($("[role=dialog] h2")).toHaveText(chinese ? "建立專案" : "Create project");
+  });
+
+  it("creates a new project through the typed CSV import commands", async () => {
+    const parentDir = mkdtempSync(join(tmpdir(), "bkuw-csv-e2e-"));
+    const sourcePath = join(parentDir, "source.csv");
+    let projectOpen = false;
+    try {
+      writeFileSync(sourcePath, "form;gloss;example;translation;pos;domain;roots\né;first;sentence;translation;verb;Motion;r1|r2\né;second;;;;Motion;r1|r2\n", "utf8");
+      const inspection = await browser.tauri.execute(
+        ({ core }, path) => core.invoke("inspect_csv", { path, delimiter: null }),
+        sourcePath,
+      ) as any;
+      expect(inspection.delimiter).toBe("semicolon");
+      const primaryId = randomUUID();
+      const previewRequest = {
+        sourcePath,
+        delimiter: inspection.delimiter,
+        project: {
+          parentDir,
+          name: "CSV desktop smoke",
+          languageName: "Test language",
+          languageCode: null,
+          analysisLanguage: "en",
+          writingSystems: [{ id: primaryId, name: "Primary", type: "orthography", scriptCode: null, languageTag: "und", displayRole: "primary", sortOrder: 0, fontFamily: null, notes: null }],
+        },
+        mappings: [
+          { columnIndex: 0, target: { kind: "entryForm", writingSystemId: primaryId } },
+          { columnIndex: 1, target: { kind: "senseGloss" } },
+          { columnIndex: 2, target: { kind: "exampleForm", writingSystemId: primaryId } },
+          { columnIndex: 3, target: { kind: "exampleTranslation" } },
+          { columnIndex: 4, target: { kind: "partOfSpeech" } },
+          { columnIndex: 5, target: { kind: "semanticDomain" } },
+          { columnIndex: 6, target: { kind: "rootFallback" } },
+        ],
+        groups: [],
+        excludedRows: [],
+        rootDelimiter: "|",
+      };
+      const preview = await browser.tauri.execute(
+        ({ core }, request) => core.invoke("preview_csv_import", { request }),
+        previewRequest,
+      ) as any;
+      expect(preview.blockingErrorCount).toBe(0);
+      expect(preview.importEntryCount).toBe(1);
+      expect(preview.importSenseCount).toBe(2);
+      const result = await browser.tauri.execute(
+        ({ core }, request) => core.invoke("create_project_from_csv", { request }),
+        { preview: previewRequest, previewToken: preview.previewToken },
+      ) as any;
+      projectOpen = true;
+      expect(result.snapshot.entries).toHaveLength(1);
+      expect(result.snapshot.partOfSpeechOptions).toEqual(["verb"]);
+      expect(result.snapshot.semanticDomainOptions).toEqual(["Motion"]);
+      const entry = await browser.tauri.execute(
+        ({ core }, id) => core.invoke("load_entry", { id }),
+        result.snapshot.entries[0].id,
+      ) as any;
+      expect(entry.forms[0].text).toBe("é");
+      expect(entry.senses).toHaveLength(2);
+      expect(entry.relations.map((relation: any) => relation.fallbackText)).toEqual(["r1", "r2"]);
+    } finally {
+      if (projectOpen) await browser.tauri.execute(({ core }) => core.invoke("close_project"));
+      rmSync(parentDir, { recursive: true, force: true });
+    }
   });
 
   it("persists a Unicode aggregate across a real desktop project reopen", async () => {
