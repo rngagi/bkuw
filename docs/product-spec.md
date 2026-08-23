@@ -27,7 +27,7 @@ Script code 明確採 ISO 15924 四字母 Title Case 代碼，UI 驗證格式並
 
 建立新 project 後立即開啟 writing-system onboarding：先說明 primary form 與實際例子；script code、BCP 47 language tag 與 font family 收在有逐欄說明的進階區域。Project 的 language code 明確採選填三字母 ISO 639-3，UI 提供官方 registry 的系統瀏覽器連結。已存在同名 `.bkuw` 路徑時必須以 modal 說明，不得覆寫。
 
-Project settings 亦管理可重用的 POS 與 semantic-domain 選項。Sense editor 只從下拉選單選取，避免每個 sense 重複輸入 metadata。
+Project settings 亦管理可重用的 POS 與語意類別選項。Sense editor 只從下拉選單選取，避免每個 sense 重複輸入 metadata。
 
 ## Lexical entries
 
@@ -48,7 +48,7 @@ Phonemic text 儲存時不包含 delimiter、顯示時加 `/…/`；phonetic tex
 
 使用者必須能夠：
 
-1. 建立或開啟 `.bkuw` project。
+1. 建立、從 CSV 匯入，或開啟 `.bkuw` project。
 2. 設定 project 資訊與 writing systems。
 3. 在 two-pane workspace 搜尋、建立及選取 entries。
 4. 編輯 forms、senses、sense-level POS、examples 與 root/base relations。
@@ -66,15 +66,25 @@ Phonemic text 儲存時不包含 delimiter、顯示時加 `/…/`；phonetic tex
 
 ## 搜尋
 
-工作區搜尋 lexical entry forms，以及 sense 的簡釋與定義；不搜尋 POS、semantic domain 或 examples。搜尋為 Unicode-aware substring match，並使用衍生 search key 做 case-folding 與 diacritic folding；因此 `guo` 必須能找到表記或義項中的顯示值 `guò`。原始文字以 NFC 保存，搜尋處理不得改寫顯示資料。
+工作區搜尋 lexical entry forms，以及 sense 的簡釋與定義；不搜尋 POS、語意類別或 examples。搜尋為 Unicode-aware substring match，並使用衍生 search key 做 case-folding 與 diacritic folding；因此 `guo` 必須能找到表記或義項中的顯示值 `guò`。原始文字以 NFC 保存，搜尋處理不得改寫顯示資料。
 
 進階 FTS、fuzzy search 與 example 全文搜尋留待後續版本。
 
+## 從 CSV 建立專案
+
+起始頁提供全頁式 CSV 流程：選檔與分隔符、專案與 writing systems、欄位 mapping、分組與驗證、目的地與結果。來源限 UTF-8／UTF-8 BOM，必須有非空白且不重複的標題列；自動判斷 comma、tab、semicolon，使用者可覆寫。React 不直接讀檔，inspection、解析與驗證都由 Rust command 完成。
+
+使用者可先建立任意 writing systems 並指定 primary、type、script code 與 language tag，再把每個來源欄對應到 entry forms／notes、sense gloss／definition／POS／語意類別、各 writing system 的單一 example form、translation／notes、root fallback 或 Ignore。每個非 Ignore target 最多使用一次，且必須恰有一個 primary entry-form mapping。每個來源列建立一個 sense；example 相關欄全空時不建立 example。
+
+預設將相鄰且 primary form 相同的列建議為同一 entry，使用者可拆分、合併相鄰群組或排除列。同組的 entry forms、entry notes 或 roots 不一致時阻擋匯入，不得取第一值。POS 與語意類別依來源首次出現順序建立 project options；已知 corpus POS code 同步建立 export mapping。Root cell 依使用者指定的單一分隔符（預設 `;`）拆成多筆未連結 fallback，不猜測同形詞 target。
+
+rngagi-corpus v0.3 的九欄順序會精確辨識並預填 mapping；`notes` 中的 `entry_notes`、`sense_definition`、`semantic_domain`、`example_notes` 會還原，未知內容附加至該列 sense definition。正式建立前重新讀取來源並以 SHA-256 綁定 preview token。Rust 產生 UUID、保存 NFC，在 staging project 的單一 SQLite transaction 寫入所有 aggregates；失敗移除 staging，不留下半成品 `.bkuw`。v0.5.0 只建立新專案，不匯入既有專案，也不支援 Big5、無標題列、單列多義項、多 examples、base relation 或自動 root linking。
+
 ## 詞條排序與小標
 
-Project 可指定排序使用的 writing system，並以一行一個元素定義字母表；`ng`、`ch` 等 multigraph 會視為單一排序元素。未定義字母表時，依 writing system language tag 使用 Unicode／ICU collation。自動排序同時產生 entry-list 與匯出辭典共用的小標。
+Project 自動排序可選擇以 writing system 或語意類別分組。Writing-system source 以一行一個元素定義字母表；`ng`、`ch` 等 multigraph 會視為單一排序元素。未定義字母表時，依 writing system language tag 使用 Unicode／ICU collation。語意類別 source 取每個 entry 第一個有值的 sense：依 Project Settings 選項順序排列，未列入設定的 legacy 值接續，未分類置底；類別內仍沿用指定 writing system、自訂 alphabet 或 ICU collation。自動排序同時產生 entry-list 與匯出辭典共用的小標。
 
-每個 entry 可選擇自動小標或覆寫成 project alphabet 的其他小標。變更前必須二次確認並說明：只改變工作區與匯出辭典中的分組，不改寫表記、搜尋內容或該小標內的自然排序；因此 `ngungu` 可移入 `N` 小標，並仍以完整表記在 `N` 內自動排序。
+以 writing system 自動排序時，每個 entry 可選擇自動小標或覆寫成 project alphabet 的其他小標。變更前必須二次確認並說明：只改變工作區與匯出辭典中的分組，不改寫表記、搜尋內容或該小標內的自然排序；因此 `ngungu` 可移入 `N` 小標，並仍以完整表記在 `N` 內自動排序。以語意類別分組時保留既有 override 資料但停用；完全自訂 manual layout 行為不變。
 
 使用者明確確認後才可啟用完全自訂排序。專用介面可拖拉 entries 與 headings、建立或移除 headings，也可從目前自動排序匯入 headings 或從無 headings 開始。新 entry 暫時放在自動對應的小標末端並標示「尚未確認」，直到 layout 再次儲存。切回自動排序需確認；既有手動 layout 保留但不生效。完全自訂模式啟用時，entry-level 小標覆寫停用。
 
@@ -105,13 +115,13 @@ Preview、LaTeX/ZIP 產生與 XeLaTeX 編譯不得凍結 webview。等待期間�
 
 Corpus CSV 固定輸出 rngagi-corpus v0.3 的九欄簡版，每個未刪除 entry 的每個 sense 一列；analysis language 必須是 `zh-TW`。`gloss_en` 在單一 analysis-language 模型下留空。完整映射與 known loss 見 `docs/corpus-csv-contract.md`。
 
-LaTeX 匯出包含可編輯來源資料夾與不含 PDF／aux／log 的 Overleaf-ready ZIP。辭典詞條順序與小標直接使用 project ordering；不另設會互相矛盾的 export collation。通用 template 使用 `fontspec`、雙欄、1.34 倍行距、懸掛縮排、頁眉、橢圓例句標記、欄內小標與 Rust 產生的 reverse index，不依賴日文專用套件或 makeindex。詞條 notes 以 `[註]` 標示並緊接詞頭下方、義項之前；例句原文後以空格直接接續翻譯，不加括號；同一 metadata 行內的多項內容以全型 `；` 分隔。Profile 選定的 pronunciation（包含 IPA）只顯示在主要詞頭右側，不再以 `IPA: …` 或其他表記重複列出；headword 與 pronunciation 不得選用同一 writing system。所有 user text 完整 TeX escape。
+LaTeX 匯出包含可編輯來源資料夾與不含 PDF／aux／log 的 Overleaf-ready ZIP。辭典詞條順序與小標直接使用 project ordering；不另設會互相矛盾的 export collation。通用 template 使用 `fontspec`、雙欄、1.34 倍行距、懸掛縮排、頁眉、橢圓例句標記、欄內小標與 Rust 產生的 reverse index，不依賴日文專用套件或 makeindex。詞條 notes 以 `[註]` 標示並緊接詞頭下方、義項之前；恰有一個義項時省略 `1`，多義項完整編號。例句與翻譯分成兩行，zh-TW 使用「例／譯」、English analysis language 使用 `Ex.`／`Tr.`；空翻譯不產生翻譯行，例句註記留在同一 block 的 muted continuation。中文 metadata 使用全形符號，例如「語意類別：」與 `；`。Profile 選定的 pronunciation（包含 IPA）只顯示在主要詞頭右側，不再以 `IPA: …` 或其他表記重複列出；headword 與 pronunciation 不得選用同一 writing system。所有 user text 完整 TeX escape。
 
 LaTeX profile 可選擇不顯示關聯詞，或顯示 root、base、兩者。對每個 target entry 只收集直接指向它的 incoming live relations，最多一層、不遞迴，同一 source entry 去重；摘要顯示 headword、optional pronunciation 與第一個 sense gloss，並連回完整詞條。
 
 LaTeX profile 另可選擇是否包含義項相片。開啟時，preview 必須驗證每張 project-local PNG 的路徑與 SHA-256；render 將圖片等比例縮入 `1000×900px` 且不放大，不透明圖以品質 82 JPEG、含透明像素的圖以 PNG 加入來源資料夾與 Overleaf ZIP，再於相應 sense 下以欄寬內、保持比例的方式排版。衍生圖只存在匯出結果，不得改寫專案內保存的 PNG；關閉時不得讀取或匯出相片。Corpus CSV 不表示相片。
 
-bkuw 自行管理 portable font packs，不依賴 OS 已安裝字型，也不把字型安裝進系統。首次需要時，由使用者在 Export wizard 下載官方固定版本；Rust 必須先驗證 SHA-256 與 pack manifest，才寫入 app-private cache。匯出資料夾與 ZIP 必須包含實際需要的字型及授權檔。TeX Gyre Termes 是所有 LaTeX/PDF 匯出的必要 base；缺少或 invalid 時屬 fatal validation error。Phonemic／phonetic writing systems 固定使用 Charis SIL。Hant 可選 Noto Serif CJK TC、明體／宋體風格的 Chiron Sung HK，或黑體／無襯線風格的 Chiron Hei HK；UI 必須在選項下明示風格，不要求使用者只靠字型名稱判斷。其他 scripts 使用一般 Noto Serif fallback。現階段不提供 Thai／Tibetan 專用 managed font packs 或 presets。
+bkuw 自行管理 portable font packs，不依賴 OS 已安裝字型，也不把字型安裝進系統。App 啟動時檢查六套 catalog packs；缺少或 invalid 時先顯示獨立設定頁，可批次下載並查看每套 bytes／驗證／完成狀態。已完成套件不重抓；下載失敗後才可選擇離線使用，且不標記完成，下次啟動繼續提醒。Project Settings 與 Export wizard 都保留管理／重試入口。Rust 必須以固定 catalog URL 下載，經 staging、SHA-256 與 pack manifest 驗證後才寫入 app-private cache。匯出資料夾與 ZIP 必須包含實際需要的字型及授權檔。TeX Gyre Termes 是所有 LaTeX/PDF 匯出的必要 base；缺少或 invalid 時屬 fatal validation error。Phonemic／phonetic writing systems 固定使用 Charis SIL。Hant `Auto` 與 zh-TW analysis text 使用昭源宋體；UI 顯示「昭源宋體／昭源黑體」，但既有 pack ID、檔名與 upstream 官方名稱維持相容。其他 scripts 使用一般 Noto Serif fallback。現階段不提供 Thai／Tibetan 專用 managed font packs 或 presets。
 
 左側詞表的主要表記與第一個可用 pronunciation form 顯示在同一行；若 pronunciation writing system 同時是 secondary，不得再顯示一次。下方依 sense order 顯示簡釋，每一列保留該 sense 自己的詞性與 gloss 配對；不同義項的詞性不得彙整成一個無法對應的清單。
 
@@ -121,8 +131,8 @@ PDF 只在本機偵測到 XeLaTeX 時產生。bkuw 在隔離 build directory 中
 
 ## 後續候選
 
-Audio、CSV import、跨 repository contract test、多 analysis-language translations、進階搜尋、IPA helper、tags、filters、duplicate detection、backup manager、簽章與自動更新尚未排入已承諾 milestone；以 `plan.md` 為準。
+Audio、匯入既有專案、跨 repository contract test、多 analysis-language translations、進階搜尋、IPA helper、tags、filters、duplicate detection、backup manager、簽章與自動更新尚未排入已承諾 milestone；以 `plan.md` 為準。
 
 ## 明確排除
 
-目前不包含 accounts、authentication、cloud sync、team collaboration、permissions、server backend、audio、CSV import、mobile、AI transcription、ASR、ELAN-style timeline、waveform segmentation、Git syncing、code signing、notarization、auto-update 或自動上傳 lexical data。受信任的 `main` version commit 通過 exact-SHA CI 後可自動建立 unsigned Draft GitHub Release；正式發布前須人工確認安裝包、checksums 與警告內容。
+目前不包含 accounts、authentication、cloud sync、team collaboration、permissions、server backend、audio、匯入既有專案、Big5 CSV、mobile、AI transcription、ASR、ELAN-style timeline、waveform segmentation、Git syncing、code signing、notarization、auto-update 或自動上傳 lexical data。受信任的 `main` version commit 通過 exact-SHA CI 後可自動建立 unsigned Draft GitHub Release；正式發布前須人工確認安裝包、checksums 與警告內容。

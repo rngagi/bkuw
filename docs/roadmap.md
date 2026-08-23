@@ -32,10 +32,16 @@ v0.4.1 修正 React field-array UI key 覆蓋持久化 sense ID，導致相片�
 
 v0.4.3 修正 WebView CSP 阻擋 sense 相片預覽的問題，並在預覽失敗時顯示雙語錯誤；LaTeX／PDF 匯出將相片縮入 `1000×900px`，不透明圖使用品質 82 JPEG、透明圖保留 PNG，減少雙欄辭典 PDF 體積且不改寫 project-local PNG。另新增 Windows `Ctrl+-/=/0`、macOS `Cmd+-/=/0` 的持久化 app zoom。發布流程新增單一 version preparation command；一般 push CI 不產生安裝包，只有 version commit 的 exact-SHA CI 成功後才自動建置 NSIS／DMG，在兩個平台完成後建立 checksums 與 exact-SHA Draft Release，人工 Publish 時才 materialize tag，並可從失敗 run 重用既有 installer artifacts。
 
+### v0.5 / CSV import, font onboarding and semantic ordering
+
+新增 UTF-8 自由 CSV 建立新專案的全頁流程：delimiter detection、任意 writing systems、欄位 mapping、相鄰列分組／拆分／合併、排除錯誤列、rngagi-corpus v0.3 預填與 notes 還原。來源 hash 與完整設定綁定 preview token；Rust 在 staging project 的單一 SQLite transaction 寫入所有 aggregates，失敗不留下半成品。
+
+Portable fonts 改為首次啟動集中檢查六套 packs、批次進度與下載失敗後的離線例外；Hant `Auto`／zh-TW analysis text 採昭源宋體。Entry ordering V2 可依第一個有值的語意類別分組，configured／legacy／未分類順序與工作區、LaTeX／PDF 共用。辭典輸出另加入單義項省略編號及例／譯分行。
+
 ## 候選 backlog
 
 - Audio import/playback 與 optional recording。
-- CSV import 與經雙方版本化的 bkuw → rngagi-corpus upload workflow。
+- 將 CSV 匯入既有專案，以及經雙方版本化的 bkuw → rngagi-corpus upload workflow。
 - Cross-repository contract fixture／CI；需兩個 repositories 共同確認後才建立。
 - 多 analysis-language translations、進階 FTS、example search、language-specific collation controls。
 - IPA helper、tags、filters、duplicate detection、backup manager。

@@ -18,7 +18,7 @@ form,gloss_zh,word_root,example,example_translation_zh,ipa,part_of_speech,gloss_
 | `ipa` | profile 指定 phonetic／phonemic form；不包含顯示用 `[…]`／`/…/` |
 | `part_of_speech` | project POS mapping 對應的七種 corpus vocabulary |
 | `gloss_en` | 目前的單一 analysis-language 模型固定留空 |
-| `notes` | stable labels 合併 entry notes、sense definition、semantic domain、example notes |
+| `notes` | stable labels 合併 entry notes、sense definition、`semantic_domain`（語意類別）、example notes |
 
 所有未 soft-delete entries 都會處理，每個 sense 一列。排序先使用 profile language tag 的 ICU4X collation 比較 primary form，再以 entry UUID 與 sense order 穩定決定次序。
 
@@ -32,4 +32,6 @@ form,gloss_zh,word_root,example,example_translation_zh,ipa,part_of_speech,gloss_
 
 ## 相容性狀態
 
-目前只修改 `bkuw` repository，沒有 `rngagi-corpus` cross-repository automated contract test，也不會由 CI 上傳資料或修改 corpus repository。若 rngagi-corpus template／version 改變，維護者必須人工重新核對九欄契約、更新 Rust golden fixture，再執行完整 CSV tests。
+v0.5.0 的「從 CSV 建立專案」會在標題恰好符合上述九欄順序時辨識 `rngagi-corpus-v0.3` 並預填：`form`→primary form、`gloss_zh`→sense gloss、`word_root`→unlinked roots、`example`→primary example form、`example_translation_zh`→translation、`ipa`→IPA entry form、`part_of_speech`→POS、`gloss_en`→sense definition、`notes`→structured notes parser。`notes` 的 stable labels `entry_notes`、`sense_definition`、`semantic_domain`、`example_notes` 會還原；未知行附加到 sense definition，避免遺失。這是使用者確認後才執行的匯入 mapping，不是自動上傳或 round-trip backup contract。
+
+本九欄契約已於 2026-08-23 人工重新核對；Rust golden fixture 仍逐 byte 驗證 header、CRLF、quoting 與 stable labels，CSV import tests 另驗證精確 profile detection 與 notes 還原。目前只修改 `bkuw` repository，沒有 `rngagi-corpus` cross-repository automated contract test，也不會由 CI 上傳資料或修改 corpus repository。若 rngagi-corpus template／version 改變，維護者必須再次人工核對九欄契約、更新 Rust golden fixture，再執行完整 CSV tests。

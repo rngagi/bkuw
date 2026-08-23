@@ -11,6 +11,10 @@
 - [x] Unicode-safe autosave、IME composition handling、soft delete／Undo 與英文／台灣繁中 UI。
 - [x] Project alphabet、entry section override、opt-in manual ordering 與 virtualized entry list。
 - [x] rngagi-corpus v0.3 CSV、portable XeLaTeX／Overleaf ZIP／PDF 與 managed font packs。
+- [x] 首次啟動 portable font setup、六套字型批次驗證／下載／離線例外，以及 Project Settings 字型管理入口。
+- [x] EntrySortSettings V2：依 writing system 或第一個有值的語意類別分組，工作區與 LaTeX／PDF 共用順序。
+- [x] UTF-8 自由 CSV 建立新專案：分隔符、writing systems、欄位 mapping、相鄰分組、排除列、staging transaction 與 stale preview 防護。
+- [x] LaTeX／PDF 單義項省略編號、例／譯分行與 analysis-language labels。
 - [x] Form／sense 搜尋、精簡詞表摘要、sense-level 相片與 optional LaTeX／PDF photo export。
 - [x] Sense 相片使用 CSP-compatible app preview；LaTeX／PDF 匯出產生適合雙欄版面的衍生 JPEG／PNG，且不修改 project-local PNG。
 - [x] Windows `Ctrl+-/=/0` 與 macOS `Cmd+-/=/0` WebView 縮放，包含持久化、bounded levels、IME／既有快捷鍵保護及 narrow Tauri capability。
@@ -20,7 +24,7 @@
 
 以下尚未承諾版本或優先順序；開始實作前須先確認 scope 與 acceptance criteria。
 
-- [ ] CSV import 與 versioned bkuw → rngagi-corpus upload workflow。
+- [ ] 將 CSV 匯入既有專案，以及 versioned bkuw → rngagi-corpus upload workflow。
 - [ ] bkuw／rngagi-corpus cross-repository contract fixture 與 CI。
 - [ ] Audio import、playback 與 optional recording。
 - [ ] 多 analysis-language gloss／translation。

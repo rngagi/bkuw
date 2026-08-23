@@ -2,7 +2,7 @@
 
 ## 系統形狀
 
-React 負責 presentation、interaction、draft state 與 localization；Rust 負責 project lifecycle、filesystem、validation、SQLite、migrations、backup、locking、font-pack supply chain 與 aggregate transactions。
+React 負責 presentation、interaction、draft state 與 localization；Rust 負責 project lifecycle、CSV parsing/import、filesystem、validation、SQLite、migrations、backup、locking、font-pack supply chain 與 aggregate transactions。
 
 ```text
 React UI
@@ -20,6 +20,7 @@ Frontend 不可直接執行 SQL。所有 `invoke` 集中在 `src/lib/tauri.ts`�
 
 - 一次只允許一個 active project。
 - 建立 project 時產生 `<name>.bkuw/project.sqlite` 與 `backups/`，遇到既有路徑不得覆寫。
+- CSV 建立新 project 時先使用同一 parent 下的 hidden staging project；所有 writing systems、metadata 與 entry aggregates 在單一 SQLite transaction 寫入，成功關閉 connection／lock 後才 rename 成 `<name>.bkuw`，失敗移除 staging。
 - 開啟時 canonicalize 路徑、驗證目錄與 database identity/schema，再取得 exclusive project lock。
 - migration 前以 SQLite-consistent 方法建立 timestamped backup；migration 失敗時保留原資料並回報 stable error code。
 - 關閉 project 時先 flush pending save，再關閉 connection 與釋放 lock。
@@ -50,6 +51,10 @@ export_project(request) -> ExportResult
 detect_xelatex() -> TexEngineStatus
 list_font_packs() -> FontPackStatus[]
 install_font_pack(packId) -> FontPackStatus
+install_font_packs(packIds, progressChannel) -> FontPackStatus[]
+inspect_csv(path, delimiter?) -> CsvInspection
+preview_csv_import(request) -> CsvImportPreview
+create_project_from_csv(request, previewToken) -> CsvImportResult
 save_entry_sort_settings(settings) -> ProjectSnapshot
 save_manual_sort_layout(layout) -> ProjectSnapshot
 ```
@@ -74,12 +79,12 @@ App-level zoom shortcut controller 使用 Tauri WebView `setZoom`，只額外授
 - `projects.analysis_language`：nullable `zh-TW`／`en`；舊專案 migration 後仍為 null。
 - `export_settings`：project-owned versioned JSON profile；目前 schema version 為 1。
 - `writing_systems`：project、name、type、script/language tags、display role、sort order、font。
-- `metadata_options`：project-owned POS／semantic-domain reusable values 與 sort order。
+- `metadata_options`：project-owned POS／語意類別 reusable values 與 sort order。
 - `lexical_entries`：project、notes、optional section override、revision、timestamps、soft-delete timestamp。
-- `entry_sort_settings`：project-owned versioned JSON；保存 auto/manual mode、排序 writing system 與 ordered alphabet elements。
+- `entry_sort_settings`：project-owned versioned JSON；V2 保存 auto/manual mode、`writingSystem | semanticDomain` source、組內排序 writing system 與 ordered alphabet elements。
 - `manual_sort_layouts`：project-owned versioned JSON；保存 headings 與 entry IDs 的線性 layout。
 - `entry_forms`：entry、writing system、NFC text、derived search key、metadata、sort order。
-- `senses`：entry、gloss、definition、POS、semantic domain、sort order。
+- `senses`：entry、gloss、definition、POS、語意類別、sort order。
 - `sense_images`：sense、project-relative PNG path、原始檔名、尺寸、byte size、SHA-256、sort order、created timestamp。
 - `examples`：sense、translation、notes、sort order。
 - `example_forms`：example、writing system、NFC text、sort order。
@@ -93,7 +98,7 @@ Owned children 使用 `ON DELETE CASCADE`。Relation target 被永久移除時�
 ## Unicode 與搜尋
 
 - 顯示文字在 Rust 寫入前正規化為 NFC。
-- `entry_forms.search_key` 與 `senses.search_key` 是可重建的衍生欄位：Unicode case fold、分解、移除 combining marks、再正規化。Sense key 只由 gloss＋definition 組成，不混入 POS 或 semantic domain。
+- `entry_forms.search_key` 與 `senses.search_key` 是可重建的衍生欄位：Unicode case fold、分解、移除 combining marks、再正規化。Sense key 只由 gloss＋definition 組成，不混入 POS 或語意類別。
 - query 使用同一演算法，對 form 或 sense search key 做 substring matching；Chinese、Tibetan、Thai、IPA 等未折疊內容仍保留並可搜尋。
 - 不假設 code point 等於 grapheme；character-level UI behavior 必須使用 grapheme-aware APIs。
 - Example forms 保存同樣的正規化文字，但目前不納入 entry-list search。
@@ -115,9 +120,19 @@ Migration 2 新增 `metadata_options`。Migration 3 新增 `projects.analysis_la
 
 ## Ordering module
 
-Rust `ordering` module 是工作區與 LaTeX 匯出的集中排序 seam。輸入為 live entry summaries、project sort settings、manual layout 與 language tag；輸出包含確定順序、section label 與 `manualOrderPending`。自訂 alphabet 使用 longest-match tokenization，確保 `ng` 不被拆為 `n`＋`g`；未定義 alphabet 時使用 ICU4X collator。Section override 只替換 group key，full form sort key 不變。
+Rust `ordering` module 是工作區與 LaTeX 匯出的集中排序 seam。`EntrySortSettingsV2` 增加 `source = writingSystem | semanticDomain`；V1 JSON 以 serde default 讀成 writing-system source，在下次保存時寫回 V2，SQLite row version 仍沿用 migration 4 contract，不需 schema migration。輸入為 live entry summaries、project sort settings、manual layout、language tag 與語意類別 options；輸出包含確定順序、section label 與 `manualOrderPending`。
+
+Writing-system source 的自訂 alphabet 使用 longest-match tokenization，確保 `ng` 不被拆為 `n`＋`g`；未定義 alphabet 時使用 ICU4X collator。Section override 只替換 group key，full form sort key 不變。語意類別 source（內部值 `semanticDomain`）以 sense sort order 取得第一個非空值：configured options 先依設定順序，legacy values 接續依 label，空值最後；組內仍比較相同 writing-system sort key。此 source 不讀 section override，React editor 同時停用該 control。
 
 Manual layout 把 heading 與 entry 當作同一線性序列。已刪除 entry 在讀取時忽略；layout 未收錄的新／恢復 entry 依自動規則插入對應 section 尾端並標示 pending。切回 auto 不刪除 layout。Frontend 只送出 typed settings/layout commands，不自行推導持久化順序。
+
+## CSV import module
+
+`csv_import` 是建立新 project 的 deep module。公開介面只有 inspection、preview 與 create；內部封裝 UTF-8／BOM 驗證、comma／tab／semicolon detection、header contract、mapping discriminated unions、row materialization、rngagi notes parser、group conflict rules、metadata collection、UUID、NFC、preview token 與 aggregate construction。React 只透過 `src/lib/tauri.ts` 選檔並傳送 typed DTO，不讀來源 bytes、SQLite 或 project filesystem。
+
+Preview token 由來源 raw bytes 的 SHA-256 與完整 `CsvPreviewRequest` 序列化共同產生。Create 重新讀檔並重跑 mapping、分組、排除列與 validation；token 不同回傳 `stale_preview`。每個 included row 建立一個 sense，example fields 全空時不建立 example；相鄰相同 primary form 只是建議分組，explicit groups 必須相鄰、互斥並覆蓋全部 included rows。Entry-level forms／notes／roots 在同組有多個 distinct value 時回傳 blocking issue。
+
+Create 階段才將 frontend-local writing-system IDs remap 成 Rust UUID，並為 entries、forms、senses、examples、relations 產生 UUID。POS／語意類別依 materialized source order 去重；known POS 同步寫入 corpus export mappings。Database module 接收完成的 aggregates，在 staging project 的同一 transaction 替換預設 writing system、寫入 project metadata/export settings 及全部 aggregates，然後移到正式路徑。
 
 `ManualSortItem` 的 Tauri JSON contract 固定使用 camelCase，尤其 entry variant 必須是 `entryId`；Rust 以 `rename_all_fields` 保證 tagged enum 的 struct fields 與 TypeScript schema 一致。Manual mode 若因舊版部分成功狀態而缺少 layout，workspace 仍提供直接管理入口，editor 載入所有 live entries 並在首次保存時建立 layout，無須手動修資料庫。
 
@@ -134,6 +149,8 @@ LaTeX renderer 從零建立通用 XeLaTeX source，不複製 `docs/main.tex` 的
 `includeSenseImages` 預設為 false，以 serde default 相容舊 export profile。啟用時，preview 與 render 都只讀 `media/images/<uuid>.png` 並驗證 PNG signature 與 DB SHA-256。Render 在記憶體中以 Lanczos3 將來源等比例縮入 `1000×900px` 且不放大；實際不透明圖使用品質 82 JPEG，含有效透明像素的圖使用 best-compression PNG，再以對應的 `.jpg`／`.png` 路徑加入 source tree。LaTeX folder、Overleaf ZIP 與隔離 PDF build 共用同一組衍生 bytes，project-local PNG 不被改寫；template 使用 `graphicx` 限制欄寬與最大高度並保持比例。未啟用時不讀或打包媒體，CSV renderer 永遠不表示相片。
 
 Font manager 是另一個 deep module。固定 catalog 包含 TeX Gyre Termes、Charis SIL、Noto Serif、Noto Serif CJK TC、Chiron Sung HK 與 Chiron Hei HK，並記錄 pack ID、上游固定 commit/release、HTTPS URL、archive members、逐檔與 archive SHA-256、版本、LaTeX faces 與授權檔。兩個 Chiron packs 使用上游 fixed tag 的 static OTF Regular／Bold 與 SIL OFL 1.1 授權；不從浮動 branch 下載。下載先進 app-local staging directory；只有 archive 與每個 extracted/downloaded file 全部通過雜湊驗證，才以 manifest 啟用 cache。cache 每次使用前依 manifest 重驗，損毀 pack 視為 invalid。React 不接觸網路或 filesystem，只能列出狀態與請求安裝；Rust HTTP client 只能使用 catalog 內建 URL。
+
+Startup gate 先列出六套狀態；未全部 installed 時才顯示 setup page。Batch install command 逐 pack 重用 verified completion、以 typed Tauri channel 回報 downloading bytes、verifying、installed／failed；失敗後 UI 才開放當次離線繼續，不保存「已完成」旗標。Hant `Auto` 與 zh-TW analysis font resolver 指向既有 `chiron-sung-hk` pack；upstream catalog identity 不改名。
 
 TeX Gyre Termes 是所有 LaTeX/PDF export 的 mandatory base pack，缺少或 invalid 時 preview 產生 fatal blocking issue。分析語言與每個 writing system 依 profile/script 決定其他必要 packs；phonemic／phonetic 類型不接受 preset override，固定解析為 Charis SIL。需要的字型檔與相應 license 都放進 `fonts/<pack-id>/`，LaTeX folder 與 Overleaf ZIP 因此不依賴 OS font registry。
 
