@@ -204,7 +204,8 @@ export const csvPreviewRequestSchema = z.object({
 });
 export const csvPreviewIssueSchema = z.object({
   severity: z.enum(["error", "warning"]), code: z.string(),
-  rowIndices: z.array(z.number().int().nonnegative()), details: nullableText,
+  rowIndices: z.array(z.number().int().nonnegative()),
+  columnIndices: z.array(z.number().int().nonnegative()).default([]), details: nullableText,
 });
 export const csvImportPreviewSchema = z.object({
   previewToken: z.string(), sourceRowCount: z.number().int().nonnegative(), importEntryCount: z.number().int().nonnegative(),

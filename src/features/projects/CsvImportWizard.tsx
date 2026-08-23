@@ -1,9 +1,10 @@
 import { ArrowLeft, ArrowRight, FileSpreadsheet, Plus, Trash2, X } from "lucide-react";
+import type { TFunction } from "i18next";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/Button";
-import { backend } from "../../lib/tauri";
-import { createId, type CsvColumnMapping, type CsvDelimiter, type CsvImportPreview, type CsvImportResult, type CsvInspection, type CsvMappingTarget, type CsvPreviewRequest, type ProjectSnapshot, type WritingSystem } from "../../types/domain";
+import { backend, CommandError } from "../../lib/tauri";
+import { createId, type CsvColumnMapping, type CsvDelimiter, type CsvImportPreview, type CsvImportResult, type CsvInspection, type CsvMappingTarget, type CsvPreviewIssue, type CsvPreviewRequest, type ProjectSnapshot, type WritingSystem } from "../../types/domain";
 import { LocaleSelect } from "./LocaleSelect";
 
 interface Props {
@@ -30,6 +31,43 @@ function parseTarget(value: string): CsvMappingTarget {
   return { kind } as CsvMappingTarget;
 }
 
+function commandDetails(value?: string): Record<string, string | number> {
+  if (!value) return {};
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as Record<string, string | number>;
+  } catch { /* Use the translated fallback without exposing raw parser diagnostics. */ }
+  return {};
+}
+
+function targetLabel(key: string, systems: WritingSystem[], t: TFunction): string {
+  const [kind, writingSystemId] = key.split(":", 2);
+  const systemName = systems.find((system) => system.id === writingSystemId)?.name ?? writingSystemId;
+  if (kind === "entryForm") return t("csv.targetEntryForm", { name: systemName });
+  if (kind === "exampleForm") return t("csv.targetExampleForm", { name: systemName });
+  const labels: Record<string, string> = {
+    entryNotes: t("csv.targetEntryNotes"), rootFallback: t("csv.targetRoots"),
+    senseGloss: t("entry.gloss"), senseDefinition: t("entry.definition"),
+    partOfSpeech: t("entry.partOfSpeech"), semanticDomain: t("entry.semanticDomain"),
+    exampleTranslation: t("entry.translation"), exampleNotes: t("entry.exampleNotes"),
+  };
+  return labels[kind] ?? key;
+}
+
+function previewIssueLabel(issue: CsvPreviewIssue, inspection: CsvInspection, systems: WritingSystem[], isZh: boolean, t: TFunction): string {
+  const separator = isZh ? "、" : ", ";
+  const columns = [...new Set(issue.columnIndices)].map((index) => {
+    const name = inspection.columns.find((column) => column.index === index)?.name ?? `#${index + 1}`;
+    return isZh ? `「${name}」` : `“${name}”`;
+  }).join(separator);
+  return t(`csv.issue.${issue.code}`, {
+    columns,
+    details: issue.details ?? "",
+    target: issue.details ? targetLabel(issue.details, systems, t) : "",
+    defaultValue: issue.code,
+  });
+}
+
 function suggestedMappings(inspection: CsvInspection, systems: WritingSystem[]): CsvColumnMapping[] {
   const primary = systems.find((system) => system.displayRole === "primary") ?? systems[0];
   const ipa = systems.find((system) => system.type === "phonetic" || system.type === "phonemic");
@@ -52,7 +90,7 @@ function suggestedMappings(inspection: CsvInspection, systems: WritingSystem[]):
 }
 
 export function CsvImportWizard({ onCancel, onProject, onError }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [step, setStep] = useState(0);
   const [inspection, setInspection] = useState<CsvInspection | null>(null);
   const [delimiter, setDelimiter] = useState<CsvDelimiter>("comma");
@@ -70,6 +108,14 @@ export function CsvImportWizard({ onCancel, onProject, onError }: Props) {
   const [result, setResult] = useState<CsvImportResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [localError, setLocalError] = useState("");
+
+  function showCsvError(error: unknown) {
+    if (error instanceof CommandError) {
+      setLocalError(t(`error.${error.code}`, { ...commandDetails(error.details), defaultValue: error.message }));
+    } else {
+      onError(error);
+    }
+  }
 
   const request = useMemo<CsvPreviewRequest | null>(() => inspection ? {
     sourcePath: inspection.sourcePath,
@@ -90,7 +136,7 @@ export function CsvImportWizard({ onCancel, onProject, onError }: Props) {
       const nextSystems = initialSystems(next);
       setInspection(next); setDelimiter(next.delimiter); setName(next.fileName.replace(/\.[^.]+$/, ""));
       setSystems(nextSystems); setMappings(suggestedMappings(next, nextSystems)); setGroups([]); setExcludedRows([]); setPreview(null); setLocalError("");
-    } catch (error) { onError(error); } finally { setBusy(false); }
+    } catch (error) { showCsvError(error); } finally { setBusy(false); }
   }
 
   async function overrideDelimiter(next: CsvDelimiter) {
@@ -99,7 +145,7 @@ export function CsvImportWizard({ onCancel, onProject, onError }: Props) {
       setBusy(true);
       const nextInspection = await backend.inspectCsv(inspection.sourcePath, next);
       setInspection(nextInspection); setDelimiter(next); setMappings(suggestedMappings(nextInspection, systems)); setGroups([]); setPreview(null);
-    } catch (error) { onError(error); } finally { setBusy(false); }
+    } catch (error) { showCsvError(error); } finally { setBusy(false); }
   }
 
   function patchSystem(index: number, patch: Partial<WritingSystem>) {
@@ -116,7 +162,7 @@ export function CsvImportWizard({ onCancel, onProject, onError }: Props) {
       setBusy(true); setLocalError("");
       const next = await backend.previewCsvImport(useSuggestedGroups ? { ...request, groups: [] } : request);
       setPreview(next); setGroups(next.groups.map((group) => group.rowIndices)); setStep(3);
-    } catch (error) { onError(error); } finally { setBusy(false); }
+    } catch (error) { showCsvError(error); } finally { setBusy(false); }
   }
 
   async function refreshGroups(nextGroups: number[][], nextExcluded = excludedRows) {
@@ -125,7 +171,7 @@ export function CsvImportWizard({ onCancel, onProject, onError }: Props) {
       setBusy(true);
       const next = await backend.previewCsvImport({ ...request, groups: nextGroups.map((rowIndices) => ({ rowIndices })), excludedRows: nextExcluded });
       setGroups(next.groups.map((group) => group.rowIndices)); setExcludedRows(nextExcluded); setPreview(next);
-    } catch (error) { onError(error); } finally { setBusy(false); }
+    } catch (error) { showCsvError(error); } finally { setBusy(false); }
   }
 
   function toggleExcluded(row: number) {
@@ -148,7 +194,7 @@ export function CsvImportWizard({ onCancel, onProject, onError }: Props) {
       if (finalPreview.blockingErrorCount) { setLocalError(t("csv.resolveErrors")); setStep(3); return; }
       const imported = await backend.createProjectFromCsv(finalRequest, finalPreview.previewToken);
       setResult(imported); setStep(5);
-    } catch (error) { onError(error); } finally { setBusy(false); }
+    } catch (error) { showCsvError(error); } finally { setBusy(false); }
   }
 
   useEffect(() => {
@@ -173,7 +219,7 @@ export function CsvImportWizard({ onCancel, onProject, onError }: Props) {
 
         {step === 2 && inspection && <section className="csv-step stack"><h2>{t("csv.mapColumns")}</h2><p>{t("csv.mapHelp")}</p><div className="csv-mapping-table">{inspection.columns.map((column) => { const mapping = mappings.find((item) => item.columnIndex === column.index) ?? { columnIndex: column.index, target: { kind: "ignore" } as CsvMappingTarget }; return <div className="csv-mapping-row" key={column.index}><div><strong>{column.name}</strong><small>{column.samples.join(" · ") || t("csv.emptySamples")}</small></div><ArrowRight size={16} /><select aria-label={t("csv.mapColumn", { name: column.name })} value={targetKey(mapping.target)} onChange={(event) => setMappings((current) => current.filter((item) => item.columnIndex !== column.index).concat({ columnIndex: column.index, target: parseTarget(event.target.value) }).sort((a, b) => a.columnIndex - b.columnIndex))}><option value="ignore">{t("csv.ignore")}</option><optgroup label={t("csv.entryTargets")}>{targetOptions.filter((option) => option.value.startsWith("entryForm")).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}<option value="entryNotes">{t("csv.targetEntryNotes")}</option><option value="rootFallback">{t("csv.targetRoots")}</option></optgroup><optgroup label={t("csv.senseTargets")}><option value="senseGloss">{t("entry.gloss")}</option><option value="senseDefinition">{t("entry.definition")}</option><option value="partOfSpeech">{t("entry.partOfSpeech")}</option><option value="semanticDomain">{t("entry.semanticDomain")}</option></optgroup><optgroup label={t("csv.exampleTargets")}>{targetOptions.filter((option) => option.value.startsWith("exampleForm")).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}<option value="exampleTranslation">{t("entry.translation")}</option><option value="exampleNotes">{t("entry.exampleNotes")}</option></optgroup></select></div>; })}</div><label className="field narrow-field"><span>{t("csv.rootDelimiter")}</span><input value={rootDelimiter} maxLength={1} onChange={(event) => setRootDelimiter(event.target.value)} /></label></section>}
 
-        {step === 3 && preview && <section className="csv-step stack"><h2>{t("csv.groupValidate")}</h2><div className="csv-counts"><span>{t("csv.importEntries", { count: preview.importEntryCount })}</span><span>{t("csv.skipRows", { count: preview.skippedRowCount })}</span><span className={preview.blockingErrorCount ? "count-error" : ""}>{t("csv.errors", { count: preview.blockingErrorCount })}</span><span>{t("csv.warnings", { count: preview.warningCount })}</span></div>{preview.issues.length > 0 && <div className="csv-issues">{preview.issues.map((issue, index) => <p className={issue.severity} key={`${issue.code}-${index}`}>{t(`csv.issue.${issue.code}`)}{issue.rowIndices.length ? ` (${t("csv.rows", { rows: issue.rowIndices.map((row) => row + 2).join(", ") })})` : ""}</p>)}</div>}<div className="csv-groups">{preview.groups.map((group, groupIndex) => <div className={`csv-group ${group.blocked ? "blocked" : ""}`} key={group.rowIndices.join("-")}><div><strong>{group.primaryForm || t("workspace.untitled")}</strong><span>{t("csv.sourceRows", { rows: group.rowIndices.map((row) => row + 2).join(", ") })}</span></div><div className="row-actions">{group.rowIndices.length > 1 && <Button size="small" onClick={() => { const [first, ...rest] = group.rowIndices; const next = [...groups]; next.splice(groupIndex, 1, [first], rest); void refreshGroups(next); }}>{t("csv.split")}</Button>}{groupIndex < groups.length - 1 && groups[groupIndex].at(-1)! + 1 === groups[groupIndex + 1][0] && <Button size="small" onClick={() => { const next = [...groups]; next.splice(groupIndex, 2, [...groups[groupIndex], ...groups[groupIndex + 1]]); void refreshGroups(next); }}>{t("csv.mergeNext")}</Button>}</div><div className="csv-group-rows">{group.rowIndices.map((row) => <label key={row}><input type="checkbox" checked={excludedRows.includes(row)} onChange={() => toggleExcluded(row)} />{t("csv.excludeRow", { row: row + 2 })}</label>)}</div></div>)}</div></section>}
+        {step === 3 && preview && <section className="csv-step stack"><h2>{t("csv.groupValidate")}</h2><div className="csv-counts"><span>{t("csv.importEntries", { count: preview.importEntryCount })}</span><span>{t("csv.skipRows", { count: preview.skippedRowCount })}</span><span className={preview.blockingErrorCount ? "count-error" : ""}>{t("csv.errors", { count: preview.blockingErrorCount })}</span><span>{t("csv.warnings", { count: preview.warningCount })}</span></div>{preview.issues.length > 0 && <div className="csv-issues">{preview.issues.map((issue, index) => <p className={issue.severity} key={`${issue.code}-${index}`}>{previewIssueLabel(issue, inspection!, systems, i18n.resolvedLanguage === "zh-TW", t)}{issue.rowIndices.length ? ` (${t("csv.rows", { rows: issue.rowIndices.map((row) => row + 2).join(i18n.resolvedLanguage === "zh-TW" ? "、" : ", ") })})` : ""}</p>)}</div>}<div className="csv-groups">{preview.groups.map((group, groupIndex) => <div className={`csv-group ${group.blocked ? "blocked" : ""}`} key={group.rowIndices.join("-")}><div><strong>{group.primaryForm || t("workspace.untitled")}</strong><span>{t("csv.sourceRows", { rows: group.rowIndices.map((row) => row + 2).join(i18n.resolvedLanguage === "zh-TW" ? "、" : ", ") })}</span></div><div className="row-actions">{group.rowIndices.length > 1 && <Button size="small" onClick={() => { const [first, ...rest] = group.rowIndices; const next = [...groups]; next.splice(groupIndex, 1, [first], rest); void refreshGroups(next); }}>{t("csv.split")}</Button>}{groupIndex < groups.length - 1 && groups[groupIndex].at(-1)! + 1 === groups[groupIndex + 1][0] && <Button size="small" onClick={() => { const next = [...groups]; next.splice(groupIndex, 2, [...groups[groupIndex], ...groups[groupIndex + 1]]); void refreshGroups(next); }}>{t("csv.mergeNext")}</Button>}</div><div className="csv-group-rows">{group.rowIndices.map((row) => <label key={row}><input type="checkbox" checked={excludedRows.includes(row)} onChange={() => toggleExcluded(row)} />{t("csv.excludeRow", { row: row + 2 })}</label>)}</div></div>)}</div></section>}
 
         {step === 4 && <section className="csv-step stack"><h2>{t("csv.destination")}</h2><p>{t("csv.destinationHelp")}</p><label className="field"><span>{t("start.parentFolder")}</span><div className="inline-field"><input value={parentDir} readOnly /><Button onClick={() => void chooseDestination()}>{t("start.chooseFolder")}</Button></div></label><div className="info-banner">{parentDir && name ? `${parentDir}/${name}.bkuw` : t("csv.destinationPending")}</div></section>}
 

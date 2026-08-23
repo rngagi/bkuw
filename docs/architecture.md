@@ -136,6 +136,8 @@ Preview token 由來源 raw bytes 的 SHA-256 與完整 `CsvPreviewRequest` 序�
 
 Create 階段才將 frontend-local writing-system IDs remap 成 Rust UUID，並為 entries、forms、senses、examples、relations 產生 UUID。POS／語意類別依 materialized source order 去重；known POS 同步寫入 corpus export mappings。Database module 接收完成的 aggregates，在 staging project 的同一 transaction 替換預設 writing system、寫入 project metadata/export settings 及全部 aggregates，然後移到正式路徑。
 
+CSV inspection 將可修正的 parse failure 分成 stable error codes，並以 JSON `details` 傳遞 byte／row／expected／actual 等非本地化參數；React wizard 使用翻譯 key 組成完整訊息。Preview validation 的 `CsvPreviewIssue` 帶 `rowIndices`、`columnIndices` 與 optional stable target key，讓 UI 能從 inspection DTO 還原實際來源欄名與 writing-system target。分組衝突在 Rust 依 entry form、entry notes、roots 分別產生 issue，不合併成無法定位的通用錯誤。
+
 `ManualSortItem` 的 Tauri JSON contract 固定使用 camelCase，尤其 entry variant 必須是 `entryId`；Rust 以 `rename_all_fields` 保證 tagged enum 的 struct fields 與 TypeScript schema 一致。Manual mode 若因舊版部分成功狀態而缺少 layout，workspace 仍提供直接管理入口，editor 載入所有 live entries 並在首次保存時建立 layout，無須手動修資料庫。
 
 ## Export architecture

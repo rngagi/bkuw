@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     fs,
     path::Path,
 };
@@ -248,7 +248,7 @@ fn parse(bytes: &[u8], delimiter: CsvDelimiter) -> AppResult<ParsedCsv> {
         AppError::with_details(
             "csv_encoding",
             "CSV import supports UTF-8 and UTF-8 BOM only.",
-            error.to_string(),
+            serde_json::json!({ "byte": error.valid_up_to() + 1 }).to_string(),
         )
     })?;
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
@@ -263,17 +263,44 @@ fn parse(bytes: &[u8], delimiter: CsvDelimiter) -> AppResult<ParsedCsv> {
         .iter()
         .map(|value| normalize_text(value.trim()))
         .collect::<Vec<_>>();
-    if headers.is_empty() || headers.iter().any(String::is_empty) {
+    if headers.is_empty() {
         return Err(AppError::new(
-            "csv_headers",
-            "CSV import requires a non-empty header row.",
+            "csv_headers_missing",
+            "CSV import requires a header row.",
         ));
     }
-    let mut seen = HashSet::new();
-    if headers.iter().any(|header| !seen.insert(header.clone())) {
-        return Err(AppError::new(
-            "csv_headers",
+    let empty_headers = headers
+        .iter()
+        .enumerate()
+        .filter_map(|(index, header)| header.is_empty().then_some(index + 1))
+        .collect::<Vec<_>>();
+    if !empty_headers.is_empty() {
+        return Err(AppError::with_details(
+            "csv_header_empty",
+            "Every CSV column requires a header name.",
+            serde_json::json!({
+                "columns": empty_headers
+                    .iter()
+                    .map(usize::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .to_string(),
+        ));
+    }
+    let mut counts = HashMap::new();
+    for header in &headers {
+        *counts.entry(header.as_str()).or_insert(0_usize) += 1;
+    }
+    let duplicate_headers = counts
+        .into_iter()
+        .filter_map(|(header, count)| (count > 1).then_some(header))
+        .collect::<Vec<_>>();
+    if !duplicate_headers.is_empty() {
+        return Err(AppError::with_details(
+            "csv_header_duplicate",
             "CSV header names must be unique.",
+            serde_json::json!({ "headers": duplicate_headers.join(", ") }).to_string(),
         ));
     }
     let rows = reader
@@ -295,10 +322,28 @@ fn parse(bytes: &[u8], delimiter: CsvDelimiter) -> AppResult<ParsedCsv> {
 }
 
 fn csv_error(error: csv::Error) -> AppError {
+    if let csv::ErrorKind::UnequalLengths {
+        pos,
+        expected_len,
+        len,
+    } = error.kind()
+    {
+        return AppError::with_details(
+            "csv_row_length",
+            "A CSV row has a different number of columns than the header.",
+            serde_json::json!({
+                "row": pos.as_ref().map_or(0, csv::Position::line),
+                "expected": expected_len,
+                "actual": len,
+            })
+            .to_string(),
+        );
+    }
+    let row = error.position().map_or(0, csv::Position::line);
     AppError::with_details(
         "csv_parse",
         "The CSV file could not be parsed.",
-        error.to_string(),
+        serde_json::json!({ "row": row }).to_string(),
     )
 }
 
@@ -354,7 +399,7 @@ fn prepare(request: &CsvPreviewRequest) -> AppResult<PreparedImport> {
         &excluded,
         &mut issues,
     );
-    validate_group_conflicts(&groups, &rows, &mut issues);
+    validate_group_conflicts(&groups, &rows, request, &mut issues);
     Ok(PreparedImport {
         parsed,
         rows,
@@ -377,32 +422,68 @@ fn validate_mappings(
         .map(|system| system.id.as_str())
         .collect::<HashSet<_>>();
     let mut columns = HashSet::new();
-    let mut targets = HashSet::new();
-    let mut primary_count = 0;
+    let mut targets = HashMap::new();
+    let mut primary_columns = Vec::new();
     for mapping in &request.mappings {
-        if mapping.column_index >= parsed.headers.len() || !columns.insert(mapping.column_index) {
-            issues.push(global_error("mapping_column_duplicate"));
+        if mapping.column_index >= parsed.headers.len() {
+            issues.push(issue(
+                CsvPreviewIssueSeverity::Error,
+                "mapping_column_missing",
+                Vec::new(),
+                vec![mapping.column_index],
+                None,
+            ));
+        } else if !columns.insert(mapping.column_index) {
+            issues.push(issue(
+                CsvPreviewIssueSeverity::Error,
+                "mapping_column_duplicate",
+                Vec::new(),
+                vec![mapping.column_index],
+                None,
+            ));
         }
         let target_key = target_key(&mapping.target);
-        if !matches!(mapping.target, CsvMappingTarget::Ignore) && !targets.insert(target_key) {
-            issues.push(global_error("mapping_target_duplicate"));
+        if !matches!(mapping.target, CsvMappingTarget::Ignore)
+            && let Some(first_column) = targets.insert(target_key.clone(), mapping.column_index)
+        {
+            issues.push(issue(
+                CsvPreviewIssueSeverity::Error,
+                "mapping_target_duplicate",
+                Vec::new(),
+                vec![first_column, mapping.column_index],
+                Some(target_key),
+            ));
         }
         match &mapping.target {
             CsvMappingTarget::EntryForm { writing_system_id }
             | CsvMappingTarget::ExampleForm { writing_system_id }
                 if !systems.contains(writing_system_id.as_str()) =>
             {
-                issues.push(global_error("mapping_writing_system_missing"));
+                issues.push(issue(
+                    CsvPreviewIssueSeverity::Error,
+                    "mapping_writing_system_missing",
+                    Vec::new(),
+                    vec![mapping.column_index],
+                    None,
+                ));
             }
             _ => {}
         }
         if matches!(&mapping.target, CsvMappingTarget::EntryForm { writing_system_id } if Some(writing_system_id.as_str()) == primary_id)
         {
-            primary_count += 1;
+            primary_columns.push(mapping.column_index);
         }
     }
-    if primary_count != 1 {
-        issues.push(global_error("primary_form_mapping"));
+    match primary_columns.len() {
+        0 => issues.push(global_error("primary_form_mapping_missing")),
+        1 => {}
+        _ => issues.push(issue(
+            CsvPreviewIssueSeverity::Error,
+            "primary_form_mapping_duplicate",
+            Vec::new(),
+            primary_columns,
+            None,
+        )),
     }
 }
 
@@ -462,7 +543,7 @@ fn row_data(
                         .get(*column_index)
                         .is_some_and(|header| header == "notes")
                 {
-                    parse_rngagi_notes(&normalized, &mut row, index, issues);
+                    parse_rngagi_notes(&normalized, &mut row, index, *column_index, issues);
                 } else {
                     row.entry_notes = Some(normalized);
                 }
@@ -494,6 +575,7 @@ fn parse_rngagi_notes(
     value: &str,
     row: &mut ImportRow,
     index: usize,
+    column_index: usize,
     issues: &mut Vec<CsvPreviewIssue>,
 ) {
     let mut unknown = Vec::new();
@@ -513,12 +595,21 @@ fn parse_rngagi_notes(
     }
     if !unknown.is_empty() {
         append_text(&mut row.definition, &unknown.join("\n"));
-        issues.push(CsvPreviewIssue {
-            severity: CsvPreviewIssueSeverity::Warning,
-            code: "unknown_rngagi_notes".into(),
-            row_indices: vec![index],
-            details: None,
-        });
+        let labels = unknown
+            .iter()
+            .map(|line| {
+                line.split_once(':')
+                    .map_or(line.as_str(), |(key, _)| key.trim())
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        issues.push(issue(
+            CsvPreviewIssueSeverity::Warning,
+            "unknown_rngagi_notes",
+            vec![index],
+            vec![column_index],
+            Some(labels),
+        ));
     }
 }
 
@@ -535,12 +626,21 @@ fn resolve_groups(
     for index in &included {
         let primary = primary_id.and_then(|id| rows[*index].entry_forms.get(id));
         if primary.is_none_or(|value| value.trim().is_empty()) {
-            issues.push(CsvPreviewIssue {
-                severity: CsvPreviewIssueSeverity::Error,
-                code: "primary_form_required".into(),
-                row_indices: vec![*index],
-                details: None,
-            });
+            issues.push(issue(
+                CsvPreviewIssueSeverity::Error,
+                "primary_form_required",
+                vec![*index],
+                primary_id
+                    .and_then(|id| {
+                        request.mappings.iter().find_map(|mapping| {
+                            matches!(&mapping.target, CsvMappingTarget::EntryForm { writing_system_id } if writing_system_id == id)
+                                .then_some(mapping.column_index)
+                        })
+                    })
+                    .into_iter()
+                    .collect(),
+                None,
+            ));
         }
     }
     if request.groups.is_empty() {
@@ -604,31 +704,44 @@ fn resolve_groups(
 fn validate_group_conflicts(
     groups: &[CsvImportGroup],
     rows: &[ImportRow],
+    request: &CsvPreviewRequest,
     issues: &mut Vec<CsvPreviewIssue>,
 ) {
     for group in groups {
-        let distinct_forms = group_values(group, rows, |row| {
-            format!("{:?}", sorted_map(&row.entry_forms))
-        });
-        let distinct_notes = group_values(group, rows, |row| {
-            row.entry_notes.clone().unwrap_or_default()
-        });
-        let distinct_roots = group_values(group, rows, |row| row.roots.join("\u{1f}"));
-        if distinct_forms > 1 || distinct_notes > 1 || distinct_roots > 1 {
-            issues.push(CsvPreviewIssue {
-                severity: CsvPreviewIssueSeverity::Error,
-                code: "group_entry_conflict".into(),
-                row_indices: group.row_indices.clone(),
-                details: None,
-            });
+        for mapping in &request.mappings {
+            let (code, distinct) = match &mapping.target {
+                CsvMappingTarget::EntryForm { writing_system_id } => (
+                    "group_entry_form_conflict",
+                    group_values(group, rows, |row| {
+                        row.entry_forms
+                            .get(writing_system_id)
+                            .cloned()
+                            .unwrap_or_default()
+                    }),
+                ),
+                CsvMappingTarget::EntryNotes => (
+                    "group_entry_notes_conflict",
+                    group_values(group, rows, |row| {
+                        row.entry_notes.clone().unwrap_or_default()
+                    }),
+                ),
+                CsvMappingTarget::RootFallback => (
+                    "group_roots_conflict",
+                    group_values(group, rows, |row| row.roots.join("\u{1f}")),
+                ),
+                _ => continue,
+            };
+            if distinct > 1 {
+                issues.push(issue(
+                    CsvPreviewIssueSeverity::Error,
+                    code,
+                    group.row_indices.clone(),
+                    vec![mapping.column_index],
+                    None,
+                ));
+            }
         }
     }
-}
-
-fn sorted_map(map: &HashMap<String, String>) -> BTreeMap<&str, &str> {
-    map.iter()
-        .map(|(key, value)| (key.as_str(), value.as_str()))
-        .collect()
 }
 
 fn group_values<F>(group: &CsvImportGroup, rows: &[ImportRow], value: F) -> usize
@@ -893,11 +1006,28 @@ fn new_id() -> String {
     Uuid::new_v4().to_string()
 }
 fn global_error(code: &str) -> CsvPreviewIssue {
+    issue(
+        CsvPreviewIssueSeverity::Error,
+        code,
+        Vec::new(),
+        Vec::new(),
+        None,
+    )
+}
+
+fn issue(
+    severity: CsvPreviewIssueSeverity,
+    code: &str,
+    row_indices: Vec<usize>,
+    column_indices: Vec<usize>,
+    details: Option<String>,
+) -> CsvPreviewIssue {
     CsvPreviewIssue {
-        severity: CsvPreviewIssueSeverity::Error,
+        severity,
         code: code.into(),
-        row_indices: Vec::new(),
-        details: None,
+        row_indices,
+        column_indices,
+        details,
     }
 }
 
@@ -963,6 +1093,33 @@ mod tests {
     }
 
     #[test]
+    fn inspection_reports_the_exact_header_and_row_shape_errors() {
+        let (_directory, duplicate_path) = write_fixture(b"form,form\na,A\n");
+        let duplicate = inspect(&duplicate_path, Some(CsvDelimiter::Comma))
+            .expect_err("duplicate header accepted");
+        assert_eq!(duplicate.code, "csv_header_duplicate");
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(
+                duplicate.details.as_deref().expect("duplicate details")
+            )
+            .expect("duplicate JSON")["headers"],
+            "form"
+        );
+
+        let (_directory, uneven_path) = write_fixture(b"form,gloss\na,A,extra\n");
+        let uneven =
+            inspect(&uneven_path, Some(CsvDelimiter::Comma)).expect_err("uneven row accepted");
+        assert_eq!(uneven.code, "csv_row_length");
+        let details = serde_json::from_str::<serde_json::Value>(
+            uneven.details.as_deref().expect("row details"),
+        )
+        .expect("row JSON");
+        assert_eq!(details["row"], 2);
+        assert_eq!(details["expected"], 2);
+        assert_eq!(details["actual"], 3);
+    }
+
+    #[test]
     fn preview_groups_adjacent_forms_and_detects_entry_conflicts() {
         let (_directory, path) = write_fixture(b"form,gloss,notes\na,A,one\na,B,two\nb,C,three\n");
         let mut request = request(path);
@@ -979,12 +1136,30 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![vec![0, 1], vec![2]]
         );
-        assert!(
-            preview
-                .issues
-                .iter()
-                .any(|issue| issue.code == "group_entry_conflict")
-        );
+        let issue = preview
+            .issues
+            .iter()
+            .find(|issue| issue.code == "group_entry_notes_conflict")
+            .expect("entry-notes conflict");
+        assert_eq!(issue.row_indices, vec![0, 1]);
+        assert_eq!(issue.column_indices, vec![2]);
+    }
+
+    #[test]
+    fn preview_identifies_the_columns_assigned_to_the_same_target() {
+        let (_directory, path) = write_fixture(b"form,alias\na,A\n");
+        let mut request = request(path);
+        request.mappings[1].target = CsvMappingTarget::EntryForm {
+            writing_system_id: "primary".into(),
+        };
+        let preview = preview(&request).expect("preview");
+        let duplicate = preview
+            .issues
+            .iter()
+            .find(|issue| issue.code == "mapping_target_duplicate")
+            .expect("duplicate target");
+        assert_eq!(duplicate.column_indices, vec![0, 1]);
+        assert_eq!(duplicate.details.as_deref(), Some("entryForm:primary"));
     }
 
     #[test]
@@ -1010,11 +1185,14 @@ mod tests {
             "entry_notes: note\nsense_definition: def\ncustom: keep",
             &mut row,
             0,
+            8,
             &mut issues,
         );
         assert_eq!(row.entry_notes.as_deref(), Some("note"));
         assert_eq!(row.definition.as_deref(), Some("def\ncustom: keep"));
         assert_eq!(issues[0].code, "unknown_rngagi_notes");
+        assert_eq!(issues[0].column_indices, vec![8]);
+        assert_eq!(issues[0].details.as_deref(), Some("custom"));
     }
 
     #[test]

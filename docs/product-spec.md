@@ -78,6 +78,8 @@ Phonemic text 儲存時不包含 delimiter、顯示時加 `/…/`；phonetic tex
 
 預設將相鄰且 primary form 相同的列建議為同一 entry，使用者可拆分、合併相鄰群組或排除列。同組的 entry forms、entry notes 或 roots 不一致時阻擋匯入，不得取第一值。POS 與語意類別依來源首次出現順序建立 project options；已知 corpus POS code 同步建立 export mapping。Root cell 依使用者指定的單一分隔符（預設 `;`）拆成多筆未連結 fallback，不猜測同形詞 target。
 
+CSV 錯誤必須在 wizard 內以目前 UI 語言直接說明可修正的原因。檔案檢查需指出無標題列、空白或重複標題名稱、非 UTF-8 byte 位置，以及欄數不符的實際來源列、預期欄數與實際欄數；preview issue DTO 同時帶來源列與欄索引，UI 以來源欄名顯示重複 mapping、重複 target、空白 primary form，以及詞形／詞條註記／詞根的個別分組衝突。Rust parser 的原始診斷不得成為唯一的使用者提示。
+
 rngagi-corpus v0.3 的九欄順序會精確辨識並預填 mapping；`notes` 中的 `entry_notes`、`sense_definition`、`semantic_domain`、`example_notes` 會還原，未知內容附加至該列 sense definition。正式建立前重新讀取來源並以 SHA-256 綁定 preview token。Rust 產生 UUID、保存 NFC，在 staging project 的單一 SQLite transaction 寫入所有 aggregates；失敗移除 staging，不留下半成品 `.bkuw`。v0.5.0 只建立新專案，不匯入既有專案，也不支援 Big5、無標題列、單列多義項、多 examples、base relation 或自動 root linking。
 
 ## 詞條排序與小標

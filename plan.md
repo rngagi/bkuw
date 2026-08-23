@@ -14,6 +14,7 @@
 - [x] 首次啟動 portable font setup、六套字型批次驗證／下載／離線例外，以及 Project Settings 字型管理入口。
 - [x] EntrySortSettings V2：依 writing system 或第一個有值的語意類別分組，工作區與 LaTeX／PDF 共用順序。
 - [x] UTF-8 自由 CSV 建立新專案：分隔符、writing systems、欄位 mapping、相鄰分組、排除列、staging transaction 與 stale preview 防護。
+- [x] CSV inspection／preview 錯誤以本地化訊息指出實際來源列、欄名、欄數與個別分組衝突，不只顯示通用解析失敗。
 - [x] LaTeX／PDF 單義項省略編號、例／譯分行與 analysis-language labels。
 - [x] LaTeX／PDF 可選擇逐義項顯示語意類別；以語意類別自動分組時由 UI 與 Rust 輸出層強制隱藏重複標示。
 - [x] Form／sense 搜尋、精簡詞表摘要、sense-level 相片與 optional LaTeX／PDF photo export。

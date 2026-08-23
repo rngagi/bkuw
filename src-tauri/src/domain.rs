@@ -318,6 +318,7 @@ pub struct CsvPreviewIssue {
     pub severity: CsvPreviewIssueSeverity,
     pub code: String,
     pub row_indices: Vec<usize>,
+    pub column_indices: Vec<usize>,
     pub details: Option<String>,
 }
 
