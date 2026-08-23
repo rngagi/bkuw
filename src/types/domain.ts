@@ -143,6 +143,7 @@ export const exportSettingsSchema = z.object({
     reverseIndex: z.enum(["gloss", "none"]),
     relatedEntries: z.enum(["none", "root", "base", "both"]),
     includeSenseImages: z.boolean(),
+    includeSemanticDomains: z.boolean().default(true),
     fontPresets: z.record(z.string(), fontPresetSchema),
   }),
 });

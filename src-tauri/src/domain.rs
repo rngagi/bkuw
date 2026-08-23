@@ -2,6 +2,10 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+const fn default_true() -> bool {
+    true
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Project {
@@ -84,6 +88,8 @@ pub struct LatexExportSettings {
     pub related_entries: RelatedEntriesMode,
     #[serde(default)]
     pub include_sense_images: bool,
+    #[serde(default = "default_true")]
+    pub include_semantic_domains: bool,
     pub font_presets: BTreeMap<String, FontPreset>,
 }
 

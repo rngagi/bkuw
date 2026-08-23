@@ -15,6 +15,7 @@
 - [x] EntrySortSettings V2：依 writing system 或第一個有值的語意類別分組，工作區與 LaTeX／PDF 共用順序。
 - [x] UTF-8 自由 CSV 建立新專案：分隔符、writing systems、欄位 mapping、相鄰分組、排除列、staging transaction 與 stale preview 防護。
 - [x] LaTeX／PDF 單義項省略編號、例／譯分行與 analysis-language labels。
+- [x] LaTeX／PDF 可選擇逐義項顯示語意類別；以語意類別自動分組時由 UI 與 Rust 輸出層強制隱藏重複標示。
 - [x] Form／sense 搜尋、精簡詞表摘要、sense-level 相片與 optional LaTeX／PDF photo export。
 - [x] Sense 相片使用 CSP-compatible app preview；LaTeX／PDF 匯出產生適合雙欄版面的衍生 JPEG／PNG，且不修改 project-local PNG。
 - [x] Windows `Ctrl+-/=/0` 與 macOS `Cmd+-/=/0` WebView 縮放，包含持久化、bounded levels、IME／既有快捷鍵保護及 narrow Tauri capability。

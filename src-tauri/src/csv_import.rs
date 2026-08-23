@@ -168,6 +168,7 @@ pub(crate) fn create(
             reverse_index: ReverseIndexMode::Gloss,
             related_entries: RelatedEntriesMode::None,
             include_sense_images: false,
+            include_semantic_domains: true,
             font_presets,
         },
     };

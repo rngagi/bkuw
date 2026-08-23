@@ -122,6 +122,8 @@ Migration 2 新增 `metadata_options`。Migration 3 新增 `projects.analysis_la
 
 Rust `ordering` module 是工作區與 LaTeX 匯出的集中排序 seam。`EntrySortSettingsV2` 增加 `source = writingSystem | semanticDomain`；V1 JSON 以 serde default 讀成 writing-system source，在下次保存時寫回 V2，SQLite row version 仍沿用 migration 4 contract，不需 schema migration。輸入為 live entry summaries、project sort settings、manual layout、language tag 與語意類別 options；輸出包含確定順序、section label 與 `manualOrderPending`。
 
+LaTeX export profile 的 `includeSemanticDomains` 決定是否逐義項輸出語意類別，舊 profile 缺少此欄時預設為 `true`。React 在 automatic semantic-domain grouping 下將控制項顯示為強制關閉；Rust `export` module 也以相同條件強制抑制逐義項 metadata，避免只靠 UI 維持輸出不重複的 invariant。
+
 Writing-system source 的自訂 alphabet 使用 longest-match tokenization，確保 `ng` 不被拆為 `n`＋`g`；未定義 alphabet 時使用 ICU4X collator。Section override 只替換 group key，full form sort key 不變。語意類別 source（內部值 `semanticDomain`）以 sense sort order 取得第一個非空值：configured options 先依設定順序，legacy values 接續依 label，空值最後；組內仍比較相同 writing-system sort key。此 source 不讀 section override，React editor 同時停用該 control。
 
 Manual layout 把 heading 與 entry 當作同一線性序列。已刪除 entry 在讀取時忽略；layout 未收錄的新／恢復 entry 依自動規則插入對應 section 尾端並標示 pending。切回 auto 不刪除 layout。Frontend 只送出 typed settings/layout commands，不自行推導持久化順序。

@@ -1369,6 +1369,7 @@ fn default_export_settings(project: &Project, systems: &[WritingSystem]) -> Expo
             reverse_index: ReverseIndexMode::Gloss,
             related_entries: RelatedEntriesMode::None,
             include_sense_images: false,
+            include_semantic_domains: true,
             font_presets: systems
                 .iter()
                 .map(|system| (system.id.clone(), FontPreset::Auto))
@@ -2611,6 +2612,73 @@ mod tests {
     }
 
     #[test]
+    fn semantic_domain_grouping_suppresses_per_sense_metadata_in_latex() {
+        let (directory, mut session) = create_session();
+        let snapshot = session.snapshot().expect("snapshot");
+        let primary_id = snapshot.writing_systems[0].id.clone();
+        session
+            .save_entry_sort_settings(EntrySortSettingsV2 {
+                version: 2,
+                mode: EntrySortMode::Auto,
+                source: EntrySortSource::SemanticDomain,
+                writing_system_id: primary_id.clone(),
+                alphabet: Vec::new(),
+            })
+            .expect("semantic-domain ordering");
+        let mut entry = session.create_entry().expect("entry");
+        entry.forms.push(EntryForm {
+            id: super::new_id(),
+            writing_system_id: primary_id,
+            text: "move".into(),
+            variant_label: None,
+            dialect: None,
+            status: None,
+            notes: None,
+            sort_order: 0,
+        });
+        entry.senses.push(Sense {
+            id: super::new_id(),
+            gloss: Some("go".into()),
+            definition: None,
+            part_of_speech: None,
+            semantic_domain: Some("Motion".into()),
+            sort_order: 0,
+            examples: Vec::new(),
+        });
+        session
+            .save_entry(SaveEntryRequest {
+                expected_revision: 0,
+                entry,
+            })
+            .expect("save entry");
+        let fonts = FontManager::seeded_for_tests(
+            directory.path().join("font-cache"),
+            &["tex-gyre-termes", "noto-serif"],
+        );
+        let preview = session
+            .preview_export_with_fonts(ExportKind::Latex, &fonts)
+            .expect("preview");
+        let result = session
+            .export_project_with_fonts(
+                ExportProjectRequest {
+                    kind: ExportKind::Latex,
+                    destination: directory.path().to_string_lossy().into_owned(),
+                    snapshot_token: preview.snapshot_token,
+                    overwrite: false,
+                },
+                &fonts,
+            )
+            .expect("export");
+        let entries = std::fs::read_to_string(
+            std::path::PathBuf::from(result.latex_directory.expect("directory"))
+                .join("entries.tex"),
+        )
+        .expect("entries");
+        assert!(entries.contains("\\BkuwSection{Motion}"));
+        assert!(!entries.contains("Semantic domain:"));
+    }
+
+    #[test]
     fn version_one_sort_settings_load_as_writing_system_and_save_as_version_two() {
         let (_directory, mut session) = create_session();
         let snapshot = session.snapshot().expect("snapshot");
@@ -3434,7 +3502,7 @@ mod tests {
     }
 
     #[test]
-    fn older_export_profile_defaults_related_entries_to_none() {
+    fn older_export_profile_defaults_new_optional_fields() {
         let (_directory, session) = create_session();
         let snapshot = session.snapshot().expect("snapshot");
         let mut value = serde_json::to_value(&snapshot.export_settings).expect("json");
@@ -3443,6 +3511,11 @@ mod tests {
             .and_then(serde_json::Value::as_object_mut)
             .expect("latex object")
             .remove("relatedEntries");
+        value
+            .get_mut("latex")
+            .and_then(serde_json::Value::as_object_mut)
+            .expect("latex object")
+            .remove("includeSemanticDomains");
         session
             .connection
             .execute(
@@ -3459,6 +3532,14 @@ mod tests {
                 .latex
                 .related_entries,
             RelatedEntriesMode::None,
+        );
+        assert!(
+            session
+                .snapshot()
+                .expect("loaded profile")
+                .export_settings
+                .latex
+                .include_semantic_domains
         );
     }
 

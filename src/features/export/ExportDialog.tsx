@@ -190,6 +190,7 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
 
   const blockers = preview?.issues.filter((issue) => issue.severity === "error") ?? [];
   const warnings = preview?.issues.filter((issue) => issue.severity === "warning") ?? [];
+  const semanticDomainGrouped = snapshot.entrySortSettings.mode === "auto" && snapshot.entrySortSettings.source === "semanticDomain";
   const pronunciationSystems = snapshot.writingSystems.filter(
     (system) => system.id !== settings.latex.headwordWritingSystemId,
   );
@@ -230,6 +231,7 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
                 <label className="field"><span>{t("export.reverseIndex")}</span><select value={settings.latex.reverseIndex} onChange={(event) => patchLatex({ reverseIndex: event.target.value as ExportSettings["latex"]["reverseIndex"] })}><option value="gloss">{t("export.gloss")}</option><option value="none">{t("common.none")}</option></select></label>
                 <label className="field"><span>{t("export.relatedEntries")}</span><select aria-label={t("export.relatedEntries")} value={settings.latex.relatedEntries} onChange={(event) => patchLatex({ relatedEntries: event.target.value as ExportSettings["latex"]["relatedEntries"] })}><option value="none">{t("common.none")}</option><option value="root">{t("export.relatedRoot")}</option><option value="base">{t("export.relatedBase")}</option><option value="both">{t("export.relatedBoth")}</option></select><small>{t("export.relatedEntriesHelp")}</small></label>
                 <label className="field checkbox-field"><span><input type="checkbox" aria-label={t("export.includeSenseImages")} checked={settings.latex.includeSenseImages} onChange={(event) => patchLatex({ includeSenseImages: event.target.checked })} />{t("export.includeSenseImages")}</span><small>{t("export.includeSenseImagesHelp")}</small></label>
+                <label className="field checkbox-field"><span><input type="checkbox" aria-label={t("export.includeSemanticDomains")} checked={!semanticDomainGrouped && settings.latex.includeSemanticDomains} disabled={semanticDomainGrouped} onChange={(event) => patchLatex({ includeSemanticDomains: event.target.checked })} />{t("export.includeSemanticDomains")}</span><small>{t(semanticDomainGrouped ? "export.includeSemanticDomainsGroupedHelp" : "export.includeSemanticDomainsHelp")}</small></label>
                 {snapshot.writingSystems.map((system) => {
                   const preset = settings.latex.fontPresets[system.id] ?? "auto";
                   const label = t("export.fontFor", { name: system.name });

@@ -81,7 +81,7 @@ const snapshot: ProjectSnapshot = {
   semanticDomainOptions: ["Motion"],
   exportSettings: {
     version: 1, corpus: { partOfSpeechMappings: {} },
-    latex: { title: "Test", author: "", headwordWritingSystemId: "ws-1", pronunciationWritingSystemId: null, exampleWritingSystemId: "ws-1", collationLanguageTag: null, sectionMode: "auto", reverseIndex: "gloss", relatedEntries: "none", includeSenseImages: false, fontPresets: { "ws-1": "auto" } },
+    latex: { title: "Test", author: "", headwordWritingSystemId: "ws-1", pronunciationWritingSystemId: null, exampleWritingSystemId: "ws-1", collationLanguageTag: null, sectionMode: "auto", reverseIndex: "gloss", relatedEntries: "none", includeSenseImages: false, includeSemanticDomains: true, fontPresets: { "ws-1": "auto" } },
   },
   entrySortSettings: { version: 2, mode: "auto", source: "writingSystem", writingSystemId: "ws-1", alphabet: [] },
   manualSortLayout: { version: 1, items: [] },

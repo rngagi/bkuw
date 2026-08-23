@@ -586,6 +586,10 @@ fn render_entries(
     } else {
         "Semantic domain:"
     };
+    let semantic_domain_grouped = snapshot.entry_sort_settings.mode == EntrySortMode::Auto
+        && snapshot.entry_sort_settings.source == EntrySortSource::SemanticDomain;
+    let include_semantic_domains =
+        snapshot.settings.latex.include_semantic_domains && !semantic_domain_grouped;
     let mut output = String::new();
     for entry in &snapshot.entries {
         let headword = form_text(entry, headword_id).unwrap_or_default();
@@ -659,7 +663,7 @@ fn render_entries(
                 tex_escape(sense.gloss.as_deref().unwrap_or_default()),
                 tex_escape(sense.definition.as_deref().unwrap_or_default()),
             ));
-            if let Some(domain) = &sense.semantic_domain {
+            if include_semantic_domains && let Some(domain) = &sense.semantic_domain {
                 output.push_str(&format!(
                     "\\BkuwMeta{{{} {}}}\n",
                     semantic_domain_label,
