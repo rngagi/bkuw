@@ -7,6 +7,7 @@ import { Button } from "./components/ui/Button";
 import { EntryEditor, type EntryEditorHandle } from "./features/entries/EntryEditor";
 import { EntryList } from "./features/entries/EntryList";
 import { ExportDialog } from "./features/export/ExportDialog";
+import { FontSetup } from "./features/fonts/FontSetup";
 import { LocaleSelect } from "./features/projects/LocaleSelect";
 import { ProjectStart } from "./features/projects/ProjectStart";
 import { SettingsDialog } from "./features/settings/SettingsDialog";
@@ -59,6 +60,8 @@ function App() {
   const [error, setError] = useState<{ key: string; detail?: string } | null>(null);
   const [deletedId, setDeletedId] = useState<string | null>(null);
   const [loadingEntry, setLoadingEntry] = useState(false);
+  const [fontSetupReady, setFontSetupReady] = useState(() => !("__TAURI_INTERNALS__" in window));
+  const [fontManagerOpen, setFontManagerOpen] = useState(false);
   const editorRef = useRef<EntryEditorHandle>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -213,6 +216,8 @@ function App() {
     return () => unlisten?.();
   }, [showError, snapshot]);
 
+  if (!fontSetupReady) return <FontSetup onContinue={() => setFontSetupReady(true)} />;
+
   if (!snapshot) return <><ProjectStart onProject={(project, isNew) => { setSnapshot(project); setEntries(project.entries); setError(null); setOnboarding(isNew); setSettingsOpen(isNew); }} onError={showError} />{error && <ErrorBanner error={error} className="start-error" onClose={() => setError(null)} />}</>;
 
   return (
@@ -233,9 +238,10 @@ function App() {
         </Panel>
       </Group>
       {deletedId && <div className="undo-toast" role="status"><span>{t("workspace.deleted")}</span><Button size="small" variant="ghost" onClick={() => void undoDelete()}>{t("common.undo")}</Button></div>}
-      <SettingsDialog open={settingsOpen} onboarding={onboarding} snapshot={snapshot} onOpenChange={(open) => { setSettingsOpen(open); if (!open) setOnboarding(false); }} onSave={saveSettings} onManageManual={() => setSortOrderOpen(true)} />
+      <SettingsDialog open={settingsOpen} onboarding={onboarding} snapshot={snapshot} onOpenChange={(open) => { setSettingsOpen(open); if (!open) setOnboarding(false); }} onSave={saveSettings} onManageManual={() => setSortOrderOpen(true)} onManageFonts={() => { setSettingsOpen(false); setFontManagerOpen(true); }} />
       <SortOrderDialog open={sortOrderOpen} snapshot={snapshot} onOpenChange={setSortOrderOpen} onSave={saveManualSortLayout} />
       <ExportDialog open={exportOpen} snapshot={snapshot} onOpenChange={setExportOpen} onFlush={flush} onSetAnalysisLanguage={setAnalysisLanguage} onNavigateEntry={(id) => { setExportOpen(false); void selectEntry(id); }} />
+      {fontManagerOpen && <div className="font-manager-overlay"><FontSetup autoContinue={false} canClose onContinue={() => setFontManagerOpen(false)} /></div>}
     </main>
   );
 }

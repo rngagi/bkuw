@@ -162,6 +162,14 @@ export const fontPackStatusSchema = z.object({
   mandatory: z.boolean(),
   installedBytes: z.number(),
 });
+export const fontInstallProgressSchema = z.object({
+  packId: z.string(),
+  phase: z.enum(["downloading", "verifying", "installed", "failed"]),
+  packIndex: z.number().int().nonnegative(),
+  packCount: z.number().int().nonnegative(),
+  downloadedBytes: z.number().nonnegative(),
+  totalBytes: z.number().nonnegative().nullable(),
+});
 export const exportPreviewSchema = z.object({
   snapshotToken: z.string(),
   rowCount: z.number(),
@@ -248,6 +256,7 @@ export type ExportPreview = z.infer<typeof exportPreviewSchema>;
 export type ExportResult = z.infer<typeof exportResultSchema>;
 export type TexEngineStatus = z.infer<typeof texEngineStatusSchema>;
 export type FontPackStatus = z.infer<typeof fontPackStatusSchema>;
+export type FontInstallProgress = z.infer<typeof fontInstallProgressSchema>;
 
 export function createId(): string {
   return crypto.randomUUID();

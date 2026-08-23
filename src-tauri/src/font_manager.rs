@@ -61,13 +61,21 @@ pub(crate) struct LatexFontFamily {
 }
 
 trait Downloader: Send + Sync {
-    fn download(&self, url: &str) -> AppResult<Vec<u8>>;
+    fn download(
+        &self,
+        url: &str,
+        progress: Option<&dyn Fn(u64, Option<u64>)>,
+    ) -> AppResult<Vec<u8>>;
 }
 
 struct HttpDownloader;
 
 impl Downloader for HttpDownloader {
-    fn download(&self, url: &str) -> AppResult<Vec<u8>> {
+    fn download(
+        &self,
+        url: &str,
+        progress: Option<&dyn Fn(u64, Option<u64>)>,
+    ) -> AppResult<Vec<u8>> {
         let client = reqwest::blocking::Client::builder()
             .timeout(Duration::from_secs(120))
             .user_agent(concat!("bkuw/", env!("CARGO_PKG_VERSION"), " font-manager"))
@@ -78,10 +86,23 @@ impl Downloader for HttpDownloader {
             .send()
             .and_then(reqwest::blocking::Response::error_for_status)
             .map_err(|error| font_error("font_download", "download font pack", error))?;
-        response
-            .bytes()
-            .map(|bytes| bytes.to_vec())
-            .map_err(|error| font_error("font_download", "read font pack response", error))
+        let total = response.content_length();
+        let mut response = response;
+        let mut bytes = Vec::with_capacity(total.unwrap_or_default() as usize);
+        let mut buffer = [0_u8; 64 * 1024];
+        loop {
+            let read = response
+                .read(&mut buffer)
+                .map_err(|error| font_error("font_download", "read font pack response", error))?;
+            if read == 0 {
+                break;
+            }
+            bytes.extend_from_slice(&buffer[..read]);
+            if let Some(report) = progress {
+                report(bytes.len() as u64, total);
+            }
+        }
+        Ok(bytes)
     }
 }
 
@@ -135,6 +156,14 @@ impl FontManager {
     }
 
     pub(crate) fn install(&self, pack_id: &str) -> AppResult<FontPackStatus> {
+        self.install_with_progress(pack_id, &|_, _| {})
+    }
+
+    pub(crate) fn install_with_progress(
+        &self,
+        pack_id: &str,
+        progress: &dyn Fn(u64, Option<u64>),
+    ) -> AppResult<FontPackStatus> {
         let pack = find_pack(pack_id)?;
         fs::create_dir_all(&self.root)
             .map_err(|error| font_error("font_filesystem", "create font cache", error))?;
@@ -148,7 +177,7 @@ impl FontManager {
 
         match pack.source {
             PackSource::Archive { url, sha256 } => {
-                let archive = self.downloader.download(url)?;
+                let archive = self.downloader.download(url, Some(progress))?;
                 verify_hash(&archive, sha256)?;
                 let mut archive = ZipArchive::new(Cursor::new(archive))
                     .map_err(|error| font_error("font_integrity", "open font archive", error))?;
@@ -176,7 +205,7 @@ impl FontManager {
                     let url = file.url.ok_or_else(|| {
                         AppError::new("font_integrity", "The font catalog file URL is missing.")
                     })?;
-                    let bytes = self.downloader.download(url)?;
+                    let bytes = self.downloader.download(url, Some(progress))?;
                     verify_hash(&bytes, file.sha256)?;
                     write_staged(staging.path(), file.output, &bytes)?;
                     installed.insert(file.output.to_owned(), hash(&bytes));
@@ -345,7 +374,11 @@ struct TestDownloader;
 
 #[cfg(test)]
 impl Downloader for TestDownloader {
-    fn download(&self, _url: &str) -> AppResult<Vec<u8>> {
+    fn download(
+        &self,
+        _url: &str,
+        _progress: Option<&dyn Fn(u64, Option<u64>)>,
+    ) -> AppResult<Vec<u8>> {
         Err(AppError::new(
             "font_download",
             "Test font manager does not use the network.",
@@ -682,13 +715,22 @@ mod tests {
     }
 
     impl Downloader for FakeDownloader {
-        fn download(&self, url: &str) -> AppResult<Vec<u8>> {
-            self.responses
+        fn download(
+            &self,
+            url: &str,
+            progress: Option<&dyn Fn(u64, Option<u64>)>,
+        ) -> AppResult<Vec<u8>> {
+            let response = self
+                .responses
                 .lock()
                 .expect("responses")
                 .get(url)
                 .cloned()
-                .ok_or_else(|| AppError::new("font_download", "missing fake response"))
+                .ok_or_else(|| AppError::new("font_download", "missing fake response"))?;
+            if let Some(report) = progress {
+                report(response.len() as u64, Some(response.len() as u64));
+            }
+            Ok(response)
         }
     }
 
@@ -759,6 +801,27 @@ mod tests {
         assert_eq!(
             manager.status_for(TERMES_PACK_ID).expect("status").state,
             FontPackState::Missing
+        );
+    }
+
+    #[test]
+    fn installs_report_downloaded_and_total_bytes_before_integrity_validation() {
+        let directory = tempdir().expect("temp directory");
+        let downloader = Arc::new(FakeDownloader::default());
+        let response = archive(&[("unexpected", b"tampered")]);
+        let response_len = response.len() as u64;
+        downloader.responses.lock().expect("responses").insert(
+            "https://ctan.net/install/fonts/tex-gyre.tds.zip".into(),
+            response,
+        );
+        let manager = FontManager::with_downloader(directory.path().into(), downloader);
+        let reported = Mutex::new(Vec::new());
+        let _ = manager.install_with_progress(TERMES_PACK_ID, &|downloaded, total| {
+            reported.lock().expect("reported").push((downloaded, total));
+        });
+        assert_eq!(
+            reported.into_inner().expect("reported"),
+            vec![(response_len, Some(response_len))]
         );
     }
 

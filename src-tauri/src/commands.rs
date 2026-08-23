@@ -1,15 +1,15 @@
 use std::sync::{Mutex, MutexGuard};
 
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Manager, State, ipc::Channel};
 
 use crate::{
     database::ProjectSession,
     domain::{
         AttachSenseImageRequest, CreateProjectRequest, DeleteEntryRequest, DeletedEntry,
         EntrySortSettingsV1, EntrySummary, ExportKind, ExportPreview, ExportProjectRequest,
-        ExportResult, ExportSettingsV1, FontPackStatus, LexicalEntry, ManualSortLayoutV1,
-        ProjectSnapshot, RemoveSenseImageRequest, SaveEntryRequest, SenseImage, SenseImageContent,
-        SenseImageMutation, TexEngineStatus, UpdateProjectSettingsRequest,
+        ExportResult, ExportSettingsV1, FontInstallProgress, FontPackStatus, LexicalEntry,
+        ManualSortLayoutV1, ProjectSnapshot, RemoveSenseImageRequest, SaveEntryRequest, SenseImage,
+        SenseImageContent, SenseImageMutation, TexEngineStatus, UpdateProjectSettingsRequest,
     },
     error::{AppError, AppResult},
 };
@@ -341,4 +341,64 @@ pub async fn install_font_pack(app: AppHandle, pack_id: String) -> AppResult<Fon
                 error.to_string(),
             )
         })?
+}
+
+#[tauri::command]
+pub async fn install_font_packs(
+    app: AppHandle,
+    pack_ids: Vec<String>,
+    on_progress: Channel<FontInstallProgress>,
+) -> AppResult<Vec<FontPackStatus>> {
+    let manager = font_manager(&app)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let pack_count = pack_ids.len();
+        let mut installed = Vec::with_capacity(pack_count);
+        for (pack_index, pack_id) in pack_ids.into_iter().enumerate() {
+            let report = |phase: &str, downloaded_bytes: u64, total_bytes: Option<u64>| {
+                let _ = on_progress.send(FontInstallProgress {
+                    pack_id: pack_id.clone(),
+                    phase: phase.into(),
+                    pack_index,
+                    pack_count,
+                    downloaded_bytes,
+                    total_bytes,
+                });
+            };
+            report("downloading", 0, None);
+            let result = manager.install_with_progress(&pack_id, &|downloaded, total| {
+                report(
+                    if total == Some(downloaded) {
+                        "verifying"
+                    } else {
+                        "downloading"
+                    },
+                    downloaded,
+                    total,
+                );
+            });
+            match result {
+                Ok(status) => {
+                    report(
+                        "installed",
+                        status.installed_bytes,
+                        Some(status.installed_bytes),
+                    );
+                    installed.push(status);
+                }
+                Err(error) => {
+                    report("failed", 0, None);
+                    return Err(error);
+                }
+            }
+        }
+        Ok(installed)
+    })
+    .await
+    .map_err(|error| {
+        AppError::with_details(
+            "internal",
+            "The font installation task could not complete.",
+            error.to_string(),
+        )
+    })?
 }

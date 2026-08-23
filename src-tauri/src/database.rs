@@ -3669,8 +3669,6 @@ mod tests {
         names.sort();
         assert!(names.contains(&"fonts/tex-gyre-termes/texgyretermes-regular.otf".into()));
         assert!(names.contains(&"fonts/tex-gyre-termes/LICENSE.txt".into()));
-        assert!(names.contains(&"fonts/noto-serif-cjk-tc/NotoSerifCJKtc-Regular.otf".into()));
-        assert!(names.contains(&"fonts/noto-serif-cjk-tc/LICENSE.txt".into()));
         assert!(names.contains(&"fonts/chiron-sung-hk/ChironSungHK-R.otf".into()));
         assert!(names.contains(&"fonts/chiron-sung-hk/ChironSungHK-B.otf".into()));
         assert!(names.contains(&"fonts/chiron-sung-hk/LICENSE.txt".into()));

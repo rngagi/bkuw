@@ -228,9 +228,9 @@ describe("ExportDialog", () => {
     expect(within(font).getByRole("option", { name: "Chiron Hei HK" })).toBeInTheDocument();
 
     fireEvent.change(font, { target: { value: "chironSungHk" } });
-    expect(screen.getByText("Ming/Song style for Traditional Chinese, including Hong Kong glyph conventions.")).toBeInTheDocument();
+    expect(screen.getByText("Ming/Song style for Traditional Chinese.")).toBeInTheDocument();
     fireEvent.change(font, { target: { value: "chironHeiHk" } });
-    expect(screen.getByText("Hei/sans-serif style for Traditional Chinese, including Hong Kong glyph conventions.")).toBeInTheDocument();
+    expect(screen.getByText("Hei/sans-serif style for Traditional Chinese.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Preview" }));
     await waitFor(() => expect(backendMock.saveExportSettings).toHaveBeenCalledWith(expect.objectContaining({

@@ -46,6 +46,7 @@ pub fn run() {
             commands::detect_xelatex,
             commands::list_font_packs,
             commands::install_font_pack,
+            commands::install_font_packs,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

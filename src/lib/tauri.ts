@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { z } from "zod";
@@ -11,13 +11,13 @@ import {
   entrySortSettingsSchema, manualSortLayoutSchema,
   lexicalEntrySchema,
   projectSnapshotSchema,
-  texEngineStatusSchema, fontPackStatusSchema,
+  texEngineStatusSchema, fontPackStatusSchema, fontInstallProgressSchema,
   senseImageSchema, senseImageContentSchema, senseImageMutationSchema,
   type ExportKind,
   type ExportSettings,
   type EntrySortSettings, type ManualSortLayout,
   type LexicalEntry,
-  type ProjectSnapshot,
+  type FontInstallProgress, type ProjectSnapshot,
   type WritingSystem,
 } from "../types/domain";
 
@@ -156,6 +156,12 @@ export const backend = {
 
   installFontPack(packId: string) {
     return call("install_font_pack", { packId }, fontPackStatusSchema);
+  },
+
+  installFontPacks(packIds: string[], onProgress: (progress: FontInstallProgress) => void) {
+    const channel = new Channel<unknown>();
+    channel.onmessage = (message) => onProgress(fontInstallProgressSchema.parse(message));
+    return call("install_font_packs", { packIds, onProgress: channel }, z.array(fontPackStatusSchema));
   },
 
   queryEntries(query: string) {

@@ -21,6 +21,16 @@ const resources = {
         projectExistsTitle: "Project name already exists",
         projectExistsBody: "A .bkuw project with this name already exists in the selected folder. Choose another name or open the existing project.",
       },
+      fontSetup: {
+        title: "Prepare portable fonts",
+        body: "Download and verify every font pack now so dictionary exports remain portable. Installed packs stay on this device and can be reused offline.",
+        overallProgress: "Overall font installation progress", completed: "{{completed}} of {{total}} font packs ready",
+        installAll: "Download all fonts", installing: "Installing fonts…", useOffline: "Use bkuw offline",
+        phase: {
+          downloading: "Downloading {{font}}: {{downloaded}} / {{total}} bytes",
+          verifying: "Verifying {{font}}…", installed: "Installed {{font}}", failed: "Could not install {{font}}",
+        },
+      },
       workspace: {
         newEntry: "New entry", search: "Search forms, glosses, and definitions…", noEntries: "No entries yet",
         noMatch: "No matching entries", selectEntry: "Select an entry or create a new one.",
@@ -62,6 +72,7 @@ const resources = {
         metadataTitle: "Sense metadata",
         metadataHelp: "Define reusable choices once; senses will show dropdowns instead of asking you to retype them.",
         partOfSpeechOptions: "Parts of speech", semanticDomainOptions: "Semantic domains",
+        fontManagement: "Portable fonts", fontManagementHelp: "Review, download, and verify the font packs used by LaTeX and PDF exports.", manageFonts: "Manage fonts",
         addOption: "Add option", optionPlaceholder: "Type a value and press Add",
       },
       sorting: {
@@ -95,7 +106,7 @@ const resources = {
         relatedEntriesHelp: "Optional. Shows direct incoming links only, one level deep, using live entries.",
         includeSenseImages: "Include sense photos", includeSenseImagesHelp: "Adds print-sized photo copies to the LaTeX project and Overleaf ZIP; stored PNGs are unchanged.",
         fontFor: "Portable font for {{name}}", font: { auto: "Automatic script preset", charisSil: "Charis SIL", notoSerif: "Noto Serif", notoSerifCjkTc: "Noto Serif CJK TC", chironSungHk: "Chiron Sung HK", chironHeiHk: "Chiron Hei HK" },
-        fontStyle: { auto: "Chooses a suitable style from the script automatically.", charisSil: "Serif style; optimized for language data and IPA.", notoSerif: "Serif style.", notoSerifCjkTc: "Ming/Song-style Traditional Chinese typeface.", chironSungHk: "Ming/Song style for Traditional Chinese, including Hong Kong glyph conventions.", chironHeiHk: "Hei/sans-serif style for Traditional Chinese, including Hong Kong glyph conventions." },
+        fontStyle: { auto: "Chooses a suitable style from the script automatically.", charisSil: "Serif style; optimized for language data and IPA.", notoSerif: "Serif style.", notoSerifCjkTc: "Ming/Song-style Traditional Chinese typeface.", chironSungHk: "Ming/Song style for Traditional Chinese.", chironHeiHk: "Hei/sans-serif style for Traditional Chinese." },
         ipaFixedFont: "Charis SIL (fixed for IPA)",
         fontPacks: "Portable font packs", fontPacksHelp: "bkuw downloads verified font packs into its private cache and embeds required fonts and licenses in every LaTeX project and Overleaf ZIP.",
         mandatory: "mandatory", downloadAndRetry: "Download and retry", downloadingFont: "Downloading…",
@@ -167,6 +178,16 @@ const resources = {
         projectExistsTitle: "專案名稱已存在",
         projectExistsBody: "所選資料夾中已有同名的 .bkuw 專案。請改用其他名稱，或開啟既有專案。",
       },
+      fontSetup: {
+        title: "準備可攜字型",
+        body: "現在一次下載並驗證全部字型套件，讓詞典匯出保持可攜。已完成的套件會留在這台裝置，之後可離線重用。",
+        overallProgress: "全部字型安裝進度", completed: "已完成 {{completed}}／{{total}} 套字型",
+        installAll: "下載全部字型", installing: "正在安裝字型…", useOffline: "離線使用 bkuw",
+        phase: {
+          downloading: "正在下載 {{font}}：{{downloaded}}／{{total}} bytes",
+          verifying: "正在驗證 {{font}}…", installed: "已安裝 {{font}}", failed: "無法安裝 {{font}}",
+        },
+      },
       workspace: {
         newEntry: "新增詞條", search: "搜尋表記、簡釋與定義…", noEntries: "尚無詞條", noMatch: "找不到符合的詞條",
         selectEntry: "選取詞條或建立新詞條。", closeProject: "關閉專案", untitled: "未命名詞條", moreSenses: "…等 {{count}} 個語義", saved: "已儲存",
@@ -204,6 +225,7 @@ const resources = {
         fontFamilyHelp: "選填；使用裝置上已安裝的字型顯示這種表記。",
         metadataTitle: "義項 metadata", metadataHelp: "先集中定義可重用的選項；編輯義項時即可使用下拉選單，不必反覆輸入。",
         partOfSpeechOptions: "詞類", semanticDomainOptions: "語義領域",
+        fontManagement: "可攜字型", fontManagementHelp: "檢查、下載並驗證 LaTeX／PDF 匯出使用的字型套件。", manageFonts: "管理字型",
         addOption: "新增選項", optionPlaceholder: "輸入內容後按新增",
       },
       sorting: {
@@ -236,13 +258,13 @@ const resources = {
         relatedEntries: "關聯詞", relatedRoot: "使用此詞根的詞條", relatedBase: "使用此詞基的詞條", relatedBoth: "詞根與詞基關聯詞",
         relatedEntriesHelp: "選填；只顯示目前未刪除詞條的一層 incoming 連結，不遞迴展開。",
         includeSenseImages: "包含義項相片", includeSenseImagesHelp: "將適合印刷尺寸的相片副本加入 LaTeX 專案與 Overleaf ZIP；保存的 PNG 不會改變。",
-        fontFor: "{{name}} 的可攜字型", font: { auto: "依 script 自動選擇", charisSil: "Charis SIL", notoSerif: "Noto Serif", notoSerifCjkTc: "Noto Serif CJK TC", chironSungHk: "昭源宋體（香港）", chironHeiHk: "昭源黑體（香港）" },
-        fontStyle: { auto: "依書寫系統自動選擇合適風格。", charisSil: "明體／襯線風格，特別適合語言資料與 IPA。", notoSerif: "明體／襯線風格。", notoSerifCjkTc: "繁體中文明體／宋體風格。", chironSungHk: "繁體中文明體／宋體風格，採香港字形慣例。", chironHeiHk: "繁體中文黑體／無襯線風格，採香港字形慣例。" },
+        fontFor: "{{name}} 的可攜字型", font: { auto: "依 script 自動選擇", charisSil: "Charis SIL", notoSerif: "Noto Serif", notoSerifCjkTc: "Noto Serif CJK TC", chironSungHk: "昭源宋體", chironHeiHk: "昭源黑體" },
+        fontStyle: { auto: "依書寫系統自動選擇合適風格。", charisSil: "明體／襯線風格，特別適合語言資料與 IPA。", notoSerif: "明體／襯線風格。", notoSerifCjkTc: "繁體中文明體／宋體風格。", chironSungHk: "繁體中文明體／宋體風格。", chironHeiHk: "繁體中文黑體／無襯線風格。" },
         ipaFixedFont: "Charis SIL（IPA 固定使用）",
         fontPacks: "可攜字型套件", fontPacksHelp: "bkuw 會將通過驗證的字型套件下載到專用 cache，並把需要的字型與授權檔放進每個 LaTeX 專案與 Overleaf ZIP。",
         mandatory: "必要", downloadAndRetry: "下載並重試", downloadingFont: "下載中…",
         fontState: { missing: "尚未下載", installed: "已安裝", invalid: "驗證失敗，請重新下載" },
-        fontPack: { "tex-gyre-termes": "TeX Gyre Termes", "charis-sil": "Charis SIL", "noto-serif": "Noto Serif", "noto-serif-cjk-tc": "Noto Serif CJK TC", "chiron-sung-hk": "昭源宋體（香港）", "chiron-hei-hk": "昭源黑體（香港）" },
+        fontPack: { "tex-gyre-termes": "TeX Gyre Termes", "charis-sil": "Charis SIL", "noto-serif": "Noto Serif", "noto-serif-cjk-tc": "Noto Serif CJK TC", "chiron-sung-hk": "昭源宋體", "chiron-hei-hk": "昭源黑體" },
         xelatexChecking: "正在偵測 XeLaTeX…", xelatexFound: "已找到 XeLaTeX：{{path}}", xelatexMissing: "找不到 XeLaTeX；仍可匯出來源與 Overleaf-ready ZIP。",
         progress: {
           preview: "正在準備一致的專案預覽…", corpusCsv: "正在寫入並驗證 corpus CSV…",

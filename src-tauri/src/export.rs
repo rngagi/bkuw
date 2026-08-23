@@ -843,7 +843,7 @@ fn ws_display_text(snapshot: &ExportSnapshot, writing_system_id: &str, text: &st
 fn font_definitions(snapshot: &ExportSnapshot, fonts: &FontManager) -> AppResult<String> {
     let mut definitions = vec![font_command("setmainfont", TERMES_PACK_ID, fonts)?];
     let analysis_pack = if snapshot.project.analysis_language.as_deref() == Some("zh-TW") {
-        NOTO_CJK_TC_PACK_ID
+        CHIRON_SUNG_HK_PACK_ID
     } else {
         TERMES_PACK_ID
     };
@@ -920,7 +920,7 @@ fn portable_font_pack_id(
         crate::domain::FontPreset::ChironSungHk => CHIRON_SUNG_HK_PACK_ID,
         crate::domain::FontPreset::ChironHeiHk => CHIRON_HEI_HK_PACK_ID,
         crate::domain::FontPreset::Auto => match script {
-            Some("Hant") => NOTO_CJK_TC_PACK_ID,
+            Some("Hant") => CHIRON_SUNG_HK_PACK_ID,
             Some("Latn") => CHARIS_PACK_ID,
             _ => NOTO_SERIF_PACK_ID,
         },
@@ -930,7 +930,7 @@ fn portable_font_pack_id(
 fn required_font_pack_ids(snapshot: &ExportSnapshot) -> Vec<String> {
     let mut ids = BTreeSet::from([TERMES_PACK_ID.to_owned()]);
     if snapshot.project.analysis_language.as_deref() == Some("zh-TW") {
-        ids.insert(NOTO_CJK_TC_PACK_ID.to_owned());
+        ids.insert(CHIRON_SUNG_HK_PACK_ID.to_owned());
     }
     for system in &snapshot.writing_systems {
         let preset = snapshot

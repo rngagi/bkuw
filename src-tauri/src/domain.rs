@@ -206,6 +206,17 @@ pub struct FontPackStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct FontInstallProgress {
+    pub pack_id: String,
+    pub phase: String,
+    pub pack_index: usize,
+    pub pack_count: usize,
+    pub downloaded_bytes: u64,
+    pub total_bytes: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct WritingSystem {
     pub id: String,
     pub name: String,

@@ -29,6 +29,8 @@ const { backendMock, prepareImageMock } = vi.hoisted(() => ({
     chooseCsvDestination: vi.fn(),
     openOverleaf: vi.fn(),
     openOverleafCompilerHelp: vi.fn(),
+    listFontPacks: vi.fn(),
+    installFontPacks: vi.fn(),
   },
   prepareImageMock: vi.fn(),
 }));
@@ -92,6 +94,9 @@ describe("App keyboard and delete workflow", () => {
     vi.clearAllMocks();
     vi.stubGlobal("crypto", { randomUUID: vi.fn(() => `id-${Math.random()}`) });
     backendMock.chooseFolder.mockResolvedValue("/tmp");
+    backendMock.listFontPacks.mockResolvedValue([
+      { id: "tex-gyre-termes", version: "2.004", state: "installed", mandatory: true, installedBytes: 1 },
+    ]);
     backendMock.createProject.mockResolvedValue(snapshot);
     backendMock.createEntry.mockResolvedValue(entry);
     backendMock.queryEntries.mockResolvedValue([]);
