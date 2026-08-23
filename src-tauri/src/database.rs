@@ -4473,6 +4473,9 @@ mod tests {
             .expect("install Noto Serif CJK TC");
         fonts.install("charis-sil").expect("install Charis SIL");
         fonts
+            .install("chiron-sung-hk")
+            .expect("install Chiron Sung HK");
+        fonts
             .install("chiron-hei-hk")
             .expect("install Chiron Hei HK");
         let preview = session
