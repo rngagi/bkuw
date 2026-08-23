@@ -5,7 +5,7 @@ import type { ManualSortLayout, ProjectSnapshot } from "../../types/domain";
 import { SortOrderDialog } from "./SortOrderDialog";
 
 const snapshot = {
-  entrySortSettings: { version: 1, mode: "manual", writingSystemId: "ws", alphabet: ["a", "b"] },
+  entrySortSettings: { version: 2, mode: "manual", source: "writingSystem", writingSystemId: "ws", alphabet: ["a", "b"] },
   manualSortLayout: { version: 1, items: [{ kind: "heading", id: "a", label: "A" }, { kind: "entry", entryId: "one" }, { kind: "heading", id: "b", label: "B" }, { kind: "entry", entryId: "two" }] },
   entries: [
     { id: "one", primaryForm: "ama", secondaryForm: null, pronunciationForm: null, pronunciationWritingSystemId: null, senses: [], revision: 1, sectionLabel: "A", manualOrderPending: false },

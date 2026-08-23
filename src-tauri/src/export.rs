@@ -20,9 +20,10 @@ use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
 
 use crate::{
     domain::{
-        CorpusPartOfSpeech, ExportIssue, ExportIssueSeverity, ExportKind, ExportPreview,
-        ExportProjectRequest, ExportResult, ExportSettingsV1, LexicalEntry, OmittedExportData,
-        PdfStatus, Project, TexEngineStatus, WritingSystem,
+        CorpusPartOfSpeech, EntrySortMode, EntrySortSettingsV2, EntrySortSource, ExportIssue,
+        ExportIssueSeverity, ExportKind, ExportPreview, ExportProjectRequest, ExportResult,
+        ExportSettingsV1, LexicalEntry, OmittedExportData, PdfStatus, Project, TexEngineStatus,
+        WritingSystem,
     },
     error::{AppError, AppResult},
     font_manager::{
@@ -54,6 +55,7 @@ pub(crate) struct ExportSnapshot {
     pub project: Project,
     pub writing_systems: Vec<WritingSystem>,
     pub settings: ExportSettingsV1,
+    pub entry_sort_settings: EntrySortSettingsV2,
     pub sections: BTreeMap<String, Option<String>>,
     pub entries: Vec<LexicalEntry>,
     pub sense_images: Vec<ExportSenseImage>,
@@ -576,10 +578,33 @@ fn render_entries(
         .map(|system| (system.id.as_str(), system))
         .collect::<BTreeMap<_, _>>();
     let mut current_section: Option<String> = None;
+    let zh_analysis = snapshot.project.analysis_language.as_deref() == Some("zh-TW");
+    let example_label = if zh_analysis { "例" } else { "Ex." };
+    let translation_label = if zh_analysis { "譯" } else { "Tr." };
+    let semantic_domain_label = if zh_analysis {
+        "語意類別："
+    } else {
+        "Semantic domain:"
+    };
     let mut output = String::new();
     for entry in &snapshot.entries {
         let headword = form_text(entry, headword_id).unwrap_or_default();
-        let section = snapshot.sections.get(&entry.id).cloned().flatten();
+        let section = snapshot
+            .sections
+            .get(&entry.id)
+            .cloned()
+            .flatten()
+            .or_else(|| {
+                (snapshot.entry_sort_settings.mode == EntrySortMode::Auto
+                    && snapshot.entry_sort_settings.source == EntrySortSource::SemanticDomain)
+                    .then(|| {
+                        if zh_analysis {
+                            "未分類".into()
+                        } else {
+                            "Uncategorized".into()
+                        }
+                    })
+            });
         if section.is_some() && section != current_section {
             current_section.clone_from(&section);
             output.push_str(&format!(
@@ -622,17 +647,23 @@ fn render_entries(
             output.push_str(&format!("\\BkuwMeta{{{}}}\n", other_forms.join("；")));
         }
         for (index, sense) in entry.senses.iter().enumerate() {
+            let sense_number = if entry.senses.len() == 1 {
+                String::new()
+            } else {
+                (index + 1).to_string()
+            };
             output.push_str(&format!(
                 "\\BkuwSense{{{}}}{{{}}}{{{}}}{{{}}}\n",
-                index + 1,
+                sense_number,
                 tex_escape(sense.part_of_speech.as_deref().unwrap_or_default()),
                 tex_escape(sense.gloss.as_deref().unwrap_or_default()),
                 tex_escape(sense.definition.as_deref().unwrap_or_default()),
             ));
             if let Some(domain) = &sense.semantic_domain {
                 output.push_str(&format!(
-                    "\\BkuwMeta{{Semantic domain: {}}}\n",
-                    tex_escape(domain)
+                    "\\BkuwMeta{{{} {}}}\n",
+                    semantic_domain_label,
+                    tex_escape(domain),
                 ));
             }
             if snapshot.settings.latex.include_sense_images {
@@ -666,14 +697,21 @@ fn render_entries(
                     .join(" / ");
                 let translation = tex_escape(example.translation.as_deref().unwrap_or_default());
                 let notes = tex_escape(example.notes.as_deref().unwrap_or_default());
-                let mut parts = vec![rendered];
+                if !rendered.is_empty() {
+                    output.push_str(&format!(
+                        "\\BkuwExample{{{}}}{{{}}}\n",
+                        example_label, rendered
+                    ));
+                }
                 if !translation.is_empty() {
-                    parts.push(translation);
+                    output.push_str(&format!(
+                        "\\BkuwTranslation{{{}}}{{{}}}\n",
+                        translation_label, translation
+                    ));
                 }
                 if !notes.is_empty() {
-                    parts.push(format!("— {notes}"));
+                    output.push_str(&format!("\\BkuwExampleNote{{{notes}}}\n"));
                 }
-                output.push_str(&format!("\\BkuwExample{{{}}}\n", parts.join(" ")));
             }
         }
         let relation_text = entry

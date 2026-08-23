@@ -3,25 +3,27 @@ import { useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "../../lib/utils";
 import { displayWritingSystemText } from "../../lib/writingSystems";
-import type { EntrySummary, WritingSystem } from "../../types/domain";
+import type { EntrySortSettings, EntrySummary, WritingSystem } from "../../types/domain";
 
-interface Props { entries: EntrySummary[]; writingSystems: WritingSystem[]; selectedId: string | null; hasQuery: boolean; onSelect(id: string): void; }
+interface Props { entries: EntrySummary[]; writingSystems: WritingSystem[]; entrySortSettings?: EntrySortSettings; selectedId: string | null; hasQuery: boolean; onSelect(id: string): void; }
 
 function summarizedSenses(entry: EntrySummary) {
   return entry.senses.filter((sense) => sense.partOfSpeech || sense.gloss);
 }
 
-export function EntryList({ entries, writingSystems, selectedId, hasQuery, onSelect }: Props) {
+export function EntryList({ entries, writingSystems, entrySortSettings, selectedId, hasQuery, onSelect }: Props) {
   const { t } = useTranslation();
   const parentRef = useRef<HTMLDivElement>(null);
   const primary = writingSystems.find((system) => system.displayRole === "primary");
   const secondary = writingSystems.find((system) => system.displayRole === "secondary");
   const rows = useMemo(() => entries.flatMap((entry, index) => {
-    const previous = index > 0 ? entries[index - 1].sectionLabel : null;
-    return entry.sectionLabel && entry.sectionLabel !== previous
-      ? [{ kind: "heading" as const, label: entry.sectionLabel }, { kind: "entry" as const, entry }]
+    const label = entry.sectionLabel ?? (entrySortSettings?.mode === "auto" && entrySortSettings.source === "semanticDomain" ? t("sorting.uncategorized") : null);
+    const previousEntry = index > 0 ? entries[index - 1] : null;
+    const previous = previousEntry?.sectionLabel ?? (previousEntry && entrySortSettings?.mode === "auto" && entrySortSettings.source === "semanticDomain" ? t("sorting.uncategorized") : null);
+    return label && label !== previous
+      ? [{ kind: "heading" as const, label }, { kind: "entry" as const, entry }]
       : [{ kind: "entry" as const, entry }];
-  }), [entries]);
+  }), [entries, entrySortSettings, t]);
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => parentRef.current,

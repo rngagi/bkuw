@@ -99,7 +99,7 @@ describe("EntryEditor", () => {
   it("confirms a section override before saving it", async () => {
     const onSave = vi.fn(async (draft: LexicalEntry) => ({ ...draft, revision: 1 }));
     const ref = createRef<EntryEditorHandle>();
-    render(<EntryEditor {...metadataProps} ref={ref} entry={emptyEntry()} writingSystems={writingSystems} entryOptions={[]} entrySortSettings={{ version: 1, mode: "auto", writingSystemId: "ws-native", alphabet: ["n", "ng"] }} onSave={onSave} onDelete={vi.fn()} onNavigate={vi.fn()} />);
+    render(<EntryEditor {...metadataProps} ref={ref} entry={emptyEntry()} writingSystems={writingSystems} entryOptions={[]} entrySortSettings={{ version: 2, mode: "auto", source: "writingSystem", writingSystemId: "ws-native", alphabet: ["n", "ng"] }} onSave={onSave} onDelete={vi.fn()} onNavigate={vi.fn()} />);
     fireEvent.change(screen.getByLabelText("Section override"), { target: { value: "N" } });
     expect(screen.getByRole("alertdialog", { name: "Move this entry to another section?" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Move entry" }));

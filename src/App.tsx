@@ -230,7 +230,7 @@ function App() {
       <Group orientation="horizontal" className="workspace">
         <Panel defaultSize="31%" minSize="240px" maxSize="520px" className="list-pane">
           <div className="list-toolbar"><div className="search-field"><Search size={16} aria-hidden="true" /><input ref={searchRef} value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("workspace.search")} aria-label={t("workspace.search")} /></div><Button size="icon" variant="primary" onClick={() => void createEntry()} aria-label={t("workspace.newEntry")}><Plus size={17} /></Button></div>
-          <EntryList entries={entries} writingSystems={snapshot.writingSystems} selectedId={entry?.id ?? null} hasQuery={Boolean(search)} onSelect={(id) => void selectEntry(id)} />
+          <EntryList entries={entries} writingSystems={snapshot.writingSystems} entrySortSettings={snapshot.entrySortSettings} selectedId={entry?.id ?? null} hasQuery={Boolean(search)} onSelect={(id) => void selectEntry(id)} />
         </Panel>
         <Separator className="resize-handle" />
         <Panel minSize="440px" className="editor-pane">

@@ -372,11 +372,21 @@ pub enum EntrySortMode {
     Manual,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum EntrySortSource {
+    #[default]
+    WritingSystem,
+    SemanticDomain,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct EntrySortSettingsV1 {
+pub struct EntrySortSettingsV2 {
     pub version: u8,
     pub mode: EntrySortMode,
+    #[serde(default)]
+    pub source: EntrySortSource,
     pub writing_system_id: String,
     pub alphabet: Vec<String>,
 }
@@ -408,7 +418,7 @@ pub struct ProjectSnapshot {
     pub part_of_speech_options: Vec<String>,
     pub semantic_domain_options: Vec<String>,
     pub export_settings: ExportSettingsV1,
-    pub entry_sort_settings: EntrySortSettingsV1,
+    pub entry_sort_settings: EntrySortSettingsV2,
     pub manual_sort_layout: ManualSortLayoutV1,
     pub entries: Vec<EntrySummary>,
 }

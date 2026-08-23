@@ -8,7 +8,8 @@ use icu_locale::Locale;
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::domain::{
-    EntrySortMode, EntrySortSettingsV1, EntrySummary, ManualSortItem, ManualSortLayoutV1,
+    EntrySortMode, EntrySortSettingsV2, EntrySortSource, EntrySummary, ManualSortItem,
+    ManualSortLayoutV1,
 };
 
 #[derive(Debug, Clone)]
@@ -16,20 +17,22 @@ pub(crate) struct SortableSummary {
     pub summary: EntrySummary,
     pub sort_text: String,
     pub section_override: Option<String>,
+    pub semantic_domain: Option<String>,
 }
 
 pub(crate) fn order_summaries(
     mut rows: Vec<SortableSummary>,
-    settings: &EntrySortSettingsV1,
+    settings: &EntrySortSettingsV2,
     layout: &ManualSortLayoutV1,
     language_tag: Option<&str>,
+    semantic_domain_options: &[String],
 ) -> Vec<EntrySummary> {
-    sort_automatic(&mut rows, settings, language_tag);
+    sort_automatic(&mut rows, settings, language_tag, semantic_domain_options);
     if settings.mode == EntrySortMode::Auto {
         return rows
             .into_iter()
             .map(|mut row| {
-                row.summary.section_label = Some(section_for(&row, settings));
+                row.summary.section_label = section_for(&row, settings);
                 row.summary.manual_order_pending = false;
                 row.summary
             })
@@ -56,9 +59,14 @@ pub(crate) fn order_summaries(
     }
 
     let mut pending = by_id.into_values().collect::<Vec<_>>();
-    sort_automatic(&mut pending, settings, language_tag);
+    sort_automatic(
+        &mut pending,
+        settings,
+        language_tag,
+        semantic_domain_options,
+    );
     for mut row in pending {
-        let section = section_for(&row, settings);
+        let section = writing_system_section_for(&row, settings);
         row.summary.section_label = Some(section.clone());
         row.summary.manual_order_pending = true;
         let insertion = result
@@ -71,10 +79,10 @@ pub(crate) fn order_summaries(
 }
 
 pub(crate) fn validate_settings(
-    settings: &EntrySortSettingsV1,
+    settings: &EntrySortSettingsV2,
     writing_system_ids: &HashSet<&str>,
 ) -> Result<(), &'static str> {
-    if settings.version != 1 || !writing_system_ids.contains(settings.writing_system_id.as_str()) {
+    if settings.version != 2 || !writing_system_ids.contains(settings.writing_system_id.as_str()) {
         return Err("Sort settings reference a missing writing system.");
     }
     let mut seen = HashSet::new();
@@ -116,16 +124,25 @@ pub(crate) fn validate_layout(layout: &ManualSortLayoutV1) -> Result<(), &'stati
 
 fn sort_automatic(
     rows: &mut [SortableSummary],
-    settings: &EntrySortSettingsV1,
+    settings: &EntrySortSettingsV2,
     language_tag: Option<&str>,
+    semantic_domain_options: &[String],
 ) {
     let alphabet = normalized_alphabet(settings);
     let collator = collator(language_tag.unwrap_or("und"));
     rows.sort_by(|left, right| {
-        let left_section = section_for(left, settings);
-        let right_section = section_for(right, settings);
-        section_rank(&left_section, &alphabet)
-            .cmp(&section_rank(&right_section, &alphabet))
+        let section_order = if settings.mode == EntrySortMode::Auto
+            && settings.source == EntrySortSource::SemanticDomain
+        {
+            semantic_section_rank(left, semantic_domain_options)
+                .cmp(&semantic_section_rank(right, semantic_domain_options))
+        } else {
+            section_rank(&writing_system_section_for(left, settings), &alphabet).cmp(&section_rank(
+                &writing_system_section_for(right, settings),
+                &alphabet,
+            ))
+        };
+        section_order
             .then_with(|| {
                 compare_text(
                     &left.sort_text,
@@ -138,7 +155,7 @@ fn sort_automatic(
     });
 }
 
-fn normalized_alphabet(settings: &EntrySortSettingsV1) -> Vec<String> {
+fn normalized_alphabet(settings: &EntrySortSettingsV2) -> Vec<String> {
     settings
         .alphabet
         .iter()
@@ -147,7 +164,19 @@ fn normalized_alphabet(settings: &EntrySortSettingsV1) -> Vec<String> {
         .collect()
 }
 
-fn section_for(row: &SortableSummary, settings: &EntrySortSettingsV1) -> String {
+fn section_for(row: &SortableSummary, settings: &EntrySortSettingsV2) -> Option<String> {
+    if settings.source == EntrySortSource::SemanticDomain {
+        return row
+            .semantic_domain
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned);
+    }
+    Some(writing_system_section_for(row, settings))
+}
+
+fn writing_system_section_for(row: &SortableSummary, settings: &EntrySortSettingsV2) -> String {
     if let Some(value) = row
         .section_override
         .as_deref()
@@ -172,6 +201,22 @@ fn section_for(row: &SortableSummary, settings: &EntrySortSettingsV1) -> String 
         },
         |item| item.trim().to_uppercase(),
     )
+}
+
+fn semantic_section_rank(row: &SortableSummary, configured: &[String]) -> (u8, usize, String) {
+    let Some(value) = row
+        .semantic_domain
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return (2, usize::MAX, String::new());
+    };
+    if let Some(index) = configured.iter().position(|option| option == value) {
+        (0, index, String::new())
+    } else {
+        (1, usize::MAX, value.to_lowercase())
+    }
 }
 
 fn section_rank(section: &str, alphabet: &[String]) -> (usize, String) {

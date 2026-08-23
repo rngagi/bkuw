@@ -16,10 +16,10 @@ use crate::{
     domain::{
         AttachSenseImageRequest, CorpusExportSettings, CreateProjectRequest, DeleteEntryRequest,
         DeletedEntry, EntryForm, EntryRelation, EntrySenseSummary, EntrySortMode,
-        EntrySortSettingsV1, EntrySummary, Example, ExampleForm, ExportSettingsV1, FontPreset,
-        LatexExportSettings, LexicalEntry, ManualSortLayoutV1, Project, ProjectSnapshot,
-        RelatedEntriesMode, RemoveSenseImageRequest, ReverseIndexMode, SaveEntryRequest,
-        SectionMode, Sense, SenseImage, SenseImageContent, SenseImageMutation,
+        EntrySortSettingsV2, EntrySortSource, EntrySummary, Example, ExampleForm, ExportSettingsV1,
+        FontPreset, LatexExportSettings, LexicalEntry, ManualSortLayoutV1, Project,
+        ProjectSnapshot, RelatedEntriesMode, RemoveSenseImageRequest, ReverseIndexMode,
+        SaveEntryRequest, SectionMode, Sense, SenseImage, SenseImageContent, SenseImageMutation,
         UpdateProjectSettingsRequest, WritingSystem,
     },
     error::{AppError, AppResult},
@@ -171,12 +171,14 @@ impl ProjectSession {
         let writing_systems = load_writing_systems(&self.connection)?;
         let entry_sort_settings = load_entry_sort_settings(&self.connection, &writing_systems)?;
         let manual_sort_layout = load_manual_sort_layout(&self.connection)?;
+        let semantic_domain_options = load_metadata_options(&self.connection, "semantic_domain")?;
         let entries = query_summaries(
             &self.connection,
             "",
             &entry_sort_settings,
             &manual_sort_layout,
             &writing_systems,
+            &semantic_domain_options,
         )?;
         Ok(ProjectSnapshot {
             root_path: self.root.to_string_lossy().into_owned(),
@@ -186,7 +188,7 @@ impl ProjectSession {
             project,
             writing_systems,
             part_of_speech_options: load_metadata_options(&self.connection, "part_of_speech")?,
-            semantic_domain_options: load_metadata_options(&self.connection, "semantic_domain")?,
+            semantic_domain_options,
             entries,
         })
     }
@@ -320,8 +322,8 @@ impl ProjectSession {
 
     pub fn save_entry_sort_settings(
         &mut self,
-        mut settings: EntrySortSettingsV1,
-    ) -> AppResult<EntrySortSettingsV1> {
+        mut settings: EntrySortSettingsV2,
+    ) -> AppResult<EntrySortSettingsV2> {
         let systems = load_writing_systems(&self.connection)?;
         let ids = systems.iter().map(|system| system.id.as_str()).collect();
         crate::ordering::validate_settings(&settings, &ids)
@@ -372,12 +374,14 @@ impl ProjectSession {
 
     pub fn query_entries(&self, query: &str) -> AppResult<Vec<EntrySummary>> {
         let systems = load_writing_systems(&self.connection)?;
+        let semantic_domain_options = load_metadata_options(&self.connection, "semantic_domain")?;
         query_summaries(
             &self.connection,
             query,
             &load_entry_sort_settings(&self.connection, &systems)?,
             &load_manual_sort_layout(&self.connection)?,
             &systems,
+            &semantic_domain_options,
         )
     }
 
@@ -742,6 +746,7 @@ impl ProjectSession {
             project: snapshot.project,
             writing_systems: snapshot.writing_systems,
             settings: snapshot.export_settings,
+            entry_sort_settings: snapshot.entry_sort_settings,
             sections,
             entries,
             sense_images: load_export_sense_images(&self.connection)?,
@@ -1396,16 +1401,17 @@ fn load_metadata_options(connection: &Connection, kind: &str) -> AppResult<Vec<S
     rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
 }
 
-fn default_entry_sort_settings(systems: &[WritingSystem]) -> EntrySortSettingsV1 {
+fn default_entry_sort_settings(systems: &[WritingSystem]) -> EntrySortSettingsV2 {
     let writing_system_id = systems
         .iter()
         .find(|system| system.display_role.as_deref() == Some("primary"))
         .or_else(|| systems.first())
         .map(|system| system.id.clone())
         .unwrap_or_default();
-    EntrySortSettingsV1 {
-        version: 1,
+    EntrySortSettingsV2 {
+        version: 2,
         mode: EntrySortMode::Auto,
+        source: EntrySortSource::WritingSystem,
         writing_system_id,
         alphabet: Vec::new(),
     }
@@ -1414,7 +1420,7 @@ fn default_entry_sort_settings(systems: &[WritingSystem]) -> EntrySortSettingsV1
 fn load_entry_sort_settings(
     connection: &Connection,
     systems: &[WritingSystem],
-) -> AppResult<EntrySortSettingsV1> {
+) -> AppResult<EntrySortSettingsV2> {
     let encoded = connection
         .query_row(
             "SELECT settings_json FROM entry_sort_settings WHERE project_id = ?1",
@@ -1425,13 +1431,18 @@ fn load_entry_sort_settings(
     match encoded {
         None => Ok(default_entry_sort_settings(systems)),
         Some(value) => {
-            let settings: EntrySortSettingsV1 = serde_json::from_str(&value).map_err(|error| {
-                AppError::with_details(
-                    "database",
-                    "Entry sort settings are invalid.",
-                    error.to_string(),
-                )
-            })?;
+            let mut settings: EntrySortSettingsV2 =
+                serde_json::from_str(&value).map_err(|error| {
+                    AppError::with_details(
+                        "database",
+                        "Entry sort settings are invalid.",
+                        error.to_string(),
+                    )
+                })?;
+            if settings.version == 1 {
+                settings.version = 2;
+                settings.source = EntrySortSource::WritingSystem;
+            }
             let ids = systems.iter().map(|system| system.id.as_str()).collect();
             if crate::ordering::validate_settings(&settings, &ids).is_ok() {
                 Ok(settings)
@@ -1494,9 +1505,10 @@ fn replace_metadata_options(
 fn query_summaries(
     connection: &Connection,
     query: &str,
-    settings: &EntrySortSettingsV1,
+    settings: &EntrySortSettingsV2,
     layout: &ManualSortLayoutV1,
     systems: &[WritingSystem],
+    semantic_domain_options: &[String],
 ) -> AppResult<Vec<EntrySummary>> {
     let key = search_key(query.trim());
     let pattern = format!("%{key}%");
@@ -1528,6 +1540,9 @@ fn query_summaries(
                 ,COALESCE((SELECT f.text FROM entry_forms f
                            WHERE f.entry_id = e.id AND f.writing_system_id = ?3
                            ORDER BY f.sort_order LIMIT 1), '')
+                ,(SELECT s.semantic_domain FROM senses s
+                  WHERE s.entry_id = e.id AND TRIM(COALESCE(s.semantic_domain, '')) != ''
+                  ORDER BY s.sort_order, s.id LIMIT 1)
          FROM lexical_entries e
          WHERE e.deleted_at IS NULL
            AND (?1 = '' OR EXISTS (
@@ -1555,6 +1570,7 @@ fn query_summaries(
             },
             section_override: row.get(6)?,
             sort_text: row.get::<_, String>(7)?,
+            semantic_domain: row.get(8)?,
         })
     })?;
     let rows = rows.collect::<Result<Vec<_>, _>>()?;
@@ -1567,6 +1583,7 @@ fn query_summaries(
         settings,
         layout,
         language_tag,
+        semantic_domain_options,
     ))
 }
 
@@ -2109,9 +2126,9 @@ mod tests {
     use super::{BASE64, ProjectSession};
     use crate::domain::{
         AttachSenseImageRequest, CorpusPartOfSpeech, CreateProjectRequest, DeleteEntryRequest,
-        EntryForm, EntryRelation, EntrySortMode, EntrySortSettingsV1, Example, ExampleForm,
-        ExportKind, ExportProjectRequest, FontPreset, ManualSortItem, ManualSortLayoutV1,
-        RelatedEntriesMode, RemoveSenseImageRequest, SaveEntryRequest, Sense,
+        EntryForm, EntryRelation, EntrySortMode, EntrySortSettingsV2, EntrySortSource, Example,
+        ExampleForm, ExportKind, ExportProjectRequest, FontPreset, ManualSortItem,
+        ManualSortLayoutV1, RelatedEntriesMode, RemoveSenseImageRequest, SaveEntryRequest, Sense,
         UpdateProjectSettingsRequest, WritingSystem,
     };
     use crate::font_manager::FontManager;
@@ -2269,9 +2286,10 @@ mod tests {
         let snapshot = session.snapshot().expect("snapshot");
         let primary_id = snapshot.writing_systems[0].id.clone();
         session
-            .save_entry_sort_settings(EntrySortSettingsV1 {
-                version: 1,
+            .save_entry_sort_settings(EntrySortSettingsV2 {
+                version: 2,
                 mode: EntrySortMode::Auto,
+                source: EntrySortSource::WritingSystem,
                 writing_system_id: primary_id.clone(),
                 alphabet: vec!["a".into(), "b".into(), "c".into(), "n".into(), "ng".into()],
             })
@@ -2323,14 +2341,143 @@ mod tests {
     }
 
     #[test]
+    fn semantic_domain_sort_uses_first_value_configured_order_and_uncategorized_last() {
+        let (_directory, mut session) = create_session();
+        let snapshot = session.snapshot().expect("snapshot");
+        let project_id = snapshot.project.id;
+        let primary_id = snapshot.writing_systems[0].id.clone();
+        for (index, value) in ["Motion", "Animals"].iter().enumerate() {
+            session
+                .connection
+                .execute(
+                    "INSERT INTO metadata_options(id, project_id, kind, value, sort_order) VALUES (?1, ?2, 'semantic_domain', ?3, ?4)",
+                    rusqlite::params![super::new_id(), project_id, value, index],
+                )
+                .expect("metadata option");
+        }
+        session
+            .save_entry_sort_settings(EntrySortSettingsV2 {
+                version: 2,
+                mode: EntrySortMode::Auto,
+                source: EntrySortSource::SemanticDomain,
+                writing_system_id: primary_id.clone(),
+                alphabet: vec!["a".into(), "b".into(), "c".into(), "d".into()],
+            })
+            .expect("sort settings");
+
+        for (form, domains) in [
+            ("baba", vec![Some("Motion")]),
+            ("ama", vec![None, Some("Motion")]),
+            ("caxa", vec![Some("Legacy")]),
+            ("dama", vec![None]),
+        ] {
+            let mut entry = session.create_entry().expect("entry");
+            entry.section_override = Some("A".into());
+            entry.forms.push(EntryForm {
+                id: super::new_id(),
+                writing_system_id: primary_id.clone(),
+                text: form.into(),
+                variant_label: None,
+                dialect: None,
+                status: None,
+                notes: None,
+                sort_order: 0,
+            });
+            entry.senses = domains
+                .into_iter()
+                .enumerate()
+                .map(|(sort_order, domain)| Sense {
+                    id: super::new_id(),
+                    gloss: None,
+                    definition: None,
+                    part_of_speech: None,
+                    semantic_domain: domain.map(str::to_owned),
+                    sort_order: sort_order as i64,
+                    examples: Vec::new(),
+                })
+                .collect();
+            session
+                .save_entry(SaveEntryRequest {
+                    expected_revision: 0,
+                    entry,
+                })
+                .expect("save entry");
+        }
+
+        let summaries = session.query_entries("").expect("summaries");
+        assert_eq!(
+            summaries
+                .iter()
+                .map(|item| (item.primary_form.as_str(), item.section_label.as_deref()))
+                .collect::<Vec<_>>(),
+            vec![
+                ("ama", Some("Motion")),
+                ("baba", Some("Motion")),
+                ("caxa", Some("Legacy")),
+                ("dama", None),
+            ]
+        );
+    }
+
+    #[test]
+    fn version_one_sort_settings_load_as_writing_system_and_save_as_version_two() {
+        let (_directory, mut session) = create_session();
+        let snapshot = session.snapshot().expect("snapshot");
+        let project_id = snapshot.project.id;
+        let writing_system_id = snapshot.writing_systems[0].id.clone();
+        let legacy = serde_json::json!({
+            "version": 1,
+            "mode": "auto",
+            "writingSystemId": writing_system_id,
+            "alphabet": ["a", "b"]
+        });
+        session
+            .connection
+            .execute(
+                "INSERT INTO entry_sort_settings(project_id, version, settings_json, updated_at) VALUES (?1, 1, ?2, ?3)",
+                rusqlite::params![project_id, legacy.to_string(), super::now()],
+            )
+            .expect("legacy settings");
+
+        let upgraded = session
+            .snapshot()
+            .expect("upgraded snapshot")
+            .entry_sort_settings;
+        assert_eq!(upgraded.version, 2);
+        assert_eq!(upgraded.source, EntrySortSource::WritingSystem);
+        let stored_version: i64 = session
+            .connection
+            .query_row("SELECT version FROM entry_sort_settings", [], |row| {
+                row.get(0)
+            })
+            .expect("stored version");
+        assert_eq!(stored_version, 1);
+
+        session
+            .save_entry_sort_settings(upgraded)
+            .expect("save upgraded settings");
+        let stored_json: String = session
+            .connection
+            .query_row("SELECT settings_json FROM entry_sort_settings", [], |row| {
+                row.get(0)
+            })
+            .expect("stored settings");
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&stored_json).expect("settings JSON")["version"],
+            2
+        );
+    }
+
+    #[test]
     fn section_override_regroups_without_changing_natural_order() {
         let (_directory, mut session) = create_session();
         let snapshot = session.snapshot().expect("snapshot");
         let primary_id = snapshot.writing_systems[0].id.clone();
         session
-            .save_entry_sort_settings(EntrySortSettingsV1 {
-                version: 1,
+            .save_entry_sort_settings(EntrySortSettingsV2 {
+                version: 2,
                 mode: EntrySortMode::Auto,
+                source: EntrySortSource::WritingSystem,
                 writing_system_id: primary_id.clone(),
                 alphabet: vec!["n".into(), "ng".into()],
             })
@@ -2417,9 +2564,10 @@ mod tests {
             })
             .expect("layout");
         session
-            .save_entry_sort_settings(EntrySortSettingsV1 {
-                version: 1,
+            .save_entry_sort_settings(EntrySortSettingsV2 {
+                version: 2,
                 mode: EntrySortMode::Manual,
+                source: EntrySortSource::WritingSystem,
                 writing_system_id: primary_id.clone(),
                 alphabet: vec!["a".into(), "b".into(), "c".into()],
             })
@@ -2491,9 +2639,10 @@ mod tests {
                 entry,
             })
             .expect("entry save");
-        let settings = EntrySortSettingsV1 {
-            version: 1,
+        let settings = EntrySortSettingsV2 {
+            version: 2,
             mode: EntrySortMode::Manual,
+            source: EntrySortSource::WritingSystem,
             writing_system_id: primary_id,
             alphabet: vec!["n".into(), "ng".into()],
         };
@@ -3643,12 +3792,16 @@ mod tests {
         let main = std::fs::read_to_string(project.join("main.tex")).expect("main.tex");
         assert!(main.contains("Field \\#1 \\& notes"));
         assert!(main.contains("A\\_B"));
-        assert!(main.contains("\\ovalbox{\\scriptsize\\bfseries 例}"));
+        assert!(main.contains("\\newcommand{\\BkuwExample}[2]"));
+        assert!(main.contains("\\newcommand{\\BkuwTranslation}[2]"));
         assert!(!main.contains("zxjatype"));
         let entries = std::fs::read_to_string(project.join("entries.tex")).expect("entries.tex");
         assert!(entries.contains("過\\_\\#\\%"));
         assert!(entries.contains("\\textbackslash{}test \\{value\\}"));
         assert!(entries.contains("\\BkuwMeta{[註] 詞條備註}"));
+        assert!(entries.contains("\\BkuwSense{}{"));
+        assert!(entries.contains("\\BkuwExample{例}{"));
+        assert!(entries.contains("\\BkuwTranslation{譯}{"));
         assert!(entries.contains("kuo˥˩"));
         assert!(!entries.contains("IPA:"));
         assert!(!entries.contains("(他過河了。)"));
@@ -3682,9 +3835,10 @@ mod tests {
         let snapshot = session.snapshot().expect("snapshot");
         let primary_id = snapshot.writing_systems[0].id.clone();
         session
-            .save_entry_sort_settings(EntrySortSettingsV1 {
-                version: 1,
+            .save_entry_sort_settings(EntrySortSettingsV2 {
+                version: 2,
                 mode: EntrySortMode::Auto,
+                source: EntrySortSource::WritingSystem,
                 writing_system_id: primary_id.clone(),
                 alphabet: vec!["m".into(), "h".into()],
             })

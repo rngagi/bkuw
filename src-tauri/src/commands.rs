@@ -6,7 +6,7 @@ use crate::{
     database::ProjectSession,
     domain::{
         AttachSenseImageRequest, CreateProjectRequest, DeleteEntryRequest, DeletedEntry,
-        EntrySortSettingsV1, EntrySummary, ExportKind, ExportPreview, ExportProjectRequest,
+        EntrySortSettingsV2, EntrySummary, ExportKind, ExportPreview, ExportProjectRequest,
         ExportResult, ExportSettingsV1, FontInstallProgress, FontPackStatus, LexicalEntry,
         ManualSortLayoutV1, ProjectSnapshot, RemoveSenseImageRequest, SaveEntryRequest, SenseImage,
         SenseImageContent, SenseImageMutation, TexEngineStatus, UpdateProjectSettingsRequest,
@@ -259,7 +259,7 @@ pub fn save_export_settings(
 #[tauri::command]
 pub fn save_entry_sort_settings(
     state: State<'_, AppState>,
-    settings: EntrySortSettingsV1,
+    settings: EntrySortSettingsV2,
 ) -> AppResult<ProjectSnapshot> {
     let mut guard = active_session(&state)?;
     let session = guard

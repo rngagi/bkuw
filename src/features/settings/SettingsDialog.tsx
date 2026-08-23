@@ -72,6 +72,7 @@ export function SettingsDialog({ open, onboarding = false, snapshot, onOpenChang
   const [partOfSpeechOptions, setPartOfSpeechOptions] = useState<string[]>([]);
   const [semanticDomainOptions, setSemanticDomainOptions] = useState<string[]>([]);
   const [sortMode, setSortMode] = useState<"auto" | "manual">("auto");
+  const [sortSource, setSortSource] = useState<"writingSystem" | "semanticDomain">("writingSystem");
   const [sortWritingSystemId, setSortWritingSystemId] = useState("");
   const [alphabet, setAlphabet] = useState("");
   const [manualInitialization, setManualInitialization] = useState<"headings" | "none" | null>(null);
@@ -90,6 +91,7 @@ export function SettingsDialog({ open, onboarding = false, snapshot, onOpenChang
     setPartOfSpeechOptions(snapshot.partOfSpeechOptions);
     setSemanticDomainOptions(snapshot.semanticDomainOptions);
     setSortMode(snapshot.entrySortSettings.mode);
+    setSortSource(snapshot.entrySortSettings.source);
     setSortWritingSystemId(snapshot.entrySortSettings.writingSystemId);
     setAlphabet(snapshot.entrySortSettings.alphabet.join("\n"));
     setManualInitialization(null);
@@ -133,7 +135,7 @@ export function SettingsDialog({ open, onboarding = false, snapshot, onOpenChang
         writingSystems: systems.map((item, index) => ({ ...item, name: item.name.trim(), sortOrder: index })),
         partOfSpeechOptions,
         semanticDomainOptions,
-        entrySortSettings: { version: 1, mode: sortMode, writingSystemId: sortWritingSystemId, alphabet: alphabet.split(/\r?\n/).map((item) => item.trim()).filter(Boolean) },
+        entrySortSettings: { version: 2, mode: sortMode, source: sortSource, writingSystemId: sortWritingSystemId, alphabet: alphabet.split(/\r?\n/).map((item) => item.trim()).filter(Boolean) },
         manualInitialization,
       });
       onOpenChange(false);
@@ -182,7 +184,7 @@ export function SettingsDialog({ open, onboarding = false, snapshot, onOpenChang
 
             <section className="metadata-settings"><h3>{t("settings.metadataTitle")}</h3><p className="section-help">{t("settings.metadataHelp")}</p><div className="two-columns"><MetadataOptionsEditor label={t("settings.partOfSpeechOptions")} values={partOfSpeechOptions} onChange={setPartOfSpeechOptions} /><MetadataOptionsEditor label={t("settings.semanticDomainOptions")} values={semanticDomainOptions} onChange={setSemanticDomainOptions} /></div></section>
             <section className="metadata-settings"><h3>{t("settings.fontManagement")}</h3><p className="section-help">{t("settings.fontManagementHelp")}</p><Button type="button" onClick={onManageFonts}>{t("settings.manageFonts")}</Button></section>
-            <section className="metadata-settings"><h3>{t("sorting.title")}</h3><p className="section-help">{t("sorting.help")}</p><div className="two-columns"><label className="field"><span>{t("sorting.writingSystem")}</span><select value={sortWritingSystemId} onChange={(event) => setSortWritingSystemId(event.target.value)}>{systems.map((system) => <option key={system.id} value={system.id}>{system.name}</option>)}</select></label><label className="field"><span>{t("sorting.mode")}</span><output>{t(`sorting.${sortMode}`)}</output></label></div><label className="field"><span>{t("sorting.alphabet")}</span><textarea value={alphabet} placeholder={t("sorting.alphabetPlaceholder")} onChange={(event) => setAlphabet(event.target.value)} /><small>{t("sorting.alphabetHelp")}</small></label><div className="inline-field">{sortMode === "auto" ? <Button type="button" onClick={() => setModeConfirm("enable")}>{t("sorting.enableManual")}</Button> : <><Button type="button" disabled={snapshot.entrySortSettings.mode !== "manual"} onClick={() => { onOpenChange(false); window.setTimeout(onManageManual, 0); }}>{t("sorting.manageManual")}</Button><Button type="button" variant="ghost" onClick={() => setModeConfirm("disable")}>{t("sorting.returnAuto")}</Button></>}</div>{sortMode === "manual" && snapshot.entrySortSettings.mode !== "manual" && <small>{t("sorting.saveBeforeManage")}</small>}</section>
+            <section className="metadata-settings"><h3>{t("sorting.title")}</h3><p className="section-help">{t("sorting.help")}</p><div className="two-columns"><label className="field"><span>{t("sorting.source")}</span><select value={sortSource} disabled={sortMode === "manual"} onChange={(event) => setSortSource(event.target.value as typeof sortSource)}><option value="writingSystem">{t("sorting.sourceWritingSystem")}</option><option value="semanticDomain">{t("sorting.sourceSemanticDomain")}</option></select></label><label className="field"><span>{t("sorting.mode")}</span><output>{t(`sorting.${sortMode}`)}</output></label><label className="field"><span>{t("sorting.writingSystem")}</span><select value={sortWritingSystemId} onChange={(event) => setSortWritingSystemId(event.target.value)}>{systems.map((system) => <option key={system.id} value={system.id}>{system.name}</option>)}</select><small>{t(sortSource === "semanticDomain" ? "sorting.writingSystemWithinCategory" : "sorting.writingSystemHelp")}</small></label></div><label className="field"><span>{t("sorting.alphabet")}</span><textarea value={alphabet} placeholder={t("sorting.alphabetPlaceholder")} onChange={(event) => setAlphabet(event.target.value)} /><small>{t("sorting.alphabetHelp")}</small></label><div className="inline-field">{sortMode === "auto" ? <Button type="button" onClick={() => setModeConfirm("enable")}>{t("sorting.enableManual")}</Button> : <><Button type="button" disabled={snapshot.entrySortSettings.mode !== "manual"} onClick={() => { onOpenChange(false); window.setTimeout(onManageManual, 0); }}>{t("sorting.manageManual")}</Button><Button type="button" variant="ghost" onClick={() => setModeConfirm("disable")}>{t("sorting.returnAuto")}</Button></>}</div>{sortMode === "manual" && snapshot.entrySortSettings.mode !== "manual" && <small>{t("sorting.saveBeforeManage")}</small>}</section>
             <div className="dialog-actions"><Button type="button" onClick={() => onOpenChange(false)}>{t("common.cancel")}</Button><Button type="submit" variant="primary" disabled={busy}>{busy ? t("common.loading") : t("common.save")}</Button></div>
           </form>
         </Dialog.Content>

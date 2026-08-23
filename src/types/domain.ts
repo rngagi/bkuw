@@ -105,8 +105,9 @@ export const entrySummarySchema = z.object({
 });
 
 export const entrySortSettingsSchema = z.object({
-  version: z.literal(1),
+  version: z.literal(2),
   mode: z.enum(["auto", "manual"]),
+  source: z.enum(["writingSystem", "semanticDomain"]),
   writingSystemId: z.string(),
   alphabet: z.array(z.string()),
 });

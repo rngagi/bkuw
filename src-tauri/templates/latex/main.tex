@@ -25,11 +25,13 @@
 }
 \newcommand{\BkuwSense}[4]{%
   \par\vspace{0.18em}\noindent\hangindent=1.4em\hangafter=1
-  {\bkuwanalysisfont\textsuperscript{\bfseries #1}\if\relax\detokenize{#2}\relax\else\,{\footnotesize\bfseries\color{bkuwaccent}[#2]}\fi\enspace #3
+  {\bkuwanalysisfont\if\relax\detokenize{#1}\relax\else\textsuperscript{\bfseries #1}\fi\if\relax\detokenize{#2}\relax\else\,{\footnotesize\bfseries\color{bkuwaccent}[#2]}\fi\if\relax\detokenize{#1#2}\relax\else\enspace\fi{}#3
   \if\relax\detokenize{#4}\relax\else\enspace{\color{bkuwmuted}#4}\fi}
 }
 \newcommand{\BkuwMeta}[1]{\par\vspace{0.12em}\noindent\hangindent=1.4em{\bkuwanalysisfont\small\color{bkuwmuted}#1}}
-\newcommand{\BkuwExample}[1]{\par\vspace{0.38em}\noindent\hangindent=1.7em{\bkuwanalysisfont\small\ovalbox{\scriptsize\bfseries 例}\enspace #1}}
+\newcommand{\BkuwExample}[2]{\par\vspace{0.38em}\noindent\hangindent=1.7em{\bkuwanalysisfont\small\ovalbox{\scriptsize\bfseries #1}\enspace #2}}
+\newcommand{\BkuwTranslation}[2]{\par\vspace{0.12em}\noindent\hangindent=1.7em{\bkuwanalysisfont\small\color{bkuwmuted}\ovalbox{\scriptsize\bfseries #1}\enspace #2}}
+\newcommand{\BkuwExampleNote}[1]{\par\vspace{0.08em}\noindent\hangindent=1.7em{\bkuwanalysisfont\footnotesize\color{bkuwmuted}— #1}}
 \newcommand{\BkuwSenseImage}[1]{\par\smallskip\begin{center}\includegraphics[width=.94\linewidth,height=.28\textheight,keepaspectratio]{#1}\end{center}\smallskip}
 \newcommand{\BkuwRelatedStart}[1]{\par\vspace{0.55em}\begin{minipage}{\linewidth}{\bkuwanalysisfont\small\color{bkuwaccent}\bfseries #1}\par\vspace{0.15em}\begin{list}{\color{bkuwaccent}--}{\leftmargin=1.25em\itemsep=0.12em\topsep=0pt}}
 \newcommand{\BkuwRelated}[4]{\item\hyperlink{#1}{{\bfseries #2}\if\relax\detokenize{#3}\relax\else\enspace #3\fi}\if\relax\detokenize{#4}\relax\else\enspace{\bkuwanalysisfont #4}\fi}
