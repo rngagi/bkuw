@@ -49,7 +49,7 @@ describe("EntryList", () => {
     const summaries = item.querySelectorAll(".entry-sense-summary");
     expect(summaries).toHaveLength(2);
     expect(summaries[0]).toHaveTextContent("名詞父親");
-    expect(summaries[1]).toHaveTextContent("動詞稱作父親…等 3 個語義");
+    expect(summaries[1]).toHaveTextContent("動詞稱作父親…等 3 個義項");
     expect(item).not.toHaveTextContent("敬稱");
   });
 });

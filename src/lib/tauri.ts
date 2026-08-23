@@ -13,11 +13,13 @@ import {
   projectSnapshotSchema,
   texEngineStatusSchema, fontPackStatusSchema, fontInstallProgressSchema,
   senseImageSchema, senseImageContentSchema, senseImageMutationSchema,
+  csvInspectionSchema, csvImportPreviewSchema, csvImportResultSchema,
   type ExportKind,
   type ExportSettings,
   type EntrySortSettings, type ManualSortLayout,
   type LexicalEntry,
   type FontInstallProgress, type ProjectSnapshot,
+  type CsvDelimiter, type CsvPreviewRequest,
   type WritingSystem,
 } from "../types/domain";
 
@@ -79,6 +81,23 @@ export const backend = {
   async chooseFolder(): Promise<string | null> {
     const selected = await open({ directory: true, multiple: false });
     return typeof selected === "string" ? selected : null;
+  },
+
+  async chooseCsvFile(): Promise<string | null> {
+    const selected = await open({ directory: false, multiple: false, filters: [{ name: "CSV", extensions: ["csv", "tsv", "txt"] }] });
+    return typeof selected === "string" ? selected : null;
+  },
+
+  inspectCsv(path: string, delimiter?: CsvDelimiter) {
+    return call("inspect_csv", { path, delimiter: delimiter ?? null }, csvInspectionSchema);
+  },
+
+  previewCsvImport(request: CsvPreviewRequest) {
+    return call("preview_csv_import", { request }, csvImportPreviewSchema);
+  },
+
+  createProjectFromCsv(preview: CsvPreviewRequest, previewToken: string) {
+    return call("create_project_from_csv", { request: { preview, previewToken } }, csvImportResultSchema);
   },
 
   async chooseCsvDestination(defaultPath: string): Promise<string | null> {

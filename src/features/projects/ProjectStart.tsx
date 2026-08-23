@@ -1,12 +1,13 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import * as AlertDialog from "@radix-ui/react-alert-dialog";
-import { FolderOpen, Plus, X } from "lucide-react";
+import { FileSpreadsheet, FolderOpen, Plus, X } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/Button";
 import { backend, CommandError } from "../../lib/tauri";
 import type { ProjectSnapshot } from "../../types/domain";
 import { LocaleSelect } from "./LocaleSelect";
+import { CsvImportWizard } from "./CsvImportWizard";
 
 interface ProjectStartProps {
   onProject(snapshot: ProjectSnapshot, isNew: boolean): void;
@@ -22,6 +23,7 @@ export function ProjectStart({ onProject, onError }: ProjectStartProps) {
   const [languageCode, setLanguageCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
+  const [csvImportOpen, setCsvImportOpen] = useState(false);
 
   async function chooseParent() {
     const folder = await backend.chooseFolder();
@@ -59,6 +61,8 @@ export function ProjectStart({ onProject, onError }: ProjectStartProps) {
     }
   }
 
+  if (csvImportOpen) return <CsvImportWizard onCancel={() => setCsvImportOpen(false)} onProject={(snapshot) => onProject(snapshot, false)} onError={onError} />;
+
   return (
     <main className="start-screen">
       <header className="start-header"><strong>bkuw</strong><LocaleSelect /></header>
@@ -68,6 +72,7 @@ export function ProjectStart({ onProject, onError }: ProjectStartProps) {
         <p>{t("start.body")}</p>
         <div className="start-actions">
           <Button variant="primary" onClick={() => setDialogOpen(true)}><Plus size={17} /> {t("start.createProject")}</Button>
+          <Button onClick={() => setCsvImportOpen(true)}><FileSpreadsheet size={17} /> {t("start.importCsv")}</Button>
           <Button onClick={() => void openProject()}><FolderOpen size={17} /> {t("start.openProject")}</Button>
         </div>
       </section>

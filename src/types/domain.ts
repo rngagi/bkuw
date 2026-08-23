@@ -171,6 +171,46 @@ export const fontInstallProgressSchema = z.object({
   downloadedBytes: z.number().nonnegative(),
   totalBytes: z.number().nonnegative().nullable(),
 });
+export const csvDelimiterSchema = z.enum(["comma", "tab", "semicolon"]);
+export const csvColumnSchema = z.object({ index: z.number().int().nonnegative(), name: z.string(), samples: z.array(z.string()) });
+export const csvInspectionSchema = z.object({
+  sourcePath: z.string(), fileName: z.string(), sha256: z.string(), delimiter: csvDelimiterSchema,
+  rowCount: z.number().int().nonnegative(), columns: z.array(csvColumnSchema), profile: nullableText,
+});
+export const csvMappingTargetSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("ignore") }),
+  z.object({ kind: z.literal("entryForm"), writingSystemId: z.string() }),
+  z.object({ kind: z.literal("entryNotes") }),
+  z.object({ kind: z.literal("senseGloss") }),
+  z.object({ kind: z.literal("senseDefinition") }),
+  z.object({ kind: z.literal("partOfSpeech") }),
+  z.object({ kind: z.literal("semanticDomain") }),
+  z.object({ kind: z.literal("exampleForm"), writingSystemId: z.string() }),
+  z.object({ kind: z.literal("exampleTranslation") }),
+  z.object({ kind: z.literal("exampleNotes") }),
+  z.object({ kind: z.literal("rootFallback") }),
+]);
+export const csvColumnMappingSchema = z.object({ columnIndex: z.number().int().nonnegative(), target: csvMappingTargetSchema });
+export const csvImportGroupSchema = z.object({ rowIndices: z.array(z.number().int().nonnegative()) });
+export const csvProjectSpecSchema = z.object({
+  parentDir: z.string(), name: z.string(), languageName: nullableText, languageCode: nullableText,
+  analysisLanguage: z.enum(["zh-TW", "en"]).nullable(), writingSystems: z.array(writingSystemSchema),
+});
+export const csvPreviewRequestSchema = z.object({
+  sourcePath: z.string(), delimiter: csvDelimiterSchema, project: csvProjectSpecSchema,
+  mappings: z.array(csvColumnMappingSchema), groups: z.array(csvImportGroupSchema),
+  excludedRows: z.array(z.number().int().nonnegative()), rootDelimiter: z.string(),
+});
+export const csvPreviewIssueSchema = z.object({
+  severity: z.enum(["error", "warning"]), code: z.string(),
+  rowIndices: z.array(z.number().int().nonnegative()), details: nullableText,
+});
+export const csvImportPreviewSchema = z.object({
+  previewToken: z.string(), sourceRowCount: z.number().int().nonnegative(), importEntryCount: z.number().int().nonnegative(),
+  importSenseCount: z.number().int().nonnegative(), skippedRowCount: z.number().int().nonnegative(),
+  blockingErrorCount: z.number().int().nonnegative(), warningCount: z.number().int().nonnegative(),
+  issues: z.array(csvPreviewIssueSchema), groups: z.array(z.object({ rowIndices: z.array(z.number().int().nonnegative()), primaryForm: z.string(), blocked: z.boolean() })),
+});
 export const exportPreviewSchema = z.object({
   snapshotToken: z.string(),
   rowCount: z.number(),
@@ -229,6 +269,11 @@ export const projectSnapshotSchema = z.object({
   manualSortLayout: manualSortLayoutSchema,
   entries: z.array(entrySummarySchema),
 });
+export const csvImportResultSchema = z.object({
+  snapshot: projectSnapshotSchema, importedEntryCount: z.number().int().nonnegative(),
+  importedSenseCount: z.number().int().nonnegative(), skippedRowCount: z.number().int().nonnegative(),
+  warnings: z.array(csvPreviewIssueSchema),
+});
 
 export const deletedEntrySchema = z.object({
   id: z.string(),
@@ -258,6 +303,16 @@ export type ExportResult = z.infer<typeof exportResultSchema>;
 export type TexEngineStatus = z.infer<typeof texEngineStatusSchema>;
 export type FontPackStatus = z.infer<typeof fontPackStatusSchema>;
 export type FontInstallProgress = z.infer<typeof fontInstallProgressSchema>;
+export type CsvDelimiter = z.infer<typeof csvDelimiterSchema>;
+export type CsvInspection = z.infer<typeof csvInspectionSchema>;
+export type CsvMappingTarget = z.infer<typeof csvMappingTargetSchema>;
+export type CsvColumnMapping = z.infer<typeof csvColumnMappingSchema>;
+export type CsvImportGroup = z.infer<typeof csvImportGroupSchema>;
+export type CsvProjectSpec = z.infer<typeof csvProjectSpecSchema>;
+export type CsvPreviewRequest = z.infer<typeof csvPreviewRequestSchema>;
+export type CsvPreviewIssue = z.infer<typeof csvPreviewIssueSchema>;
+export type CsvImportPreview = z.infer<typeof csvImportPreviewSchema>;
+export type CsvImportResult = z.infer<typeof csvImportResultSchema>;
 
 export function createId(): string {
   return crypto.randomUUID();

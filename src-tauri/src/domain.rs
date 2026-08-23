@@ -215,6 +215,145 @@ pub struct FontInstallProgress {
     pub total_bytes: Option<u64>,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum CsvDelimiter {
+    Comma,
+    Tab,
+    Semicolon,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CsvColumn {
+    pub index: usize,
+    pub name: String,
+    pub samples: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CsvInspection {
+    pub source_path: String,
+    pub file_name: String,
+    pub sha256: String,
+    pub delimiter: CsvDelimiter,
+    pub row_count: usize,
+    pub columns: Vec<CsvColumn>,
+    pub profile: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum CsvMappingTarget {
+    Ignore,
+    EntryForm { writing_system_id: String },
+    EntryNotes,
+    SenseGloss,
+    SenseDefinition,
+    PartOfSpeech,
+    SemanticDomain,
+    ExampleForm { writing_system_id: String },
+    ExampleTranslation,
+    ExampleNotes,
+    RootFallback,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CsvColumnMapping {
+    pub column_index: usize,
+    pub target: CsvMappingTarget,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CsvImportGroup {
+    pub row_indices: Vec<usize>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CsvProjectSpec {
+    pub parent_dir: String,
+    pub name: String,
+    pub language_name: Option<String>,
+    pub language_code: Option<String>,
+    pub analysis_language: Option<String>,
+    pub writing_systems: Vec<WritingSystem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CsvPreviewRequest {
+    pub source_path: String,
+    pub delimiter: CsvDelimiter,
+    pub project: CsvProjectSpec,
+    pub mappings: Vec<CsvColumnMapping>,
+    pub groups: Vec<CsvImportGroup>,
+    pub excluded_rows: Vec<usize>,
+    pub root_delimiter: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum CsvPreviewIssueSeverity {
+    Error,
+    Warning,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CsvPreviewIssue {
+    pub severity: CsvPreviewIssueSeverity,
+    pub code: String,
+    pub row_indices: Vec<usize>,
+    pub details: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CsvPreviewGroup {
+    pub row_indices: Vec<usize>,
+    pub primary_form: String,
+    pub blocked: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CsvImportPreview {
+    pub preview_token: String,
+    pub source_row_count: usize,
+    pub import_entry_count: usize,
+    pub import_sense_count: usize,
+    pub skipped_row_count: usize,
+    pub blocking_error_count: usize,
+    pub warning_count: usize,
+    pub issues: Vec<CsvPreviewIssue>,
+    pub groups: Vec<CsvPreviewGroup>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateProjectFromCsvRequest {
+    pub preview: CsvPreviewRequest,
+    pub preview_token: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CsvImportResult {
+    pub snapshot: ProjectSnapshot,
+    pub imported_entry_count: usize,
+    pub imported_sense_count: usize,
+    pub skipped_row_count: usize,
+    pub warnings: Vec<CsvPreviewIssue>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct WritingSystem {

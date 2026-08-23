@@ -113,6 +113,137 @@ impl ProjectSession {
         result
     }
 
+    pub(crate) fn create_imported(
+        request: CreateProjectRequest,
+        analysis_language: Option<String>,
+        writing_systems: Vec<WritingSystem>,
+        part_of_speech_options: Vec<String>,
+        semantic_domain_options: Vec<String>,
+        export_settings: ExportSettingsV1,
+        entries: Vec<LexicalEntry>,
+    ) -> AppResult<Self> {
+        validate_project_name(&request.name)?;
+        validate_writing_systems(&writing_systems)?;
+        validate_metadata_options(&part_of_speech_options)?;
+        validate_metadata_options(&semantic_domain_options)?;
+        validate_analysis_language(analysis_language.as_deref())?;
+        for entry in &entries {
+            validate_entry(entry)?;
+        }
+        let parent = PathBuf::from(&request.parent_dir)
+            .canonicalize()
+            .map_err(|error| {
+                AppError::with_details(
+                    "invalid_project",
+                    "The selected parent folder is not available.",
+                    error.to_string(),
+                )
+            })?;
+        let final_root = parent.join(format!("{}.bkuw", request.name.trim()));
+        if final_root.exists() {
+            return Err(AppError::new(
+                "project_exists",
+                "A project with this name already exists in the selected folder.",
+            ));
+        }
+        let staging_name = format!(".bkuw-import-{}", new_id());
+        let staging_root = parent.join(format!("{staging_name}.bkuw"));
+        let mut session = Self::create(CreateProjectRequest {
+            parent_dir: request.parent_dir.clone(),
+            name: staging_name,
+            language_name: None,
+            language_code: None,
+        })?;
+        let result = (|| {
+            let project_id = project_id(&session.connection)?;
+            let timestamp = now();
+            let transaction = session.connection.transaction()?;
+            transaction.execute(
+                "DELETE FROM writing_systems WHERE project_id = ?1",
+                params![project_id],
+            )?;
+            transaction.execute(
+                "UPDATE projects SET name = ?1, language_name = ?2, language_code = ?3, analysis_language = ?4, updated_at = ?5 WHERE id = ?6",
+                params![
+                    normalize_text(request.name.trim()),
+                    normalize_optional(request.language_name),
+                    normalize_optional(request.language_code),
+                    normalize_optional(analysis_language),
+                    timestamp,
+                    project_id,
+                ],
+            )?;
+            for system in &writing_systems {
+                transaction.execute(
+                    "INSERT INTO writing_systems
+                     (id, project_id, name, type, script_code, language_tag, display_role,
+                      sort_order, font_family, notes)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                    params![
+                        system.id,
+                        project_id,
+                        normalize_text(system.name.trim()),
+                        system.kind,
+                        normalize_optional(system.script_code.clone()),
+                        normalize_optional(system.language_tag.clone()),
+                        system.display_role,
+                        system.sort_order,
+                        normalize_optional(system.font_family.clone()),
+                        normalize_optional(system.notes.clone()),
+                    ],
+                )?;
+            }
+            replace_metadata_options(
+                &transaction,
+                &project_id,
+                "part_of_speech",
+                &part_of_speech_options,
+            )?;
+            replace_metadata_options(
+                &transaction,
+                &project_id,
+                "semantic_domain",
+                &semantic_domain_options,
+            )?;
+            let settings_json = serde_json::to_string(&export_settings).map_err(|error| {
+                AppError::with_details(
+                    "internal",
+                    "Export settings could not be encoded.",
+                    error.to_string(),
+                )
+            })?;
+            transaction.execute(
+                "INSERT INTO export_settings(project_id, version, settings_json, updated_at) VALUES (?1, 1, ?2, ?3)",
+                params![project_id, settings_json, timestamp],
+            )?;
+            for entry in &entries {
+                transaction.execute(
+                    "INSERT INTO lexical_entries
+                     (id, project_id, notes, section_override, revision, created_at, updated_at, deleted_at)
+                     VALUES (?1, ?2, ?3, NULL, 1, ?4, ?4, NULL)",
+                    params![entry.id, project_id, normalize_optional(entry.notes.clone()), timestamp],
+                )?;
+                insert_forms(&transaction, &entry.id, &entry.forms)?;
+                replace_senses(&transaction, &entry.id, &entry.senses)?;
+                insert_relations(&transaction, &entry.id, &entry.relations)?;
+            }
+            transaction.commit()?;
+            Ok(())
+        })();
+        if let Err(error) = result {
+            drop(session);
+            let _ = fs::remove_dir_all(&staging_root);
+            return Err(error);
+        }
+        FileExt::unlock(&session.lock_file)?;
+        drop(session);
+        if let Err(error) = fs::rename(&staging_root, &final_root) {
+            let _ = fs::remove_dir_all(&staging_root);
+            return Err(error.into());
+        }
+        Self::open(final_root)
+    }
+
     pub fn open(path: impl AsRef<Path>) -> AppResult<Self> {
         let root = path.as_ref().canonicalize().map_err(|error| {
             AppError::with_details(
@@ -2156,6 +2287,66 @@ mod tests {
             .write_to(&mut output, image::ImageFormat::Png)
             .expect("encode test PNG");
         output.into_inner()
+    }
+
+    #[test]
+    fn failed_import_transaction_removes_the_staging_project() {
+        let directory = tempdir().expect("temp directory");
+        let seed = ProjectSession::create(CreateProjectRequest {
+            parent_dir: directory.path().to_string_lossy().into_owned(),
+            name: "Seed".into(),
+            language_name: None,
+            language_code: None,
+        })
+        .expect("seed project");
+        let snapshot = seed.snapshot().expect("snapshot");
+        seed.close().expect("close seed");
+        let timestamp = super::now();
+        let entry = crate::domain::LexicalEntry {
+            id: super::new_id(),
+            notes: None,
+            section_override: None,
+            revision: 0,
+            created_at: timestamp.clone(),
+            updated_at: timestamp,
+            forms: vec![EntryForm {
+                id: super::new_id(),
+                writing_system_id: "missing-writing-system".into(),
+                text: "ama".into(),
+                variant_label: None,
+                dialect: None,
+                status: None,
+                notes: None,
+                sort_order: 0,
+            }],
+            senses: Vec::new(),
+            relations: Vec::new(),
+        };
+        let result = ProjectSession::create_imported(
+            CreateProjectRequest {
+                parent_dir: directory.path().to_string_lossy().into_owned(),
+                name: "Rollback".into(),
+                language_name: None,
+                language_code: None,
+            },
+            None,
+            snapshot.writing_systems,
+            Vec::new(),
+            Vec::new(),
+            snapshot.export_settings,
+            vec![entry],
+        );
+        assert!(result.is_err());
+        assert!(!directory.path().join("Rollback.bkuw").exists());
+        assert!(
+            !std::fs::read_dir(directory.path())
+                .expect("parent")
+                .filter_map(Result::ok)
+                .any(|entry| entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with(".bkuw-import-"))
+        );
     }
 
     #[test]

@@ -5,11 +5,13 @@ use tauri::{AppHandle, Manager, State, ipc::Channel};
 use crate::{
     database::ProjectSession,
     domain::{
-        AttachSenseImageRequest, CreateProjectRequest, DeleteEntryRequest, DeletedEntry,
-        EntrySortSettingsV2, EntrySummary, ExportKind, ExportPreview, ExportProjectRequest,
-        ExportResult, ExportSettingsV1, FontInstallProgress, FontPackStatus, LexicalEntry,
-        ManualSortLayoutV1, ProjectSnapshot, RemoveSenseImageRequest, SaveEntryRequest, SenseImage,
-        SenseImageContent, SenseImageMutation, TexEngineStatus, UpdateProjectSettingsRequest,
+        AttachSenseImageRequest, CreateProjectFromCsvRequest, CreateProjectRequest, CsvDelimiter,
+        CsvImportPreview, CsvImportResult, CsvInspection, CsvPreviewRequest, DeleteEntryRequest,
+        DeletedEntry, EntrySortSettingsV2, EntrySummary, ExportKind, ExportPreview,
+        ExportProjectRequest, ExportResult, ExportSettingsV1, FontInstallProgress, FontPackStatus,
+        LexicalEntry, ManualSortLayoutV1, ProjectSnapshot, RemoveSenseImageRequest,
+        SaveEntryRequest, SenseImage, SenseImageContent, SenseImageMutation, TexEngineStatus,
+        UpdateProjectSettingsRequest,
     },
     error::{AppError, AppResult},
 };
@@ -85,6 +87,46 @@ pub fn create_project(
     let snapshot = session.snapshot()?;
     *guard = Some(session);
     Ok(snapshot)
+}
+
+#[tauri::command]
+pub async fn inspect_csv(
+    path: String,
+    delimiter: Option<CsvDelimiter>,
+) -> AppResult<CsvInspection> {
+    run_blocking(move || crate::csv_import::inspect(&path, delimiter)).await
+}
+
+#[tauri::command]
+pub async fn preview_csv_import(request: CsvPreviewRequest) -> AppResult<CsvImportPreview> {
+    run_blocking(move || crate::csv_import::preview(&request)).await
+}
+
+#[tauri::command]
+pub async fn create_project_from_csv(
+    app: AppHandle,
+    request: CreateProjectFromCsvRequest,
+) -> AppResult<CsvImportResult> {
+    {
+        let state = app.state::<AppState>();
+        if lock_state(&state)?.is_some() {
+            return Err(AppError::new(
+                "project_open",
+                "Close the current project before creating another one.",
+            ));
+        }
+    }
+    let (session, result) = run_blocking(move || crate::csv_import::create(request)).await?;
+    let state = app.state::<AppState>();
+    let mut guard = lock_state(&state)?;
+    if guard.is_some() {
+        return Err(AppError::new(
+            "project_open",
+            "Another project was opened while the CSV import was running.",
+        ));
+    }
+    *guard = Some(session);
+    Ok(result)
 }
 
 #[tauri::command]

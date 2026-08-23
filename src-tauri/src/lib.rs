@@ -1,4 +1,5 @@
 mod commands;
+mod csv_import;
 mod database;
 mod domain;
 mod error;
@@ -47,6 +48,9 @@ pub fn run() {
             commands::list_font_packs,
             commands::install_font_pack,
             commands::install_font_packs,
+            commands::inspect_csv,
+            commands::preview_csv_import,
+            commands::create_project_from_csv,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
