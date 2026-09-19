@@ -2,7 +2,11 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { prepareReleaseVersion, readReleaseVersion } from "./version.mjs";
+import {
+  classifyReleaseChange,
+  prepareReleaseVersion,
+  readReleaseVersion,
+} from "./version.mjs";
 
 const temporaryRoots: string[] = [];
 
@@ -35,6 +39,16 @@ afterEach(async () => {
 });
 
 describe("release version module", () => {
+  it("classifies only an exact version increase as a release change", () => {
+    expect(classifyReleaseChange("0.4.2", "0.4.2")).toBe("none");
+    expect(classifyReleaseChange("0.4.2", "0.4.3")).toBe("increased");
+    expect(classifyReleaseChange("0.4.2", "0.5.0")).toBe("increased");
+    expect(classifyReleaseChange("0.9.9", "1.0.0")).toBe("increased");
+    expect(() => classifyReleaseChange("0.4.2", "0.4.1")).toThrow(
+      "Release version must not decrease",
+    );
+  });
+
   it("updates every canonical version file together", async () => {
     const root = await fixture();
     const tauriPath = join(root, "src-tauri/tauri.conf.json");

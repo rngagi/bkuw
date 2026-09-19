@@ -6,9 +6,104 @@ on:
       - main
   pull_request:
 
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
 jobs:
+  changes:
+    name: Classify changes
+    runs-on: ubuntu-latest
+    outputs:
+      app: ${{ steps.classify.outputs.app }}
+      latex: ${{ steps.classify.outputs.latex }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+      - name: Classify changed files
+        id: classify
+        env:
+          DIFF_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          app=false
+          latex=false
+          if [[ -z "$DIFF_BASE" || "$DIFF_BASE" =~ ^0+$ ]]; then
+            app=true
+            latex=true
+          else
+            if ! git cat-file -e "$DIFF_BASE^{commit}" 2>/dev/null; then
+              git fetch --no-tags --depth=1 origin "$DIFF_BASE"
+            fi
+            while IFS= read -r path; do
+              [[ -z "$path" ]] && continue
+              case "$path" in
+                *.md) ;;
+                *) app=true ;;
+              esac
+              case "$path" in
+                src-tauri/*|.github/workflows/ci.yml) latex=true ;;
+              esac
+            done < <(git diff --name-only "$DIFF_BASE" "$GITHUB_SHA")
+            if [[ "$latex" == "true" ]]; then
+              app=true
+            fi
+          fi
+
+          {
+            echo "app=$app"
+            echo "latex=$latex"
+          } >> "$GITHUB_OUTPUT"
+
+  fast-checks:
+    name: Type, format, and unit checks
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Install Windows audio build dependencies
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          install: mingw-w64-x86_64-gcc make mingw-w64-x86_64-pkgconf curl tar xz python
+      - name: Cache audio sources and builds
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/audio-sources
+            .cache/audio-build
+            src-tauri/resources/audio
+          key: audio-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/audio/**') }}
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm audio:prepare
+      - run: pnpm exec tsc --noEmit --pretty false
+      - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+      - run: pnpm test
+
   portable-xelatex-template:
     name: Portable XeLaTeX template
+    needs:
+      - changes
+      - fast-checks
+    if: >-
+      needs.changes.outputs.latex == 'true' &&
+      needs.fast-checks.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -25,6 +120,12 @@ jobs:
 
   verify:
     name: ${{ matrix.name }}
+    needs:
+      - changes
+      - fast-checks
+    if: >-
+      needs.changes.outputs.app == 'true' &&
+      needs.fast-checks.result == 'success'
     strategy:
       fail-fast: false
       matrix:
@@ -32,15 +133,15 @@ jobs:
           - name: macOS Apple Silicon
             os: macos-15
             target: aarch64-apple-darwin
+            binary: bkuw
           - name: Windows x64
             os: windows-latest
             target: x86_64-pc-windows-msvc
+            binary: bkuw.exe
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
-        with:
-          version: 11.1.0
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -48,15 +149,60 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-          components: clippy,rustfmt
+          components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          shared-key: desktop-${{ matrix.target }}
+      - name: Install Windows audio build dependencies
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          install: mingw-w64-x86_64-gcc make mingw-w64-x86_64-pkgconf curl tar xz python
+      - name: Cache audio sources and builds
+        uses: actions/cache@v4
+        with:
+          path: |
+            .cache/audio-sources
+            .cache/audio-build
+            src-tauri/resources/audio
+          key: audio-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/audio/**') }}
       - run: pnpm install --frozen-lockfile
-      - run: pnpm check
-      - run: pnpm test
+      - run: pnpm audio:prepare
+      - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
       - run: pnpm test:rust
       - run: pnpm tauri build --no-bundle --features e2e --config src-tauri/tauri.e2e.conf.json --target ${{ matrix.target }}
       - run: pnpm test:e2e
         env:
-          BKUW_E2E_APPLICATION: ./src-tauri/target/${{ matrix.target }}/release/bkuw
+          BKUW_E2E_APPLICATION: ./src-tauri/target/${{ matrix.target }}/release/${{ matrix.binary }}
+
+  result:
+    name: CI result
+    if: always()
+    needs:
+      - changes
+      - fast-checks
+      - portable-xelatex-template
+      - verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify required jobs
+        env:
+          APP_CHANGED: ${{ needs.changes.outputs.app }}
+          LATEX_CHANGED: ${{ needs.changes.outputs.latex }}
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          FAST_RESULT: ${{ needs.fast-checks.result }}
+          LATEX_RESULT: ${{ needs.portable-xelatex-template.result }}
+          VERIFY_RESULT: ${{ needs.verify.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$CHANGES_RESULT" = "success"
+          if [[ "$APP_CHANGED" == "true" ]]; then
+            test "$FAST_RESULT" = "success"
+            test "$VERIFY_RESULT" = "success"
+          fi
+          if [[ "$LATEX_CHANGED" == "true" ]]; then
+            test "$LATEX_RESULT" = "success"
+          fi

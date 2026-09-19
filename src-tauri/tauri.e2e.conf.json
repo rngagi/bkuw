@@ -1,4 +1,7 @@
 {
+  "build": {
+    "beforeBuildCommand": "pnpm exec vite build"
+  },
   "app": {
     "withGlobalTauri": true,
     "security": {

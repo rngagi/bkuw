@@ -10,6 +10,18 @@ describe("release workflow invariants", () => {
     expect(ci).not.toContain("upload-artifact");
     expect(ci).toContain("--no-bundle");
     expect(ci).not.toContain("x86_64-apple-darwin");
+    expect(ci).toContain("cancel-in-progress: ${{ github.event_name == 'pull_request' }}");
+    expect(ci).toContain("name: CI result");
+    expect(ci).toContain("binary: bkuw.exe");
+  });
+
+  it("runs platform-independent checks once and gates expensive jobs by changed paths", async () => {
+    const ci = await readFile(resolve(root, ".github/workflows/ci.yml"), "utf8");
+    expect(ci.match(/pnpm exec tsc --noEmit/g)).toHaveLength(1);
+    expect(ci.match(/pnpm test$/gm)).toHaveLength(1);
+    expect(ci).toContain("name: Classify changes");
+    expect(ci).toContain("needs.changes.outputs.latex == 'true'");
+    expect(ci).toContain("needs.fast-checks.result == 'success'");
   });
 
   it("prepares releases after successful CI instead of accepting pushed tags", async () => {
@@ -19,9 +31,9 @@ describe("release workflow invariants", () => {
     expect(release).not.toMatch(/push:\s*\n\s+tags:/);
     expect(release).toContain("github.event.workflow_run.conclusion == 'success'");
     expect(release).toContain("github.event.workflow_run.head_repository.full_name == github.repository");
-    expect(release).toContain("fetch-depth: 0");
-    expect(release).toContain("git log --format=%H -- package.json");
-    expect(release).toContain('"$candidate_version" != "$version"');
+    expect(release).toContain("fetch-depth: 2");
+    expect(release).toContain('change-from-parent "$version"');
+    expect(release).not.toContain("git log --format=%H -- package.json");
   });
 
   it("builds only supported installers and creates a draft at the exact SHA", async () => {

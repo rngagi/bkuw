@@ -31,6 +31,14 @@ function compareVersions(left, right) {
   return 0;
 }
 
+export function classifyReleaseChange(previousVersion, nextVersion) {
+  const comparison = compareVersions(nextVersion, previousVersion);
+  if (comparison < 0) {
+    throw new Error(`Release version must not decrease from ${previousVersion} to ${nextVersion}`);
+  }
+  return comparison === 0 ? "none" : "increased";
+}
+
 function replaceCargoPackageVersion(contents, version) {
   const packageSection = contents.match(/(^\[package\]\n)([\s\S]*?)(?=^\[|(?![\s\S]))/m);
   if (!packageSection) {
@@ -114,6 +122,10 @@ async function loadVersionFiles(root) {
 
 export async function readReleaseVersion(root) {
   const files = await loadVersionFiles(root);
+  return releaseVersionFromFiles(files);
+}
+
+function releaseVersionFromFiles(files) {
   const versions = {
     "package.json": jsonVersion(files["package.json"], "package.json"),
     "src-tauri/Cargo.toml": cargoTomlVersion(files["src-tauri/Cargo.toml"]),
@@ -132,6 +144,26 @@ export async function readReleaseVersion(root) {
     );
   }
   return { version: Object.values(versions)[0], files };
+}
+
+function readReleaseVersionAtRevision(root, revision) {
+  const files = Object.fromEntries(
+    VERSION_FILES.map((filename) => [filename, git(root, ["show", `${revision}:${filename}`])]),
+  );
+  return releaseVersionFromFiles(files);
+}
+
+export async function releaseChangeFromParent(root, expectedVersion) {
+  const current = await readReleaseVersion(root);
+  if (current.version !== expectedVersion) {
+    throw new Error(`Expected release version ${expectedVersion}, found ${current.version}`);
+  }
+  const previous = readReleaseVersionAtRevision(root, "HEAD^");
+  return {
+    status: classifyReleaseChange(previous.version, current.version),
+    previousVersion: previous.version,
+    version: current.version,
+  };
 }
 
 async function writeVersionFiles(root, outputs) {
@@ -194,8 +226,10 @@ async function runCli() {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
   const argumentsWithoutSeparator = process.argv.slice(2).filter((argument) => argument !== "--");
   const [command, expectedVersion, ...extra] = argumentsWithoutSeparator;
-  if (extra.length > 0 || !["check", "prepare"].includes(command)) {
-    throw new Error("Usage: pnpm release:prepare -- <version> | pnpm release:check -- [version]");
+  if (extra.length > 0 || !["change-from-parent", "check", "prepare"].includes(command)) {
+    throw new Error(
+      "Usage: pnpm release:prepare -- <version> | pnpm release:check -- [version] | node scripts/release/version.mjs change-from-parent <version>",
+    );
   }
 
   if (command === "check") {
@@ -204,6 +238,15 @@ async function runCli() {
       throw new Error(`Expected release version ${expectedVersion}, found ${version}`);
     }
     console.log(`bkuw release version ${version} is consistent.`);
+    return;
+  }
+
+  if (command === "change-from-parent") {
+    if (!expectedVersion) {
+      throw new Error("change-from-parent requires the expected current version");
+    }
+    const result = await releaseChangeFromParent(root, expectedVersion);
+    console.log(result.status === "none" ? "none" : `increased ${result.previousVersion}`);
     return;
   }
 
