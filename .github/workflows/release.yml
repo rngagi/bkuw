@@ -22,6 +22,11 @@ on:
         description: Failed release run whose installer artifacts should be reused
         required: false
         type: string
+      skip_ci:
+        description: Skip the CI success check for this manually dispatched release
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: bkuw-release
@@ -110,14 +115,16 @@ jobs:
               exit 0
             fi
           else
-            ci_record="$(gh api --method GET \
-              "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs" \
-              -f branch=main \
-              -f event=push \
-              -f head_sha="$target_sha" \
-              -f per_page=1 \
-              --jq '.workflow_runs[0] | if . == null then empty else [.status, (.conclusion // "")] | @tsv end')"
-            test "$ci_record" = $'completed\tsuccess'
+            if [[ "${{ inputs.skip_ci }}" != "true" ]]; then
+              ci_record="$(gh api --method GET \
+                "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs" \
+                -f branch=main \
+                -f event=push \
+                -f head_sha="$target_sha" \
+                -f per_page=1 \
+                --jq '.workflow_runs[0] | if . == null then empty else [.status, (.conclusion // "")] | @tsv end')"
+              test "$ci_record" = $'completed\tsuccess'
+            fi
 
             if [[ -n "$artifact_run_id" ]]; then
               recovery_record="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$artifact_run_id" \
