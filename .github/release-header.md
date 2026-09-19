@@ -1,38 +1,36 @@
 # bkuw 0.6.0
 
-## Changelog / 變更記錄
+## 變更記錄
 
-### Features / 新功能
+### 新功能
 
-- Export is now a five-step wizard: choose output, configure content, check requirements, confirm export, and review the result.
-- Local PDF export checks XeLaTeX, required TeX packages, managed fonts, and a minimal compilation before proceeding.
-- Missing LaTeX distributions can be downloaded, SHA-256 verified, and handed off to the official Windows x64 TeX Live or macOS Apple Silicon MacTeX installer.
-- Saved PowerShell and shell installation scripts include bilingual setup instructions.
-- Overleaf guidance now covers ZIP import, selecting XeLaTeX, setting `main.tex`, recompiling, and downloading the PDF.
-- The application icon was updated in commit `4b38efb`.
+- 匯出流程改為五個步驟：選擇輸出、設定內容、檢查準備狀態、確認並匯出、查看結果。
+- 本機 PDF 匯出會檢查 XeLaTeX、必要 TeX 套件、bkuw 管理的字型與最小編譯結果。
+- 缺少 LaTeX 編譯器時，可下載並驗證 Windows x64 TeX Live 或 macOS Apple Silicon MacTeX，再開啟官方安裝精靈。
+- 提供 Windows PowerShell、macOS shell 安裝腳本與雙語安裝說明。
+- Overleaf 流程涵蓋 ZIP 匯入、選擇 XeLaTeX、設定 `main.tex`、重新編譯與下載 PDF。
+- 應用程式 icon 已更新，來源 commit 為 `4b38efb`。
 
-### Fixes and maintenance / 修正與維護
+### 修正與維護
 
-- LaTeX checks distinguish missing engines, missing packages, failed probes, and timeouts, with preserved diagnostic logs.
-- Returning to export settings preserves edits while requiring a fresh preview and requirement check.
-- Failed PDF compilation keeps the LaTeX sources and Overleaf ZIP without claiming PDF completion.
+- LaTeX 環境檢查會區分缺少編譯器、缺少套件、編譯失敗與逾時，並保留診斷紀錄。
+- 返回匯出設定後會保留輸入內容，但要求重新預覽與檢查，避免使用過期結果。
+- PDF 編譯失敗時會保留 LaTeX 原始碼與 Overleaf ZIP，不會誤顯示為 PDF 匯出完成。
 
-## Downloads / 下載
+## 下載
 
-- Windows x64: download the NSIS `setup.exe` installer.
-- macOS Apple Silicon: download the `.dmg` image. macOS Intel is not supported.
-- Verify downloads with `SHA256SUMS.txt` when needed.
+- Windows x64：下載 NSIS `setup.exe` 安裝程式。
+- macOS Apple Silicon：下載 `.dmg` 映像檔；不支援 macOS Intel。
+- 如需確認檔案完整性，請使用 `SHA256SUMS.txt` 驗證下載檔案。
 
-## Unsigned build notice / 未簽署版本提醒
-
-These installers are not yet code-signed or notarized. Windows SmartScreen and macOS Gatekeeper may show a warning.
+## 未簽署版本提醒
 
 這些安裝包尚未進行程式碼簽章或 Apple notarization，Windows SmartScreen 與 macOS Gatekeeper 可能顯示警告。
 
-If a trusted macOS download reports that `bkuw.app` is damaged, first try **System Settings → Privacy & Security → Open Anyway**. If necessary, verify the download checksum and then run:
+如果可信任的 macOS 下載檔顯示 `bkuw.app` 已損毀，請先嘗試「系統設定 → 隱私權與安全性 → 強制打開」。必要時先驗證下載檔案的 checksum，再執行：
 
 ```bash
 sudo xattr -dr com.apple.quarantine /Applications/bkuw.app
 ```
 
-Only remove quarantine after confirming that the app came from this repository and its checksum matches.
+只有在確認 App 來自本 repository 且 checksum 相符後，才移除 quarantine 標記。
