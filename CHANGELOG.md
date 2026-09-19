@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.6.2
+
+### 中文
+
+- 義項與例句可加入多個 WAV、MP3、M4A/AAC、FLAC、OGG/Opus 或 AIFF 音檔；bkuw 會在本機離線轉成單聲道 64 kbps MP3。
+- 新增批次匯入、逐檔進度與錯誤、播放／暫停、拖曳進度及刪除操作，並完整支援英文與台灣繁中介面。
+- 音檔保存在 project-local `media/audio`，讀取時驗證路徑、檔案大小與 SHA-256；刪除義項或例句時同步清理附件，詞條 Undo 仍會保留音檔。
+- Windows x64 與 macOS Apple Silicon 安裝包隨附固定版本、完整性驗證且可離線使用的 FFmpeg／LAME 工具、授權及對應原始碼。
+- 減少 GitHub Actions 重複檢查，取消同一 pull request 的過期 CI，並只讓 exact version commit 觸發 Draft Release 建置。
+- 程式內錄音、音檔匯出，以及在 corpus CSV、LaTeX 或 PDF 中包含音檔尚未提供。
+
+### English
+
+- Senses and examples can now hold multiple WAV, MP3, M4A/AAC, FLAC, OGG/Opus, or AIFF files; bkuw converts them locally and offline to mono 64 kbps MP3.
+- Added batch import with per-file progress and errors, playback and pause, seeking, deletion, and complete English and Taiwan Traditional Chinese UI coverage.
+- Audio is stored under the project-local `media/audio` directory and verified by path, size, and SHA-256 when read; deleting a sense or example cleans up its attachments while entry Undo preserves them.
+- Windows x64 and macOS Apple Silicon installers bundle fixed, integrity-checked FFmpeg/LAME tools, licenses, and corresponding source archives for offline use.
+- Reduced duplicate GitHub Actions work, cancel outdated CI runs for the same pull request, and allow only the exact version commit to trigger Draft Release builds.
+- In-app recording, audio export, and audio in corpus CSV, LaTeX, or PDF output are not included yet.
+
 ## 0.6.1
 
 ### 中文
