@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.1
+
+### 中文
+
+- 修正桌面應用程式與 Windows/macOS 安裝程式仍使用舊 icon 的問題。
+- 重新產生 Tauri 的 PNG、ICO、ICNS、Windows、Android 與 iOS icon 資產。
+
+### English
+
+- Fixed desktop app and Windows/macOS installer bundles still using the old icon.
+- Regenerated the Tauri PNG, ICO, ICNS, Windows, Android, and iOS icon assets.
+
 ## 0.6.0
 
 ### 新功能
@@ -18,4 +30,3 @@
 - PDF 未成功產生時，不會顯示為 PDF 匯出完成，並保留 LaTeX 原始碼與 Overleaf ZIP。
 - 更新應用程式 icon。此項變更來自 commit `4b38efb`。
 - 版本與 Windows x64、macOS Apple Silicon 發布流程更新為 `0.6.0`。
-

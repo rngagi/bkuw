@@ -1,6 +1,18 @@
-# bkuw 0.6.0
+# bkuw 0.6.1
 
-## 變更記錄
+## 變更記錄 / Changelog
+
+### 中文
+
+- 修正桌面應用程式與 Windows/macOS 安裝程式仍使用舊 icon 的問題。
+- 重新產生 Tauri 的 PNG、ICO、ICNS、Windows、Android 與 iOS icon 資產。
+
+### English
+
+- Fixed desktop app and Windows/macOS installer bundles still using the old icon.
+- Regenerated the Tauri PNG, ICO, ICNS, Windows, Android, and iOS icon assets.
+
+## 0.6.0 變更記錄 / Changelog
 
 ### 新功能
 
