@@ -319,3 +319,18 @@ export type CsvImportResult = z.infer<typeof csvImportResultSchema>;
 export function createId(): string {
   return crypto.randomUUID();
 }
+
+export const latexEnvironmentSchema = z.object({
+  state: z.enum(["missing", "unusable", "missingPackages", "fontsMissing", "probeFailed", "timedOut", "ready"]),
+  path: nullableText,
+  version: nullableText,
+  missingFiles: z.array(z.string()),
+  diagnosticPath: nullableText,
+});
+export type LatexEnvironment = z.infer<typeof latexEnvironmentSchema>;
+export const latexInstallProgressSchema = z.object({
+  phase: z.enum(["downloading", "verifying", "waiting"]),
+  downloadedBytes: z.number(),
+  totalBytes: z.number().nullable(),
+});
+export type LatexInstallProgress = z.infer<typeof latexInstallProgressSchema>;

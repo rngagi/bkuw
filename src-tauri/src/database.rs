@@ -4495,12 +4495,21 @@ mod tests {
                 }],
             }],
         });
-        session
+        let entry = session
             .save_entry(SaveEntryRequest {
                 expected_revision: 0,
                 entry,
             })
             .expect("save");
+        session
+            .attach_sense_image(AttachSenseImageRequest {
+                entry_id: entry.id.clone(),
+                sense_id: entry.senses[0].id.clone(),
+                expected_revision: entry.revision,
+                original_filename: "field-photo.png".into(),
+                png_base64: BASE64.encode(sample_png()),
+            })
+            .expect("attach photo for real compilation");
         let mut related = session.create_entry().expect("related entry");
         related.forms.push(EntryForm {
             id: super::new_id(),
@@ -4537,6 +4546,7 @@ mod tests {
             .expect("save related entry");
         let mut export_settings = session.snapshot().expect("snapshot").export_settings;
         export_settings.latex.related_entries = RelatedEntriesMode::Root;
+        export_settings.latex.include_sense_images = true;
         export_settings.latex.pronunciation_writing_system_id = Some(ipa_id);
         export_settings.latex.font_presets.insert(
             snapshot.writing_systems[0].id.clone(),
@@ -4545,20 +4555,31 @@ mod tests {
         session
             .save_export_settings(export_settings)
             .expect("related entries setting");
-        let fonts = FontManager::new(directory.path().join("font-cache"));
-        fonts
-            .install("tex-gyre-termes")
-            .expect("install TeX Gyre Termes");
-        fonts
-            .install("noto-serif-cjk-tc")
-            .expect("install Noto Serif CJK TC");
-        fonts.install("charis-sil").expect("install Charis SIL");
-        fonts
-            .install("chiron-sung-hk")
-            .expect("install Chiron Sung HK");
-        fonts
-            .install("chiron-hei-hk")
-            .expect("install Chiron Hei HK");
+        let fonts = FontManager::new(
+            std::env::var_os("BKUW_LATEX_SMOKE_FONT_CACHE")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| directory.path().join("font-cache")),
+        );
+        for pack in [
+            "tex-gyre-termes",
+            "noto-serif-cjk-tc",
+            "charis-sil",
+            "chiron-sung-hk",
+            "chiron-hei-hk",
+        ] {
+            if fonts.status_for(pack).expect("font status").state
+                != crate::domain::FontPackState::Installed
+            {
+                fonts.install(pack).expect("install portable font");
+            }
+        }
+        let environment = crate::export::check_environment(
+            &session.export_snapshot().expect("snapshot"),
+            &fonts,
+            &directory.path().join("diagnostics"),
+        )
+        .expect("environment probe");
+        assert_eq!(environment.state, "ready", "{environment:?}");
         let preview = session
             .preview_export_with_fonts(ExportKind::Pdf, &fonts)
             .expect("preview");

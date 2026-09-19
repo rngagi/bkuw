@@ -34,6 +34,7 @@ fn font_manager(app: &AppHandle) -> AppResult<crate::font_manager::FontManager> 
 #[derive(Default)]
 pub struct AppState {
     session: Mutex<Option<ProjectSession>>,
+    latex_installer: crate::export::environment::InstallerState,
 }
 
 fn lock_state<'a>(
@@ -359,6 +360,65 @@ pub async fn export_project(
         crate::export::run(&snapshot, request, Some(&fonts))
     })
     .await
+}
+
+#[tauri::command]
+pub async fn check_latex_environment(
+    app: AppHandle,
+) -> AppResult<crate::export::environment::EnvironmentStatus> {
+    run_blocking(move || {
+        let snapshot = {
+            let state = app.state::<AppState>();
+            let guard = active_session(&state)?;
+            guard
+                .as_ref()
+                .ok_or_else(|| AppError::new("no_project", "No project is open."))?
+                .export_snapshot()?
+        };
+        let root = app.path().app_local_data_dir().map_err(|_| {
+            AppError::new(
+                "latex_environment",
+                "The app data directory is unavailable.",
+            )
+        })?;
+        crate::export::check_environment(&snapshot, &font_manager(&app)?, &root.join("diagnostics"))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn install_latex(
+    app: AppHandle,
+    on_progress: Channel<crate::export::environment::InstallProgress>,
+) -> AppResult<()> {
+    run_blocking(move || {
+        let state = app.state::<AppState>();
+        let root = app.path().app_local_data_dir().map_err(|_| {
+            AppError::new(
+                "latex_install_filesystem",
+                "The app data directory is unavailable.",
+            )
+        })?;
+        crate::export::environment::install(
+            &root.join("latex-installers"),
+            &state.latex_installer,
+            &|progress| {
+                let _ = on_progress.send(progress);
+            },
+        )
+    })
+    .await
+}
+
+#[tauri::command]
+pub fn cancel_latex_download(state: State<'_, AppState>) {
+    state.latex_installer.cancel();
+}
+
+#[tauri::command]
+pub async fn save_latex_install_guide(destination: String) -> AppResult<String> {
+    run_blocking(move || crate::export::environment::save_guide(std::path::Path::new(&destination)))
+        .await
 }
 
 #[tauri::command]

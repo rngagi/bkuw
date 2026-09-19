@@ -1,33 +1,43 @@
 # bkuw 匯出指南 / Export guide
 
-## 台灣繁中
+## 逐步匯出
 
-1. 在專案設定確認 analysis language；rngagi-corpus CSV 必須選「繁體中文（台灣）」。
-2. 從 header 開啟「匯出」，選 CSV、LaTeX 或 PDF。
-3. 設定 POS mapping、書寫系統、逆向索引、關聯詞、是否包含義項相片與 portable font presets。LaTeX 的詞條順序及小標使用「專案設定 → 詞條排序」。
-4. 按「預覽」。bkuw 會先完成 autosave；阻擋錯誤必須修正，warnings 則說明格式無法表示的資料。
-5. 選擇目的地。既有 CSV 需要二次確認，寫入採 temporary sibling file 與 atomic replacement。
+1. 選擇輸出：預設「本機 PDF」，也可選 Overleaf ZIP、LaTeX 原始碼或 corpus CSV。
+2. 設定內容：選擇書寫系統、圖片、字型、相關詞條等；CSV 設定 POS 對應。
+3. 檢查準備狀態：修正資料錯誤、下載必要字型。本機 PDF 另檢查 XeLaTeX、套件並進行測試編譯。
+4. 確認並匯出：檢視筆數、警告與輸出內容，選擇目的地。取消位置選擇會留在此步驟。
+5. 結果：查看檔案路徑；Overleaf 依畫面教學自行上傳 ZIP。返回設定保留輸入，但必須重新檢查。
 
-LaTeX 輸出資料夾包含 `main.tex`、`entries.tex`、`reverse-index.tex`、`.latexmkrc`、本 README 內容，以及本機成功時的 `dictionary.pdf`。勾選「包含義項相片」時，project-local PNG 會放在 `images/` 並於相應義項下保持比例排版；關閉時不打包任何相片。同層 `*-overleaf.zip` 包含來源檔、需要的 portable fonts／授權檔與選用相片，不包含 PDF、log 或 aux files。可選的關聯詞只顯示直接 incoming root／base links 一層，並連回完整詞條。
+## 本機 LaTeX 安裝
 
-找不到 XeLaTeX 時，來源與 ZIP 仍會正常建立。到 Overleaf 建立 Upload Project、上傳 ZIP，並將 compiler 設為 XeLaTeX。bkuw 不會自動上傳詞彙資料。
+缺少編譯器時按「安裝 LaTeX」，bkuw 下載並驗證完整 TeX Live（Windows x64）或 MacTeX（macOS Apple Silicon），再開啟官方精靈。請預留數 GB 下載與磁碟空間，保留完整安裝選項。系統授權僅在官方精靈／系統視窗操作。開啟精靈不代表安裝完成；完成後返回 App 按「重新檢查」。下載可取消與重試。若已關閉安裝精靈，可解除等待狀態後再下載。
 
-字型不需要也不應手動安裝到作業系統。App 啟動時會先檢查 TeX Gyre Termes、Charis SIL、Noto Serif、Noto Serif CJK TC、昭源宋體與昭源黑體；缺少時可按「全部下載」查看逐套 bytes 與整體進度。只有實際下載失敗後才會出現「離線使用」，且下次啟動仍會提醒。Project Settings 與 Export wizard 都可重新開啟管理／重試入口。bkuw 從官方固定版本下載、驗證 SHA-256 並保存於專用 cache；Hant `Auto` 與 zh-TW analysis text 使用昭源宋體，IPA（phonemic／phonetic）固定使用 Charis SIL。TeX Gyre Termes 是必要 base，缺少或損毀時 LaTeX/PDF preview 會直接阻擋。現階段不提供 Thai／Tibetan 專用 managed font packs。輸出的 `fonts/` 目錄與 Overleaf ZIP 會自帶需要的字型及授權檔，因此不依賴 Windows、macOS 或 Overleaf 原本安裝的 fonts。首次下載完成後，cache 可離線重用。
+已有環境但缺套件時，用該發行版的管理工具修復，不直接覆蓋。詳細步驟與手動腳本用法見 [雙語安裝指南](../src-tauri/templates/latex/INSTALL.md)。可在匯出準備步驟按「另存安裝腳本與說明」。安裝完成、必要字型已下載後可離線編譯；ZIP 本身不需要本機 TeX。
 
-編譯失敗或超過 120 秒時，來源專案與 `diagnostic.log` 會保留。錯誤畫面會顯示完整的診斷紀錄位置；可複製該路徑，並在 Windows 檔案總管或 macOS Finder 前往該檔案。錯誤畫面也會區分 validation、stale preview、filesystem、compile 與 timeout；修正後重新 preview 再匯出。
+## Overleaf
 
-## English
+1. [匯入 ZIP](https://docs.overleaf.com/managing-projects-and-files/uploading-a-project)：選 New Project → Upload Project，上傳 `*-overleaf.zip`。
+2. [選擇 XeLaTeX](https://docs.overleaf.com/getting-started/recompiling-your-project/selecting-a-tex-live-version-and-latex-compiler)。
+3. [設定主文件](https://docs.overleaf.com/getting-started/recompiling-your-project/the-main-document)：選根目錄的 `main.tex`。
+4. [編譯](https://docs.overleaf.com/getting-started/recompiling-your-project)：按 Recompile 並處理顯示的錯誤。
+5. [下載 PDF](https://docs.overleaf.com/managing-projects-and-files/downloading-a-project)。
 
-1. Confirm the project analysis language. The rngagi-corpus CSV requires Taiwan Traditional Chinese (`zh-TW`).
-2. Open Export from the app header and choose CSV, LaTeX, or PDF.
-3. Configure POS mappings, writing systems, reverse index, related entries, whether to include sense photos, and portable font presets. Included photos are exported as print-sized JPEG/PNG derivatives while project PNGs stay unchanged. LaTeX entry order and headings come from Project Settings → Entry ordering.
-4. Select Preview. bkuw flushes autosave first. Blocking errors must be fixed; warnings identify data the target format cannot represent.
-5. Choose a destination. Replacing an existing CSV requires confirmation and uses a temporary sibling plus atomic replacement.
+Overleaf 需要網路與帳號；bkuw 不會自動上傳資料。ZIP 自帶字型、授權與選用圖片。若本機編譯失敗或逾時，來源與 `diagnostic.log` 仍保留；PDF 未產生時不會標示完成。
 
-The LaTeX folder contains `main.tex`, `entries.tex`, `reverse-index.tex`, `.latexmkrc`, a bilingual README, and `dictionary.pdf` when local compilation succeeds. When “Include sense photos” is enabled, project-local PNG files are copied under `images/` and placed proportionally below their senses; when disabled, no photos are packaged. The sibling `*-overleaf.zip` contains source files, required portable fonts/licenses, and selected photos—never PDF, logs, or auxiliary files. Optional related entries include one level of direct incoming root/base links and link back to each full entry.
+## Step-by-step export
 
-If XeLaTeX is unavailable, source and ZIP generation still succeeds. In Overleaf, create an Upload Project, upload the ZIP, and select XeLaTeX. bkuw never uploads lexical data automatically.
+1. Choose Local PDF (default), Overleaf ZIP, LaTeX sources, or corpus CSV.
+2. Configure writing systems, photos, fonts and related entries; map POS for CSV.
+3. Check requirements: resolve data issues and download required fonts. Local PDF also validates XeLaTeX, packages and a minimal compilation.
+4. Confirm the counts, warnings and output, then choose a destination. Cancelling the destination keeps this step open.
+5. Review the result paths. For Overleaf, follow the official links above to upload the ZIP, select XeLaTeX and root `main.tex`, recompile and download the PDF.
 
-Do not install these fonts into the operating system. At startup, bkuw checks TeX Gyre Termes, Charis SIL, Noto Serif, Noto Serif CJK TC, Chiron Sung HK, and Chiron Hei HK. “Download all fonts” shows per-pack byte progress and integrity verification. “Use bkuw offline” appears only after a real download failure and does not suppress the reminder on the next launch. The same manager is available from Project Settings, while Export retains targeted retry. Downloads use fixed official versions and SHA-256 verification before entering bkuw's private cache. Hant `Auto` and zh-TW analysis text use Chiron Sung HK; IPA (phonemic/phonetic) always uses Charis SIL. TeX Gyre Termes is mandatory, so a missing or invalid pack blocks LaTeX/PDF preview. Dedicated Thai and Tibetan managed font packs are not currently offered. Exported projects and Overleaf ZIPs carry their required fonts and license files under `fonts/`, independent of fonts installed on Windows, macOS, or Overleaf. Once downloaded, the cache can be reused offline.
+Back preserves settings and requires a fresh check. Local installer assistance downloads and verifies a full Windows TeX Live or macOS Apple Silicon MacTeX installer, then opens the official wizard. Keep the full installation selected and authorize only in the system UI. Allow several GB of download and disk space. Installer handoff is not success: finish installation and choose Check again. Download can be cancelled and retried. Repair existing installations with their own package manager. Save standalone scripts and the [bilingual installation guide](../src-tauri/templates/latex/INSTALL.md) from the requirements step if needed.
 
-On a compile failure or 120-second timeout, bkuw preserves the source project and `diagnostic.log`. The error panel shows the full diagnostic-log path so it can be copied and opened from Windows File Explorer or macOS Finder. Correct the reported problem, create a fresh preview, and export again.
+Once TeX and managed fonts are available, local compilation works offline. Overleaf requires an account and internet access; bkuw never uploads data automatically. Compilation failures preserve sources and diagnostic logs.
+
+## 字型與輸出 / Fonts and output
+
+字型由 bkuw 以固定來源、SHA-256 與 manifest 驗證後存入專用 cache，不需安裝至作業系統。TeX Gyre Termes 為必要字型，IPA 固定 Charis SIL，Hant Auto 與 zh-TW 分析文字使用昭源宋體。來源與 ZIP 包含實際使用的字型與授權。相片輸出為適合排版的衍生檔，專案原始 PNG 不變。CSV 維持 rngagi-corpus v0.3 九欄契約。
+
+bkuw caches verified managed fonts without installing them into the OS. TeX Gyre Termes is mandatory, IPA uses Charis SIL, and Hant Auto / zh-TW analysis text use Chiron Sung HK. Sources and ZIP include used fonts and licenses. Photo derivatives are sized for print without changing project PNGs. Corpus CSV retains the rngagi-corpus v0.3 nine-column contract.

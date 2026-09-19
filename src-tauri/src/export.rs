@@ -1,3 +1,5 @@
+pub(crate) mod environment;
+
 use std::{
     collections::{BTreeMap, BTreeSet},
     env, fs,
@@ -176,6 +178,33 @@ pub(crate) fn run(
             export_latex_project(snapshot, request.kind, &request.destination, manager)
         }
     }
+}
+
+pub(crate) fn check_environment(
+    snapshot: &ExportSnapshot,
+    fonts: &FontManager,
+    diagnostics: &Path,
+) -> AppResult<environment::EnvironmentStatus> {
+    let engine = xelatex_configuration().0;
+    if engine.is_none() {
+        return environment::inspect(None, None, diagnostics);
+    }
+    let sources = (|| -> AppResult<Vec<(String, Vec<u8>)>> {
+        let mut sources = fonts.export_files(&required_font_pack_ids(snapshot))?;
+        let packages = include_str!("../templates/latex/main.tex")
+            .lines()
+            .filter(|line| line.starts_with("\\documentclass") || line.starts_with("\\usepackage"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let tex = format!(
+            "{packages}\n{}\n\\begin{{document}}bkuw\\end{{document}}",
+            font_definitions(snapshot, fonts)?
+        );
+        sources.push(("probe.tex".into(), tex.into_bytes()));
+        Ok(sources)
+    })()
+    .ok();
+    environment::inspect(engine, sources, diagnostics)
 }
 
 #[must_use]
@@ -463,6 +492,9 @@ fn find_xelatex() -> Option<PathBuf> {
             PathBuf::from(r"C:\Program Files\MiKTeX\miktex\bin\x64\xelatex.exe"),
             PathBuf::from(r"C:\Program Files\MiKTeX\miktex\bin\xelatex.exe"),
         ]);
+        if let Some(local) = env::var_os("LOCALAPPDATA") {
+            candidates.push(PathBuf::from(local).join(r"MiKTeX\miktex\bin\x64\xelatex.exe"));
+        }
         for year in 2020..=2030 {
             candidates.push(PathBuf::from(format!(
                 r"C:\texlive\{year}\bin\windows\xelatex.exe"
@@ -547,6 +579,10 @@ fn render_latex_sources(
         (
             ".latexmkrc".into(),
             b"$pdf_mode = 5;\n$xelatex = 'xelatex -no-shell-escape -interaction=nonstopmode -halt-on-error -file-line-error %O %S';\n".to_vec(),
+        ),
+        (
+            "INSTALL.md".into(),
+            include_str!("../templates/latex/INSTALL.md").as_bytes().to_vec(),
         ),
         (
             "README.md".into(),

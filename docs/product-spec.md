@@ -111,7 +111,7 @@ App UI 必須完整支援 `en` 與 `zh-TW`。首次啟動依 OS locale 決定，
 
 ## 匯出流程
 
-Header 的 Export wizard 依「格式、profile、validation preview、目的地、結果」操作。Preview 前必須 flush autosave；preview token 綁定當下 project snapshot，資料變動後不得以舊 token 匯出。Blocking error 會禁止輸出，warning 會說明無法表示或被省略的資料，並可導覽到相關 entry。
+Header 的 Export wizard 依「選擇輸出、設定內容、檢查準備狀態、確認並匯出、結果」逐步操作。預設本機 PDF，可主動選擇 Overleaf ZIP、LaTeX 原始碼或 corpus CSV。返回上一步保留設定；返回編輯會清除舊 preview，重新檢查後才能繼續。Preview 前必須 flush autosave；preview token 綁定當下 project snapshot，資料變動後不得以舊 token 匯出。Blocking error 會禁止輸出，warning 會說明無法表示或被省略的資料，並可導覽到相關 entry。
 
 Preview、LaTeX/ZIP 產生與 XeLaTeX 編譯不得凍結 webview。等待期間顯示目前階段的本地化 indeterminate progress；PDF 明確說明 XeLaTeX 在背景執行且最長可能接近 120 秒。只有選擇 LaTeX／PDF 時才檢查 portable fonts，只有選擇 PDF 時才偵測 XeLaTeX，避免開啟一般 CSV wizard 時進行無關 I/O。
 
@@ -127,7 +127,7 @@ bkuw 自行管理 portable font packs，不依賴 OS 已安裝字型，也不把
 
 左側詞表的主要表記與第一個可用 pronunciation form 顯示在同一行；若 pronunciation writing system 同時是 secondary，不得再顯示一次。下方依 sense order 顯示簡釋，每一列保留該 sense 自己的詞性與 gloss 配對；不同義項的詞性不得彙整成一個無法對應的清單。
 
-PDF 只在本機偵測到 XeLaTeX 時產生。bkuw 在隔離 build directory 中以 `-no-shell-escape` 執行兩次並限制 120 秒；失敗保留來源與 diagnostic log，並在錯誤區顯示可選取、可複製的完整 log 路徑。找不到引擎仍是成功的 LaTeX 匯出，UI 提供 Overleaf 上傳步驟，但不自動上傳 lexical data。
+本機 PDF 在準備步驟驗證 XeLaTeX 可執行、同一環境的 kpsewhich 可找到模板所需套件，再用 managed fonts 進行最小編譯。必要套件由模板推導；錯誤、缺字型與逾時會阻擋前進。CSV 不做字型／TeX 檢查；LaTeX 與 Overleaf 只需資料與字型驗證。PDF 只在本機偵測到 XeLaTeX 時產生。bkuw 在隔離 build directory 中以 `-no-shell-escape` 執行兩次並限制 120 秒；失敗保留來源與 diagnostic log，並在錯誤區顯示可選取、可複製的完整 log 路徑。若檢查後引擎消失，仍保存來源與 ZIP，但 UI 明確標示未產生 PDF。Overleaf 自選流程與此備援均提供官方 ZIP 匯入、XeLaTeX 設定、main.tex 主文件、編譯與 PDF 下載教學，不自動上傳 lexical data。
 
 關閉主視窗時必須先完成有效草稿的 autosave 並釋放 project lock，之後程式才結束；Windows 與 macOS 的標準關窗操作皆須可用。
 
@@ -138,3 +138,9 @@ Audio、匯入既有專案、跨 repository contract test、多 analysis-languag
 ## 明確排除
 
 目前不包含 accounts、authentication、cloud sync、team collaboration、permissions、server backend、audio、匯入既有專案、Big5 CSV、mobile、AI transcription、ASR、ELAN-style timeline、waveform segmentation、Git syncing、code signing、notarization、auto-update 或自動上傳 lexical data。受信任的 `main` version commit 通過 exact-SHA CI 後可自動建立 unsigned Draft GitHub Release；正式發布前須人工確認安裝包、checksums 與警告內容。
+
+### LaTeX 安裝協助
+
+缺少 XeLaTeX 時，使用者可按「安裝 LaTeX」。bkuw 從固定 HTTPS 來源串流下載完整 MacTeX 2026（macOS Apple Silicon）或 TeX Live 2025 final installer（Windows x64），驗證內建 SHA-256 後開啟官方精靈。Windows 使用同版本 final repository，請保留 full scheme；完整安裝需數 GB 網路與磁碟空間。系統授權交給官方精靈處理，App 不收集密碼。
+
+下載有進度、取消與失敗重試。開啟精靈只表示等待安裝；回到 App 或手動按「重新檢查」才確認是否可編譯。若官方精靈取消或關閉，可選「安裝精靈已關閉，允許重新下載」再試。已有 TeX 時提供套件管理修復說明，不覆蓋安裝。可另外儲存 PowerShell／shell 腳本與雙語安裝說明，採相同固定 URL 與 SHA-256 驗證。安裝與字型下載完成後，本機編譯保持離線可用。

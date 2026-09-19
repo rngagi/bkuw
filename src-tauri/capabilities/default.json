@@ -2,7 +2,9 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the main window",
-  "windows": ["main"],
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "core:window:allow-destroy",
@@ -12,10 +14,42 @@
     {
       "identifier": "opener:allow-open-url",
       "allow": [
-        { "url": "https://iso639-3.sil.org/code_tables/639/data" },
-        { "url": "https://www.unicode.org/iso15924/iso15924-codes.html" },
-        { "url": "https://www.overleaf.com/project" },
-        { "url": "https://www.overleaf.com/learn/how-to/Changing_compiler" }
+        {
+          "url": "https://iso639-3.sil.org/code_tables/639/data"
+        },
+        {
+          "url": "https://www.unicode.org/iso15924/iso15924-codes.html"
+        },
+        {
+          "url": "https://www.overleaf.com/project"
+        },
+        {
+          "url": "https://www.overleaf.com/learn/how-to/Changing_compiler"
+        },
+        {
+          "url": "https://docs.overleaf.com/managing-projects-and-files/uploading-a-project"
+        },
+        {
+          "url": "https://docs.overleaf.com/getting-started/recompiling-your-project/selecting-a-tex-live-version-and-latex-compiler"
+        },
+        {
+          "url": "https://docs.overleaf.com/getting-started/recompiling-your-project/the-main-document"
+        },
+        {
+          "url": "https://docs.overleaf.com/getting-started/recompiling-your-project"
+        },
+        {
+          "url": "https://docs.overleaf.com/managing-projects-and-files/downloading-a-project"
+        },
+        {
+          "url": "https://tug.org/texlive/tlmgr.html"
+        },
+        {
+          "url": "https://tug.org/mactex/"
+        },
+        {
+          "url": "https://miktex.org/howto/miktex-console"
+        }
       ]
     }
   ]

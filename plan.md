@@ -22,6 +22,12 @@
 - [x] Windows `Ctrl+-/=/0` 與 macOS `Cmd+-/=/0` WebView 縮放，包含持久化、bounded levels、IME／既有快捷鍵保護及 narrow Tauri capability。
 - [x] Windows x64／macOS Apple Silicon CI validation 不產生 artifacts；version commit 的 exact-SHA `main` CI 成功後自動建置 NSIS／DMG，完成才建立 checksums 與 exact-SHA Draft Release，人工 Publish 時才 materialize tag，並支援 artifact recovery。macOS Intel 不在支援或建置範圍內。
 
+## 逐步匯出與 LaTeX 安裝引導
+
+- [x] 五步驟匯出、本機 PDF 優先、必要套件／字型檢查、官方安裝器交接與雙語安裝／Overleaf 教學。驗證：`pnpm check`、`pnpm test`、`pnpm test:rust`。
+- [ ] Milestone：desktop E2E、真實 XeLaTeX 編譯及 `pnpm tauri build --no-bundle`。
+- [ ] 外部人工驗收：Windows x64／macOS Apple Silicon 官方安裝精靈與安裝後離線編譯、Overleaf 匯入含繁中／IPA／圖片的 ZIP。
+
 ## 候選 backlog
 
 以下尚未承諾版本或優先順序；開始實作前須先確認 scope 與 acceptance criteria。

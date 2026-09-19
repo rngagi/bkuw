@@ -24,7 +24,7 @@ Frontend 不可直接執行 SQL。所有 `invoke` 集中在 `src/lib/tauri.ts`�
 - 開啟時 canonicalize 路徑、驗證目錄與 database identity/schema，再取得 exclusive project lock。
 - migration 前以 SQLite-consistent 方法建立 timestamped backup；migration 失敗時保留原資料並回報 stable error code。
 - 關閉 project 時先 flush pending save，再關閉 connection 與釋放 lock。
-- Tauri main window 僅有 open/save dialog、必要 core capability，以及 scope 嚴格限定為官方 ISO 639-3、Unicode ISO 15924、Overleaf project／compiler help URL 的 opener permission；不開放 shell、HTTP 或 broad filesystem plugin。Project database 操作限制在 active canonical project；export 只操作使用者經 dialog 選定的目的地。
+- Tauri main window 僅有 open/save dialog、必要 core capability，以及 scope 嚴格限定為官方 ISO 639-3、Unicode ISO 15924、Overleaf project／官方匯入、編譯器、主文件、編譯、下載教學，以及 TeX Live／MacTeX／MiKTeX 官方說明 URL 的 opener permission；不開放 shell、HTTP 或 broad filesystem plugin。Project database 操作限制在 active canonical project；export 只操作使用者經 dialog 選定的目的地。
 
 ## Command interface
 
@@ -49,6 +49,10 @@ save_export_settings(settings) -> ExportSettingsV1
 preview_export(kind) -> ExportPreview
 export_project(request) -> ExportResult
 detect_xelatex() -> TexEngineStatus
+check_latex_environment() -> LatexEnvironment
+install_latex(onProgress) -> void
+cancel_latex_download() -> void
+save_latex_install_guide(destination) -> string
 list_font_packs() -> FontPackStatus[]
 install_font_pack(packId) -> FontPackStatus
 install_font_packs(packIds, progressChannel) -> FontPackStatus[]
@@ -160,7 +164,7 @@ TeX Gyre Termes 是所有 LaTeX/PDF export 的 mandatory base pack，缺少或 i
 
 Entry list 的 read model 由 database 一次載入 forms，再以固定的一個 bulk query 載入 ordered sense summaries。每個 summary 保存自己的 POS 與 gloss，禁止先各自彙整後再嘗試配對。Pronunciation form 依 phonetic 優先、phonemic 次之選出，連同 writing-system ID 回傳；React 使用該系統的 `/…/`／`[…]` 顯示規則，並在它也是 secondary 時抑制重複行。
 
-ZIP 打包 `main.tex`、`entries.tex`、`reverse-index.tex`、`.latexmkrc`、bilingual `README.md`、`fonts/` 下的必要 font/license files，以及 profile 啟用時的 `images/`，不含 PDF/log/aux。PDF runner 從 PATH、macOS TeX path 與 Windows 常見路徑找 XeLaTeX，把完整 sources tree 複製到 temporary build directory，兩次執行 `-no-shell-escape -interaction=nonstopmode -halt-on-error -file-line-error`，每次最多 120 秒。成功只複製 PDF；失敗/timeout 保留 source project 與 `diagnostic.log`。
+ZIP 打包 `main.tex`、`entries.tex`、`reverse-index.tex`、`.latexmkrc`、bilingual `README.md`／`INSTALL.md`、`fonts/` 下的必要 font/license files，以及 profile 啟用時的 `images/`，不含 PDF/log/aux。PDF runner 從 PATH、macOS TeX path 與 Windows 常見路徑找 XeLaTeX，把完整 sources tree 複製到 temporary build directory，兩次執行 `-no-shell-escape -interaction=nonstopmode -halt-on-error -file-line-error`，每次最多 120 秒。成功只複製 PDF；失敗/timeout 保留 source project 與 `diagnostic.log`。
 
 CSV 的外部相容契約見 `docs/corpus-csv-contract.md`。目前沒有跨 repository 自動 contract test；`rngagi-corpus` 版本變更必須人工重驗與更新 golden fixture。
 
@@ -187,3 +191,15 @@ React Hook Form 管理 entry aggregate draft，Zod 負責 frontend validation。
 - Vitest + React Testing Library 測互動、autosave、translations、validation 與 nested editors。
 - WebdriverIO Tauri service 執行主要 desktop workflow smoke test。
 - GitHub Actions 在 `main`／pull request 的 Windows x64 與 macOS Apple Silicon jobs 執行 checks、tests 與 release-mode desktop E2E，但不建立或上傳 installer artifacts，也不建立 macOS Intel 產物。成功的 trusted `main` push CI 會觸發 release planner；planner 以 exact HEAD 的四個一致版本對比 Git history 中上一個 package version，因此可容許 version commit 後同批 push 還有修正 commit。只有版本遞增且對應 tag 尚不存在時，才於 Windows／macOS jobs 建置並暫存 NSIS／DMG。受限 `contents: write` 的 final job 驗證檔名與 SHA-256，最後建立以 exact SHA 為 target、含自動 changelog 的 Draft Release；GitHub 只在人工 Publish 時 materialize tag。`publish-draft` module 可安全更新尚未 materialize tag 的草稿 target，或更新 tag 已指向相同 commit 的既有草稿；manual recovery 可重用指定 release run 的 installer artifacts，無須重新打包。發布前保留人工確認閘門。
+
+### Export wizard and local TeX setup
+
+`ExportDialog` keeps output intent, settings, preview and current step in component state; Overleaf maps to the existing `latex` export kind, without a database migration. Autosave and settings are flushed before preview, and returning to edit invalidates the preview. `LatexRequirements` only mounts for local PDF at the requirements step, ignores stale async responses, and rechecks on focus after installer handoff. The typed adapter validates all environment/progress DTOs with Zod. Dependency errors have translation keys in both locales.
+
+`export::environment` owns executable/version checks, template-derived package checks through the engine's sibling `kpsewhich`, an isolated 30-second compilation probe, diagnostics, installer download/handoff, and script generation. Version checks time out after 10 seconds; package probes after 5 seconds. The probe uses managed font files and no lexical data. Export snapshots are taken under the project lock; probing, network, and compilation run outside it. Existing `detect_xelatex` remains compatible with callers; normal compilation keeps its existing isolation and snapshot validation.
+
+Installer download is explicitly requested, restricted to catalog HTTPS URLs with redirects disabled, streamed to an app-private temporary file, and verified against a pinned SHA-256 before launch. Progress is throttled to 200 ms. A process-wide AppState guard prevents overlapping downloads; cancellation is observed between chunks, with network reads bounded to 30 seconds. Partial downloads are deleted automatically. Verified installers live in unique `latex-installers` subdirectories and may be deleted after installation. macOS uses `/usr/bin/open` for the verified `.pkg`; Windows launches the verified `.exe` with the matching historical repository. No frontend shell/HTTP/filesystem capability is introduced. Installer handoff is not installation success; existing TeX blocks a new install. Script exports use the same catalog and user-selected output directory.
+
+Catalog provenance: MacTeX `mactex-20260324.pkg` SHA-256 comes from Homebrew's `Casks/m/mactex.rb`; the TeX Live 2025 final installer was hashed from the official historic mirror and cross-checked against its published SHA-512. Catalog changes require revalidation; an unavailable or replaced download fails closed rather than falling back to an unverified installer. The installer itself manages package retrieval after handoff. Official package-manager links guide repair of an existing environment.
+
+The real XeLaTeX smoke test can reuse an existing verified font cache through `BKUW_LATEX_SMOKE_FONT_CACHE`; when unset, it installs fonts in its temporary test directory. The fixture includes Traditional Chinese, IPA and a sense photo. Desktop E2E reuses packs only after `list_font_packs` reports successful integrity verification.

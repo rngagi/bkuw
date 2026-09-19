@@ -232,3 +232,13 @@ textarea { min-height: 72px; resize: vertical; }
 .app-error button { border: 0; background: transparent; font-size: 20px; color: inherit; }
 .undo-toast { position: fixed; z-index: 20; right: 18px; bottom: 18px; display: flex; align-items: center; gap: 14px; padding: 10px 12px 10px 16px; border: 1px solid var(--border); border-radius: 6px; background: #282323; color: white; box-shadow: 0 8px 24px rgb(0 0 0 / 18%); }
 @media (max-width: 1040px) { .header-actions button { font-size: 0; } .writing-system-basics, .writing-system-advanced .settings-grid, .mapping-grid, .export-latex-grid, .export-progress { grid-template-columns: 1fr; } .mapping-grid > .section-help, .engine-status { grid-column: 1; } .relation-row { grid-template-columns: 100px 1fr; } }
+
+.export-steps { display: flex; flex-wrap: wrap; list-style: none; gap: 8px 16px; padding: 0; margin: 0 0 12px; color: var(--muted-foreground); font-size: 13px; }
+.export-steps [aria-current="step"] { color: var(--primary); font-weight: 600; }
+.export-step-title { font-size: 16px; margin: 0 0 12px; }
+.export-step-title:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.latex-requirements, .overleaf-help { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 14px; border: 1px solid var(--border); border-radius: 6px; }
+.latex-requirements h3, .latex-requirements p, .overleaf-help h3 { margin: 0; }
+.latex-requirements code { display: block; overflow-wrap: anywhere; max-width: 100%; }
+.latex-requirements progress { accent-color: var(--primary); width: 100%; }
+.overleaf-help ol { padding-inline-start: 22px; margin: 0; }

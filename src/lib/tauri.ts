@@ -3,6 +3,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { z } from "zod";
 import {
+  latexEnvironmentSchema, latexInstallProgressSchema, type LatexInstallProgress,
   deletedEntrySchema,
   entrySummarySchema,
   exportPreviewSchema,
@@ -61,6 +62,17 @@ async function call<T>(
   }
 }
 
+export const exportHelpUrls = {
+  "upload": "https://docs.overleaf.com/managing-projects-and-files/uploading-a-project",
+  "compiler": "https://docs.overleaf.com/getting-started/recompiling-your-project/selecting-a-tex-live-version-and-latex-compiler",
+  "main": "https://docs.overleaf.com/getting-started/recompiling-your-project/the-main-document",
+  "compile": "https://docs.overleaf.com/getting-started/recompiling-your-project",
+  "download": "https://docs.overleaf.com/managing-projects-and-files/downloading-a-project",
+  "texlive": "https://tug.org/texlive/tlmgr.html",
+  "mactex": "https://tug.org/mactex/",
+  "miktex": "https://miktex.org/howto/miktex-console"
+} as const;
+
 export const backend = {
   openLanguageCodeRegistry(): Promise<void> {
     return openUrl("https://iso639-3.sil.org/code_tables/639/data");
@@ -76,6 +88,24 @@ export const backend = {
 
   openOverleafCompilerHelp(): Promise<void> {
     return openUrl("https://www.overleaf.com/learn/how-to/Changing_compiler");
+  },
+
+  openExportHelp(topic: "upload" | "compiler" | "main" | "compile" | "download" | "texlive" | "mactex" | "miktex"): Promise<void> {
+    return openUrl(exportHelpUrls[topic]);
+  },
+  checkLatexEnvironment() {
+    return call("check_latex_environment", {}, latexEnvironmentSchema);
+  },
+  installLatex(onProgress: (progress: LatexInstallProgress) => void): Promise<void> {
+    const channel = new Channel<unknown>();
+    channel.onmessage = (value) => onProgress(latexInstallProgressSchema.parse(value));
+    return call("install_latex", { onProgress: channel }, z.null()).then(() => undefined);
+  },
+  cancelLatexDownload(): Promise<void> {
+    return call("cancel_latex_download", {}, z.null()).then(() => undefined);
+  },
+  saveLatexInstallGuide(destination: string): Promise<string> {
+    return call("save_latex_install_guide", { destination }, z.string());
   },
 
   async chooseFolder(): Promise<string | null> {

@@ -20,3 +20,16 @@ Required fonts and their license notices are included under `fonts/`. The projec
 
 Entry order and headings follow the bkuw project ordering settings. Optional related-entry lists contain direct links only, one level deep.
 詞條順序與小標依 bkuw 專案排序設定；選用的關聯詞清單只包含一層直接連結。
+
+## Local compilation / 本機編譯
+
+Prefer the bkuw Local PDF wizard. It checks XeLaTeX, packages and managed fonts before export. For manual setup, see [INSTALL.md](INSTALL.md). To compile this exported folder manually, run `xelatex -no-shell-escape -interaction=nonstopmode -halt-on-error main.tex` twice from this directory.
+優先使用 bkuw 本機 PDF 匯出精靈；會先檢查 XeLaTeX、套件與字型。手動安裝請參考 [INSTALL.md](INSTALL.md)。若直接編譯此資料夾，請在此目錄執行兩次 `xelatex -no-shell-escape -interaction=nonstopmode -halt-on-error main.tex`。
+
+## Official Overleaf guides / Overleaf 官方教學
+
+1. [Upload ZIP / 匯入 ZIP](https://docs.overleaf.com/managing-projects-and-files/uploading-a-project).
+2. [Select XeLaTeX / 選擇 XeLaTeX](https://docs.overleaf.com/getting-started/recompiling-your-project/selecting-a-tex-live-version-and-latex-compiler).
+3. [Set root main.tex / 設定根目錄 main.tex](https://docs.overleaf.com/getting-started/recompiling-your-project/the-main-document).
+4. [Recompile / 編譯](https://docs.overleaf.com/getting-started/recompiling-your-project).
+5. [Download PDF / 下載 PDF](https://docs.overleaf.com/managing-projects-and-files/downloading-a-project).

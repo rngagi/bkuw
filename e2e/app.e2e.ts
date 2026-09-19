@@ -155,7 +155,9 @@ describe("bkuw desktop shell", () => {
         "過,經歷,guo,我經歷過。,我經歷過。,kuo˥˩,verb,,\r\n",
       );
 
+      const fontStatuses = await browser.tauri.execute(({ core }) => core.invoke("list_font_packs")) as any[];
       for (const packId of ["tex-gyre-termes", "noto-serif-cjk-tc", "noto-serif", "charis-sil"]) {
+        if (fontStatuses.some((pack) => pack.id === packId && pack.state === "installed")) continue;
         const installed = await browser.tauri.execute(
           ({ core }, id) => core.invoke("install_font_pack", { packId: id }),
           packId,
@@ -171,10 +173,18 @@ describe("bkuw desktop shell", () => {
         ({ core }, request) => core.invoke("export_project", { request }),
         { kind: "latex", destination: parentDir, snapshotToken: latexPreview.snapshotToken, overwrite: false },
       ) as any;
-      expect(readdirSync(latexResult.latexDirectory).sort()).toEqual([".latexmkrc", "README.md", "entries.tex", "fonts", "main.tex", "reverse-index.tex"]);
+      expect(readdirSync(latexResult.latexDirectory).sort()).toEqual([".latexmkrc", "INSTALL.md", "README.md", "entries.tex", "fonts", "main.tex", "reverse-index.tex"]);
       expect(existsSync(join(latexResult.latexDirectory, "fonts", "tex-gyre-termes", "LICENSE.txt"))).toBe(true);
       expect(existsSync(join(latexResult.latexDirectory, "fonts", "charis-sil", "Charis-Regular.ttf"))).toBe(true);
       expect(existsSync(latexResult.zipPath)).toBe(true);
+      const installGuide = await browser.tauri.execute(
+        ({ core }, destination) => core.invoke("save_latex_install_guide", { destination }),
+        parentDir,
+      ) as string;
+      expect(readdirSync(installGuide).sort()).toEqual(["README.md", "install-macos.sh", "install-windows.ps1"]);
+      expect(readFileSync(join(installGuide, "README.md"), "utf8")).toContain("重新檢查");
+      const environment = await browser.tauri.execute(({ core }) => core.invoke("check_latex_environment")) as any;
+      expect(["ready", "missing", "unusable", "missingPackages", "probeFailed", "timedOut"]).toContain(environment.state);
 
       await browser.tauri.execute(({ core }) => core.invoke("close_project"));
       projectOpen = false;

@@ -1,6 +1,6 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { ExternalLink, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/Button";
 import { backend, CommandError } from "../../lib/tauri";
@@ -12,8 +12,10 @@ import type {
   ExportSettings,
   FontPackStatus,
   ProjectSnapshot,
-  TexEngineStatus,
+  LatexEnvironment,
 } from "../../types/domain";
+
+import { LatexRequirements, OverleafHelp } from "./LatexRequirements";
 
 interface Props {
   open: boolean;
@@ -44,12 +46,17 @@ function cloneSettings(settings: ExportSettings): ExportSettings {
 
 export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnalysisLanguage, onNavigateEntry }: Props) {
   const { t } = useTranslation();
-  const [kind, setKind] = useState<ExportKind>("corpusCsv");
+  const [step, setStep] = useState(0);
+  const [overleaf, setOverleaf] = useState(false);
+  const [environmentRevision, setEnvironmentRevision] = useState(0);
+  const [installingLatex, setInstallingLatex] = useState(false);
+  const stepHeading = useRef<HTMLHeadingElement>(null);
+  const [kind, setKind] = useState<ExportKind>("pdf");
   const [settings, setSettings] = useState<ExportSettings>(() => cloneSettings(snapshot.exportSettings));
   const [analysisLanguage, setAnalysisLanguage] = useState<"zh-TW" | "en" | null>(snapshot.project.analysisLanguage);
   const [preview, setPreview] = useState<ExportPreview | null>(null);
   const [result, setResult] = useState<ExportResult | null>(null);
-  const [engine, setEngine] = useState<TexEngineStatus | null>(null);
+  const [engine, setEngine] = useState<LatexEnvironment | null>(null);
   const [fontPacks, setFontPacks] = useState<FontPackStatus[]>([]);
   const [installingPack, setInstallingPack] = useState<string | null>(null);
   const [busyTask, setBusyTask] = useState<BusyTask | null>(null);
@@ -58,6 +65,9 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
 
   useEffect(() => {
     if (!open) return;
+    setStep(0);
+    setKind("pdf");
+    setOverleaf(false);
     setSettings(cloneSettings(snapshot.exportSettings));
     setAnalysisLanguage(snapshot.project.analysisLanguage);
     setPreview(null);
@@ -68,24 +78,11 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
     setFontPacks([]);
   }, [open]);
 
-  useEffect(() => {
-    if (!open || kind === "corpusCsv") return;
-    let active = true;
-    void backend.listFontPacks().then((packs) => {
-      if (active) setFontPacks(packs);
-    }).catch(() => {
-      if (active) setFontPacks([]);
-    });
-    if (kind === "pdf") {
-      setEngine(null);
-      void backend.detectXeLatex().then((status) => {
-        if (active) setEngine(status);
-      }).catch(() => {
-        if (active) setEngine(null);
-      });
-    }
-    return () => { active = false; };
-  }, [kind, open]);
+  useEffect(() => { stepHeading.current?.focus(); }, [step, open]);
+
+  function invalidate() {
+    setPreview(null); setResult(null); setEngine(null); setPendingDestination(null);
+  }
 
   function patchLatex(value: Partial<ExportSettings["latex"]>) {
     setSettings((current) => ({ ...current, latex: { ...current.latex, ...value } }));
@@ -120,10 +117,9 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
       setSettings(saved);
       const nextPreview = await backend.previewExport(kind);
       setPreview(nextPreview);
-      if (nextPreview.requiredFontPacks.length > 0) {
-        setFontPacks((current) => mergeFontPacks(current, nextPreview.requiredFontPacks));
-      }
+      setFontPacks(nextPreview.requiredFontPacks);
       setResult(null);
+      setStep(2);
     } catch (value) {
       setError({ message: value instanceof CommandError ? t(`error.${value.code}`) : t("error.generic") });
     } finally {
@@ -140,7 +136,9 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
       if (preview) {
         const nextPreview = await backend.previewExport(kind);
         setPreview(nextPreview);
-        setFontPacks((current) => mergeFontPacks(current, nextPreview.requiredFontPacks));
+        setFontPacks(nextPreview.requiredFontPacks);
+        setEngine(null);
+        setEnvironmentRevision((value) => value + 1);
       }
     } catch (value) {
       setError({ message: value instanceof CommandError ? t(`error.${value.code}`) : t("error.generic") });
@@ -150,7 +148,7 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
   }
 
   async function runExport(overwrite = false, destination?: string) {
-    if (!preview) return;
+    if (!preview || busy) return;
     setBusyTask("destination");
     setError(null);
     let selected = destination;
@@ -170,10 +168,12 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
       });
       setPendingDestination(null);
       setResult(exported);
+      setStep(4);
     } catch (value) {
       if (value instanceof CommandError && value.code === "export_filesystem" && value.details === "destination_exists" && selected) {
         setPendingDestination(selected);
       } else {
+        if (value instanceof CommandError && value.code === "export_stale") { invalidate(); setStep(1); }
         setError({
           message: value instanceof CommandError ? t(`error.${value.code}`) : t("error.generic"),
           diagnosticPath: value instanceof CommandError
@@ -195,12 +195,23 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
     (system) => system.id !== settings.latex.headwordWritingSystemId,
   );
 
+  const busy = busyTask !== null || installingPack !== null || installingLatex;
+  const steps = ["choose", "configure", "requirements", "confirm", "done"];
+  function changeStep(next: number) {
+    if (next < 2) invalidate();
+    setStep(next);
+  }
+
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+    <Dialog.Root open={open} onOpenChange={(value) => { if (!busy) onOpenChange(value); }}>
       <Dialog.Portal>
         <Dialog.Overlay className="dialog-overlay" />
-        <Dialog.Content className="dialog-content export-dialog">
-          <div className="dialog-heading"><div><Dialog.Title>{t("export.title")}</Dialog.Title><Dialog.Description>{t("export.description")}</Dialog.Description></div><Dialog.Close asChild><Button size="icon" variant="ghost" aria-label={t("common.close")}><X size={17} /></Button></Dialog.Close></div>
+        <Dialog.Content className="dialog-content export-dialog" onEscapeKeyDown={(event) => { if (busy) event.preventDefault(); }} onPointerDownOutside={(event) => { if (busy) event.preventDefault(); }}>
+          <div className="dialog-heading"><div><Dialog.Title>{t("export.title")}</Dialog.Title><Dialog.Description>{t("export.description")}</Dialog.Description></div><Dialog.Close asChild><Button size="icon" variant="ghost" disabled={busy} aria-label={t("common.close")}><X size={17} /></Button></Dialog.Close></div>
+          <ol className="export-steps" aria-label={t("export.wizard.steps")}>
+            {steps.map((name, index) => <li key={name} aria-current={step === index ? "step" : undefined}>{index + 1}. {t(`export.wizard.${name}`)}</li>)}
+          </ol>
+          <h2 ref={stepHeading} tabIndex={-1} className="export-step-title">{t(`export.wizard.${steps[step]}`)}</h2>
           {error && <div className="error-banner export-error" role="alert">
             <p>{error.message}</p>
             {error.diagnosticPath && <div className="diagnostic-location">
@@ -211,11 +222,11 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
           </div>}
 
           {!result && <div className="export-body">
-            <fieldset className="format-picker"><legend>{t("export.format")}</legend>
-              {(["corpusCsv", "latex", "pdf"] as ExportKind[]).map((value) => <label key={value}><input type="radio" aria-label={value === "corpusCsv" ? "CSV" : value === "latex" ? "LaTeX" : "PDF"} checked={kind === value} onChange={() => { setKind(value); setPreview(null); }} />{t(`export.kind.${value}`)}</label>)}
-            </fieldset>
+            {step === 0 && <fieldset className="format-picker"><legend>{t("export.format")}</legend>
+              {(["pdf", "overleaf", "latex", "corpusCsv"] as const).map((value) => <label key={value}><input type="radio" aria-label={value === "corpusCsv" ? "CSV" : value === "latex" ? "LaTeX" : value === "overleaf" ? "Overleaf" : "PDF"} checked={value === "overleaf" ? overleaf : !overleaf && kind === value} onChange={() => { setKind(value === "overleaf" ? "latex" : value); setOverleaf(value === "overleaf"); invalidate(); }} />{t(value === "pdf" ? "export.wizard.localPdf" : value === "overleaf" ? "export.wizard.overleaf" : `export.kind.${value}`)}</label>)}
+            </fieldset>}
 
-            <section className="export-profile"><h3>{t("export.profile")}</h3>
+            {step === 1 && <fieldset disabled={busy} className="export-profile"><h3>{t("export.profile")}</h3>
               <label className="field"><span>{t("export.analysisLanguage")}</span><select value={analysisLanguage ?? ""} onChange={(event) => setAnalysisLanguage((event.target.value || null) as "zh-TW" | "en" | null)}><option value="">{t("common.none")}</option><option value="zh-TW">{t("locale.zhTW")}</option><option value="en">{t("locale.en")}</option></select><small>{kind === "corpusCsv" ? t("export.corpusRequiresZhTW") : t("export.analysisLanguageHelp")}</small></label>
 
               {kind === "corpusCsv" ? <div className="mapping-grid">
@@ -237,23 +248,38 @@ export function ExportDialog({ open, snapshot, onOpenChange, onFlush, onSetAnaly
                   const label = t("export.fontFor", { name: system.name });
                   return <label className="field" key={system.id}><span>{label}</span>{system.type === "phonemic" || system.type === "phonetic" ? <output>{t("export.ipaFixedFont")}</output> : <><select aria-label={label} value={preset} onChange={(event) => patchLatex({ fontPresets: { ...settings.latex.fontPresets, [system.id]: event.target.value as typeof fontPresets[number] } })}>{fontPresets.map((value) => <option value={value} key={value}>{t(`export.font.${value}`)}</option>)}</select><small>{t(`export.fontStyle.${preset}`)}</small></>}</label>;
                 })}
-                {kind === "pdf" && <p className="engine-status">{engine === null ? t("export.xelatexChecking") : engine.available ? t("export.xelatexFound", { path: engine.path }) : t("export.xelatexMissing")}</p>}
+
               </div>}
-            </section>
+            </fieldset>}
 
-            {kind !== "corpusCsv" && <section className="font-pack-manager"><h3>{t("export.fontPacks")}</h3><p className="section-help">{t("export.fontPacksHelp")}</p><ul>{fontPacks.map((pack) => <li key={pack.id}><div><strong>{t(`export.fontPack.${pack.id}`)}</strong><small>{t(`export.fontState.${pack.state}`)} · {pack.version}{pack.mandatory ? ` · ${t("export.mandatory")}` : ""}</small></div>{pack.state !== "installed" && <Button disabled={installingPack !== null} onClick={() => void installAndRetry(pack.id)}>{installingPack === pack.id ? t("export.downloadingFont") : t("export.downloadAndRetry")}</Button>}</li>)}</ul></section>}
+            {step === 2 && kind !== "corpusCsv" && <section className="font-pack-manager"><h3>{t("export.fontPacks")}</h3><p className="section-help">{t("export.fontPacksHelp")}</p><ul>{fontPacks.map((pack) => <li key={pack.id}><div><strong>{t(`export.fontPack.${pack.id}`)}</strong><small>{t(`export.fontState.${pack.state}`)} · {pack.version}{pack.mandatory ? ` · ${t("export.mandatory")}` : ""}</small></div>{pack.state !== "installed" && <Button disabled={installingPack !== null} onClick={() => void installAndRetry(pack.id)}>{installingPack === pack.id ? t("export.downloadingFont") : t("export.downloadAndRetry")}</Button>}</li>)}</ul></section>}
 
-            {preview && <section className="export-preview" aria-live="polite"><h3>{t("export.preview")}</h3><p>{t("export.rowsReady", { count: preview.rowCount })}</p><p>{t("export.issueCounts", { errors: blockers.length, warnings: warnings.length })}</p>
-              {preview.issues.length > 0 && <ul>{preview.issues.map((issue, index) => { const label = t(`export.issue.${issue.code}`, { defaultValue: issue.code, font: issue.details ? t(`export.fontPack.${issue.details}`, { defaultValue: issue.details }) : "" }); return <li key={`${issue.code}-${index}`} className={issue.severity}>{issue.entryId ? <button type="button" className="inline-link" onClick={() => onNavigateEntry(issue.entryId!)}>{label}</button> : label}</li>; })}</ul>}
+            {step === 2 && kind === "pdf" && <LatexRequirements revision={environmentRevision} onStatus={setEngine} onBusy={setInstallingLatex} />}
+            {step === 2 && kind === "pdf" && engine && engine.state !== "ready" && <Button disabled={busy} onClick={() => { setKind("latex"); setOverleaf(true); invalidate(); setStep(1); }}>{t("export.wizard.switchOverleaf")}</Button>}
+            {step === 0 && overleaf && <p>{t("export.wizard.manualUpload")}</p>}
+            {(step === 2 || step === 3) && preview && <section className="export-preview" aria-live="polite"><h3>{t("export.preview")}</h3><p>{t("export.rowsReady", { count: preview.rowCount })}</p><p>{t("export.issueCounts", { errors: blockers.length, warnings: warnings.length })}</p>
+              {preview.issues.length > 0 && <ul>{preview.issues.map((issue, index) => { const label = t(`export.issue.${issue.code}`, { defaultValue: issue.code, font: issue.details ? t(`export.fontPack.${issue.details}`, { defaultValue: issue.details }) : "" }); return <li key={`${issue.code}-${index}`} className={issue.severity}>{issue.entryId ? <button type="button" className="inline-link" disabled={busy} onClick={() => onNavigateEntry(issue.entryId!)}>{label}</button> : label}</li>; })}</ul>}
               {(preview.omitted.examples > 0 || preview.omitted.exampleForms > 0 || preview.omitted.baseRelations > 0) && <p>{t("export.omitted", preview.omitted)}</p>}
             </section>}
 
-            {pendingDestination && <div className="overwrite-confirm" role="alertdialog" aria-label={t("export.overwriteTitle")}><strong>{t("export.overwriteTitle")}</strong><p>{t("export.overwriteBody")}</p><div className="dialog-actions"><Button onClick={() => setPendingDestination(null)}>{t("common.cancel")}</Button><Button variant="danger" onClick={() => void runExport(true, pendingDestination)}>{t("export.overwrite")}</Button></div></div>}
+            {pendingDestination && <div className="overwrite-confirm" role="alertdialog" aria-label={t("export.overwriteTitle")}><strong>{t("export.overwriteTitle")}</strong><p>{t("export.overwriteBody")}</p><div className="dialog-actions"><Button disabled={busy} onClick={() => setPendingDestination(null)}>{t("common.cancel")}</Button><Button disabled={busy} variant="danger" onClick={() => void runExport(true, pendingDestination)}>{t("export.overwrite")}</Button></div></div>}
             {(busyTask === "preview" || busyTask === "export") && <ExportProgress task={busyTask} kind={kind} />}
-            <div className="dialog-actions"><Button onClick={() => onOpenChange(false)}>{t("common.cancel")}</Button>{!preview ? <Button variant="primary" disabled={busyTask !== null} onClick={() => void makePreview()}>{busyTask ? t("common.loading") : t("export.preview")}</Button> : <Button variant="primary" disabled={busyTask !== null || blockers.length > 0} onClick={() => void runExport()}>{busyTask ? t("common.loading") : t("export.chooseAndExport")}</Button>}</div>
+            {step === 3 && <p>{t(kind === "pdf" ? "export.wizard.pdfOutput" : kind === "corpusCsv" ? "export.wizard.csvOutput" : "export.wizard.latexOutput")}</p>}
+            <div className="dialog-actions">
+              <Button disabled={busy} onClick={() => onOpenChange(false)}>{t("common.cancel")}</Button>
+              {step > 0 && <Button disabled={busy} onClick={() => changeStep(step - 1)}>{t("common.back")}</Button>}
+              {step === 0 && <Button variant="primary" onClick={() => setStep(1)}>{t("common.next")}</Button>}
+              {step === 1 && <Button variant="primary" disabled={busy} onClick={() => void makePreview()}>{busy ? t("common.loading") : t("export.wizard.check")}</Button>}
+              {step === 2 && <Button variant="primary" disabled={busy || !preview || blockers.length > 0 || (kind === "pdf" && engine?.state !== "ready")} onClick={() => setStep(3)}>{t("common.next")}</Button>}
+              {step === 3 && <Button variant="primary" disabled={busy || !preview || blockers.length > 0} onClick={() => void runExport()}>{busy ? t("common.loading") : t("export.chooseAndExport")}</Button>}
+            </div>
           </div>}
 
-          {result && <section className="export-result"><h3>{t("export.complete")}</h3><p>{t("export.exportedRows", { count: result.rowCount })}</p>{result.csvPath && <code>{result.csvPath}</code>}{result.latexDirectory && <code>{result.latexDirectory}</code>}{result.zipPath && <code>{result.zipPath}</code>}{result.pdfPath && <code>{result.pdfPath}</code>}{result.pdfStatus === "xeLatexMissing" && <><p>{t("export.missingResult")}</p><p>{t("export.overleafSteps")}</p><div className="inline-field"><Button onClick={() => void backend.openOverleaf()}><ExternalLink size={15} />{t("export.openOverleaf")}</Button><Button variant="ghost" onClick={() => void backend.openOverleafCompilerHelp()}>{t("export.compilerHelp")}</Button></div></>}<div className="dialog-actions"><Button variant="primary" onClick={() => onOpenChange(false)}>{t("common.close")}</Button></div></section>}
+          {result && <section className="export-result"><h3>{t(kind === "pdf" && result.pdfStatus !== "created" ? "export.wizard.pdfIncomplete" : "export.complete")}</h3><p>{t("export.exportedRows", { count: result.rowCount })}</p>{result.csvPath && <code>{result.csvPath}</code>}{result.latexDirectory && <code>{result.latexDirectory}</code>}{result.zipPath && <code>{result.zipPath}</code>}{result.pdfPath && <code>{result.pdfPath}</code>}
+            {(overleaf || result.pdfStatus === "xeLatexMissing") && <OverleafHelp />}
+            {kind === "pdf" && result.pdfStatus !== "created" && <Button onClick={() => { setResult(null); setEngine(null); setStep(2); }}>{t("export.wizard.recheck")}</Button>}
+            <div className="dialog-actions"><Button variant="primary" onClick={() => onOpenChange(false)}>{t("common.close")}</Button></div>
+          </section>}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
