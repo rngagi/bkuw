@@ -44,6 +44,16 @@ Entry 可包含：
 
 Phonemic text 儲存時不包含 delimiter、顯示時加 `/…/`；phonetic text 顯示時加 `[…]`。使用者輸入原文不被改寫。
 
+## 義項與例句音檔
+
+每個 sense 與 example 可添加多個音檔，依添加順序排列；音檔不綁定 writing system，entry 層級沒有音檔。
+
+從電腦選取 WAV、MP3、M4A/AAC、FLAC、OGG/Opus、AIFF 的常見音訊檔，使用隨附工具離線轉成 MP3、64 kbps CBR、單聲道、44.1 kHz。支援 PCM、MP3、AAC、ALAC、FLAC、Vorbis、Opus；空檔、損毀、無法解碼或含多個音軌的來源拒絕匯入。每個來源最多 256 MiB、30 分鐘，轉檔最多 5 分鐘。保留 MP3 編碼所需的少量末端 frame padding，不裁切原始語音。專案只保存壓縮版與 NFC 來源檔名，不修改電腦上的來源檔，不做降噪、音量正規化或靜音裁切。
+
+可一次選取多檔，逐檔顯示進度與錯誤，成功的音檔即使其他檔案失敗也會保留。每筆顯示檔名、長度、大小，提供播放／暫停、拖曳進度及刪除。同時只播放一筆，離開詞條或專案時停止。播放失敗有英文與台灣繁中訊息。編輯義項／例句不會刪除音檔；刪除其擁有者時清理附件，詞條軟刪除則保留音檔供還原。
+
+程式內直接錄音維持 backlog；本次沒有麥克風權限、剪輯、音檔匯出或變更 corpus CSV contract。
+
 ## 核心使用流程
 
 使用者必須能夠：
@@ -133,11 +143,11 @@ bkuw 自行管理 portable font packs，不依賴 OS 已安裝字型，也不把
 
 ## 後續候選
 
-Audio、匯入既有專案、跨 repository contract test、多 analysis-language translations、進階搜尋、IPA helper、tags、filters、duplicate detection、backup manager、簽章與自動更新尚未排入已承諾 milestone；以 `plan.md` 為準。
+程式內錄音、匯入既有專案、跨 repository contract test、多 analysis-language translations、進階搜尋、IPA helper、tags、filters、duplicate detection、backup manager、簽章與自動更新尚未排入已承諾 milestone；以 `plan.md` 為準。
 
 ## 明確排除
 
-目前不包含 accounts、authentication、cloud sync、team collaboration、permissions、server backend、audio、匯入既有專案、Big5 CSV、mobile、AI transcription、ASR、ELAN-style timeline、waveform segmentation、Git syncing、code signing、notarization、auto-update 或自動上傳 lexical data。受信任的 `main` version commit 通過 exact-SHA CI 後可自動建立 unsigned Draft GitHub Release；正式發布前須人工確認安裝包、checksums 與警告內容。
+目前不包含 accounts、authentication、cloud sync、team collaboration、permissions、server backend、程式內錄音、匯入既有專案、Big5 CSV、mobile、AI transcription、ASR、ELAN-style timeline、waveform segmentation、Git syncing、code signing、notarization、auto-update 或自動上傳 lexical data。受信任的 `main` version commit 通過 exact-SHA CI 後可自動建立 unsigned Draft GitHub Release；正式發布前須人工確認安裝包、checksums 與警告內容。
 
 ### LaTeX 安裝協助
 

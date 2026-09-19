@@ -1,3 +1,5 @@
+pub(crate) mod audio;
+
 use std::{
     collections::{HashMap, HashSet},
     fs::{self, File, OpenOptions},
@@ -32,12 +34,13 @@ const EXPORT_SETTINGS_MIGRATION: &str = include_str!("../migrations/003_export_s
 const ENTRY_ORDERING_MIGRATION: &str = include_str!("../migrations/004_entry_ordering.sql");
 const SENSE_SEARCH_MIGRATION: &str = include_str!("../migrations/005_sense_search.sql");
 const SENSE_IMAGES_MIGRATION: &str = include_str!("../migrations/006_sense_images.sql");
-const LATEST_SCHEMA_VERSION: i64 = 6;
+const LATEST_SCHEMA_VERSION: i64 = 7;
 
 pub struct ProjectSession {
     root: PathBuf,
     connection: Connection,
     lock_file: File,
+    session_token: String,
 }
 
 impl ProjectSession {
@@ -104,6 +107,7 @@ impl ProjectSession {
                 root: root.clone(),
                 connection,
                 lock_file,
+                session_token: new_id(),
             })
         })();
 
@@ -289,6 +293,7 @@ impl ProjectSession {
             root,
             connection,
             lock_file,
+            session_token: new_id(),
         })
     }
 
@@ -537,6 +542,7 @@ impl ProjectSession {
         validate_entry(&request.entry)?;
         let id = request.entry.id.clone();
         let previous_images = load_entry_image_paths(&self.connection, &id)?;
+        let previous_audio = self.entry_audio_paths(&id)?;
         let timestamp = now();
         let transaction = self.connection.transaction()?;
         let updated = transaction.execute(
@@ -565,6 +571,7 @@ impl ProjectSession {
         replace_senses(&transaction, &id, &request.entry.senses)?;
         insert_relations(&transaction, &id, &request.entry.relations)?;
         transaction.commit()?;
+        self.clean_removed_audio(&previous_audio, &id)?;
         let current_images = load_entry_image_paths(&self.connection, &id)?;
         for relative_path in previous_images.difference(&current_images) {
             if let Ok(path) = self.media_path(relative_path) {
@@ -1176,6 +1183,13 @@ fn migrate(connection: &mut Connection, root: &Path) -> AppResult<()> {
         transaction.execute_batch(SENSE_IMAGES_MIGRATION)?;
         transaction.execute(
             "INSERT INTO schema_migrations(version, applied_at) VALUES (6, ?1)",
+            params![now()],
+        )?;
+    }
+    if current < 7 {
+        transaction.execute_batch(include_str!("../migrations/007_audio.sql"))?;
+        transaction.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (7, ?1)",
             params![now()],
         )?;
     }
@@ -1990,14 +2004,41 @@ fn replace_senses(
                 sense_search_key(gloss.as_deref(), definition.as_deref())
             ],
         )?;
-        transaction.execute(
-            "DELETE FROM examples WHERE sense_id = ?1",
-            params![sense.id],
-        )?;
+        let incoming_examples = sense
+            .examples
+            .iter()
+            .map(|example| example.id.as_str())
+            .collect::<HashSet<_>>();
+        let existing_examples = {
+            let mut statement =
+                transaction.prepare("SELECT id FROM examples WHERE sense_id = ?1")?;
+            let rows = statement.query_map(params![sense.id], |row| row.get::<_, String>(0))?;
+            rows.collect::<Result<Vec<_>, _>>()?
+        };
+        for id in existing_examples {
+            if !incoming_examples.contains(id.as_str()) {
+                transaction.execute("DELETE FROM examples WHERE id = ?1", params![id])?;
+            }
+        }
         for example in &sense.examples {
+            let owner = transaction
+                .query_row(
+                    "SELECT sense_id FROM examples WHERE id = ?1",
+                    params![example.id],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()?;
+            if owner.as_deref().is_some_and(|owner| owner != sense.id) {
+                return Err(AppError::new(
+                    "validation",
+                    "An example identifier belongs to another sense.",
+                ));
+            }
             transaction.execute(
                 "INSERT INTO examples (id, sense_id, translation, notes, sort_order)
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                 VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT(id) DO UPDATE SET translation = excluded.translation,
+                   notes = excluded.notes, sort_order = excluded.sort_order",
                 params![
                     example.id,
                     sense.id,
@@ -2005,6 +2046,10 @@ fn replace_senses(
                     normalize_optional(example.notes.clone()),
                     example.sort_order
                 ],
+            )?;
+            transaction.execute(
+                "DELETE FROM example_forms WHERE example_id = ?1",
+                params![example.id],
             )?;
             for form in &example.forms {
                 transaction.execute(
@@ -3357,7 +3402,8 @@ mod tests {
         let connection = rusqlite::Connection::open(root.join("project.sqlite")).expect("open");
         connection
             .execute_batch(
-                "DROP TABLE manual_sort_layouts;
+                "DROP TABLE audio_attachments;
+                 DROP TABLE manual_sort_layouts;
                  DROP TABLE entry_sort_settings;
                  ALTER TABLE lexical_entries DROP COLUMN section_override;
                  DROP TABLE export_settings;
@@ -3469,7 +3515,8 @@ mod tests {
         let connection = rusqlite::Connection::open(root.join("project.sqlite")).expect("open");
         connection
             .execute_batch(
-                "ALTER TABLE senses DROP COLUMN search_key;
+                "DROP TABLE audio_attachments;
+                 ALTER TABLE senses DROP COLUMN search_key;
                  DELETE FROM schema_migrations WHERE version >= 5;",
             )
             .expect("simulate version four");

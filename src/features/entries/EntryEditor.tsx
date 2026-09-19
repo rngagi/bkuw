@@ -16,6 +16,7 @@ import { CommandError } from "../../lib/tauri";
 import { displayWritingSystemText } from "../../lib/writingSystems";
 import { createId, type EntrySortSettings, type EntrySummary, type LexicalEntry, type Sense, type WritingSystem } from "../../types/domain";
 import { SenseImageEditor } from "./SenseImageEditor";
+import { AudioEditor } from "./AudioEditor";
 
 export interface EntryEditorHandle {
   flush(): Promise<LexicalEntry | undefined>;
@@ -69,7 +70,8 @@ function WritingSystemInput({ system, registration, autoFocus = false }: {
   return delimiters ? <div className="transcription-input"><span aria-hidden="true">{delimiters[0]}</span>{input}<span aria-hidden="true">{delimiters[1]}</span></div> : input;
 }
 
-function ExampleEditor({ control, register, senseIndex, exampleIndex, writingSystems, onRemove, onMove, count }: {
+function ExampleEditor({ control, register, entryId, exampleId, onFlush, onEntryMutated, senseIndex, exampleIndex, writingSystems, onRemove, onMove, count }: {
+  entryId: string; exampleId: string; onFlush(): Promise<LexicalEntry | undefined>; onEntryMutated(entry: LexicalEntry): void;
   control: Control<LexicalEntry>; register: Register; senseIndex: number; exampleIndex: number;
   writingSystems: WritingSystem[]; onRemove(): void; onMove(from: number, to: number): void; count: number;
 }) {
@@ -90,6 +92,7 @@ function ExampleEditor({ control, register, senseIndex, exampleIndex, writingSys
       })}
       <Button type="button" size="small" variant="ghost" disabled={!nextSystem} onClick={() => { if (nextSystem) forms.append({ id: createId(), writingSystemId: nextSystem.id, text: "", sortOrder: forms.fields.length }); }}><Plus size={14} />{t("entry.addExampleForm")}</Button>
       <div className="two-columns"><label className="field"><span>{t("entry.translation")}</span><input {...register(`senses.${senseIndex}.examples.${exampleIndex}.translation` as const)} /></label><label className="field"><span>{t("entry.exampleNotes")}</span><input {...register(`senses.${senseIndex}.examples.${exampleIndex}.notes` as const)} /></label></div>
+      <AudioEditor entryId={entryId} owner={{ kind: "example", id: exampleId }} onFlush={onFlush} onEntryMutated={onEntryMutated} />
     </div>
   );
 }
@@ -114,9 +117,10 @@ function SenseEditor({ control, register, entryId, sense, index, writingSystems,
       <div className="two-columns"><label className="field"><span>{t("entry.gloss")}</span><input {...register(`senses.${index}.gloss` as const)} /></label><label className="field"><span>{t("entry.partOfSpeech")}</span><select {...register(`senses.${index}.partOfSpeech` as const, { setValueAs: (value) => value || null })}><option value="">{t("common.none")}</option>{metadataChoices(partOfSpeechOptions, sense.partOfSpeech).map((value) => <option key={value} value={value}>{value}</option>)}</select></label></div>
       <label className="field"><span>{t("entry.definition")}</span><textarea {...register(`senses.${index}.definition` as const)} /></label>
       <label className="field"><span>{t("entry.semanticDomain")}</span><select {...register(`senses.${index}.semanticDomain` as const, { setValueAs: (value) => value || null })}><option value="">{t("common.none")}</option>{metadataChoices(semanticDomainOptions, sense.semanticDomain).map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+      <AudioEditor entryId={entryId} owner={{ kind: "sense", id: sense.id }} onFlush={onFlush} onEntryMutated={onEntryMutated} />
       <SenseImageEditor entryId={entryId} senseId={sense.id} onFlush={onFlush} onEntryMutated={onEntryMutated} />
       <div className="subsection-heading"><h4>{t("entry.examples")}</h4><Button type="button" size="small" onClick={() => examples.append({ id: createId(), translation: null, notes: null, sortOrder: examples.fields.length, forms: primary ? [{ id: createId(), writingSystemId: primary.id, text: "", sortOrder: 0 }] : [] })}><Plus size={14} />{t("entry.addExample")}</Button></div>
-      {examples.fields.map((example, exampleIndex) => <ExampleEditor key={example.fieldKey} control={control} register={register} senseIndex={index} exampleIndex={exampleIndex} writingSystems={writingSystems} onRemove={() => examples.remove(exampleIndex)} onMove={examples.move} count={examples.fields.length} />)}
+      {examples.fields.map((example, exampleIndex) => <ExampleEditor key={example.fieldKey} entryId={entryId} exampleId={example.id} onFlush={onFlush} onEntryMutated={onEntryMutated} control={control} register={register} senseIndex={index} exampleIndex={exampleIndex} writingSystems={writingSystems} onRemove={() => examples.remove(exampleIndex)} onMove={examples.move} count={examples.fields.length} />)}
     </section>
   );
 }

@@ -14,6 +14,7 @@ import {
   projectSnapshotSchema,
   texEngineStatusSchema, fontPackStatusSchema, fontInstallProgressSchema,
   senseImageSchema, senseImageContentSchema, senseImageMutationSchema,
+  audioAttachmentSchema, audioMutationSchema, audioContentSchema, type AudioOwner,
   csvInspectionSchema, csvImportPreviewSchema, csvImportResultSchema,
   type ExportKind,
   type ExportSettings,
@@ -235,6 +236,25 @@ export const backend = {
       { request: { entry, expectedRevision: entry.revision } },
       lexicalEntrySchema,
     );
+  },
+
+  async chooseAudioFiles(): Promise<string[]> {
+    const selected = await open({ multiple: true, directory: false, filters: [
+      { name: "WAV / MP3 / M4A / AAC / FLAC / OGG / Opus / AIFF", extensions: ["wav", "mp3", "m4a", "aac", "flac", "ogg", "opus", "aif", "aiff", "aifc"] },
+    ] });
+    return selected ? (Array.isArray(selected) ? selected : [selected]) : [];
+  },
+  listAudio(owner: AudioOwner) {
+    return call("list_audio", { owner }, z.array(audioAttachmentSchema));
+  },
+  importAudio(request: { entryId: string; owner: AudioOwner; expectedRevision: number; sourcePath: string }) {
+    return call("import_audio", { request }, audioMutationSchema);
+  },
+  loadAudio(audioId: string) {
+    return call("load_audio", { audioId }, audioContentSchema);
+  },
+  removeAudio(request: { entryId: string; audioId: string; expectedRevision: number }) {
+    return call("remove_audio", { request }, audioMutationSchema);
   },
 
   listSenseImages(senseId: string) {

@@ -611,3 +611,53 @@ pub struct DeletedEntry {
     pub id: String,
     pub deleted_at: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(tag = "kind", content = "id", rename_all = "camelCase")]
+pub enum AudioOwner {
+    Sense(String),
+    Example(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioAttachment {
+    pub id: String,
+    pub owner: AudioOwner,
+    pub original_filename: String,
+    pub duration_ms: u64,
+    pub byte_size: u64,
+    pub sort_order: i64,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportAudioRequest {
+    pub entry_id: String,
+    pub owner: AudioOwner,
+    pub expected_revision: i64,
+    pub source_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoveAudioRequest {
+    pub entry_id: String,
+    pub audio_id: String,
+    pub expected_revision: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioMutation {
+    pub entry: LexicalEntry,
+    pub audio: Option<AudioAttachment>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioContent {
+    pub mime_type: String,
+    pub data_base64: String,
+}

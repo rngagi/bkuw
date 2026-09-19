@@ -334,3 +334,16 @@ export const latexInstallProgressSchema = z.object({
   totalBytes: z.number().nullable(),
 });
 export type LatexInstallProgress = z.infer<typeof latexInstallProgressSchema>;
+
+export const audioOwnerSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("sense"), id: z.string() }),
+  z.object({ kind: z.literal("example"), id: z.string() }),
+]);
+export const audioAttachmentSchema = z.object({
+  id: z.string(), owner: audioOwnerSchema, originalFilename: z.string(),
+  durationMs: z.number(), byteSize: z.number(), sortOrder: z.number(), createdAt: z.string(),
+});
+export const audioMutationSchema = z.object({ entry: lexicalEntrySchema, audio: audioAttachmentSchema.nullable() });
+export const audioContentSchema = z.object({ mimeType: z.literal("audio/mpeg"), dataBase64: z.string() });
+export type AudioOwner = z.infer<typeof audioOwnerSchema>;
+export type AudioAttachment = z.infer<typeof audioAttachmentSchema>;

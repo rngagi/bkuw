@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+.cache/
+src-tauri/resources/audio/*
+!src-tauri/resources/audio/README.txt

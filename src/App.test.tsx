@@ -16,6 +16,7 @@ const { backendMock, prepareImageMock } = vi.hoisted(() => ({
     saveEntry: vi.fn(),
     deleteEntry: vi.fn(),
     restoreEntry: vi.fn(),
+    listAudio: vi.fn().mockResolvedValue([]),
     listSenseImages: vi.fn(),
     attachSenseImage: vi.fn(),
     loadSenseImage: vi.fn(),

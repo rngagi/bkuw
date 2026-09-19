@@ -76,22 +76,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - name: Install Windows audio build dependencies
-        if: runner.os == 'Windows'
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW64
-          install: mingw-w64-x86_64-gcc make mingw-w64-x86_64-pkgconf curl tar xz python
-      - name: Cache audio sources and builds
-        uses: actions/cache@v4
-        with:
-          path: |
-            .cache/audio-sources
-            .cache/audio-build
-            src-tauri/resources/audio
-          key: audio-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/audio/**') }}
       - run: pnpm install --frozen-lockfile
-      - run: pnpm audio:prepare
       - run: pnpm exec tsc --noEmit --pretty false
       - run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
       - run: pnpm test

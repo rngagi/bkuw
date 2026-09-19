@@ -20,13 +20,14 @@ XeLaTeX template 使用較寬鬆行距、欄內小標、橢圓例句標記與一
 - Node.js 24 LTS
 - pnpm 11（實際版本由 `packageManager` 鎖定）
 - Rust stable
-- macOS：Xcode Command Line Tools
-- Windows：MSVC Build Tools 與 WebView2
+- macOS：Xcode Command Line Tools、make、Python 3
+- Windows：MSVC Build Tools、WebView2，以及 MSYS2 MINGW64 的 gcc／make／pkgconf／curl／tar／xz／Python 3
 
 ## 常用命令
 
 ```bash
 pnpm install
+pnpm audio:prepare
 pnpm tauri dev
 pnpm check
 pnpm test
@@ -38,6 +39,12 @@ pnpm tauri build
 pnpm release:check
 pnpm release:prepare -- 0.5.0
 ```
+
+`pnpm audio:prepare` 首次會下載經 SHA-256 驗證的 FFmpeg／LAME 原始碼並建置精簡工具；之後可離線使用。`tauri dev` 與一般 build 會自動檢查；直接執行 Rust 音檔測試前也需先準備工具。工具、授權與完整來源會隨安裝包提供，使用者不需另外安裝。
+
+## 義項與例句音檔
+
+義項與例句可添加多個 WAV、MP3、M4A/AAC、FLAC、OGG/Opus 或 AIFF 音檔，全部在本機轉成單聲道 MP3 64 kbps，並可播放、拖曳進度與刪除。每檔最多 256 MiB、30 分鐘；專案只保存壓縮版，不修改來源檔。程式內錄音仍在 backlog。
 
 ## 介面縮放
 

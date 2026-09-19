@@ -38,9 +38,13 @@ v0.4.3 修正 WebView CSP 阻擋 sense 相片預覽的問題，並在預覽失�
 
 Portable fonts 改為首次啟動集中檢查六套 packs、批次進度與下載失敗後的離線例外；Hant `Auto`／zh-TW analysis text 採昭源宋體。Entry ordering V2 可依第一個有值的語意類別分組，configured／legacy／未分類順序與工作區、LaTeX／PDF 共用。辭典輸出另加入單義項省略編號及例／譯分行。
 
+## 未發布：義項與例句音檔
+
+每個義項／例句可添加多個本機音檔，支援常見格式並離線轉成單聲道 MP3 64 kbps，提供播放、進度拖曳與刪除。專案只保存壓縮版，來源檔不修改。直接錄音留在 backlog；驗證狀態以 `plan.md` 為準。
+
 ## 候選 backlog
 
-- Audio import/playback 與 optional recording。
+- 義項／例句的程式內直接錄音。
 - 將 CSV 匯入既有專案，以及經雙方版本化的 bkuw → rngagi-corpus upload workflow。
 - Cross-repository contract fixture／CI；需兩個 repositories 共同確認後才建立。
 - 多 analysis-language translations、進階 FTS、example search、language-specific collation controls。

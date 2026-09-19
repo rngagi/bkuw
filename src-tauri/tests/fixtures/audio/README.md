@@ -1,0 +1,1 @@
+Synthetic 440 Hz, 0.25 second stereo tones generated for bkuw tests. No recorded speech or third-party audio. Formats cover WAV PCM, MP3, AAC in M4A/ADTS, FLAC, Vorbis in Ogg, Opus in Ogg, and AIFF PCM. Generated with FFmpeg lavfi sine; fixtures may be freely reused.

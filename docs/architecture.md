@@ -43,6 +43,10 @@ list_sense_images(senseId) -> SenseImage[]
 attach_sense_image(request) -> SenseImageMutation
 load_sense_image(imageId) -> SenseImageContent
 remove_sense_image(request) -> SenseImageMutation
+list_audio(owner: AudioOwner) -> AudioAttachment[]
+import_audio(request: ImportAudioRequest) -> AudioMutation
+load_audio(audioId) -> AudioContent
+remove_audio(request: RemoveAudioRequest) -> AudioMutation
 delete_entry(id, expectedRevision) -> DeletedEntry
 restore_entry(id) -> LexicalEntry
 save_export_settings(settings) -> ExportSettingsV1
@@ -72,6 +76,18 @@ App-level zoom shortcut controller 使用 Tauri WebView `setZoom`，只額外授
 `save_entry` 接收 forms、senses、examples、example forms 與 relations 的完整 aggregate，在單一 transaction 內以 replace-diff strategy 寫入。Sense rows 使用 upsert／delete diff，而不是全部刪除重建，避免一般 autosave cascade 掉仍存在 sense 的相片。`revision` 使用 optimistic concurrency 防止較舊 autosave 覆蓋新資料。
 
 相片二進位不放進 entry aggregate。Frontend `imageCompression` adapter 依指定的 Canvas 流程解碼 PNG／JPEG／WebP，只有長邊超過 2560px 時等比例縮圖，再輸出 PNG；這是輕度尺寸處理，不承諾固定 byte 上限。Attach／remove command 會先 flush entry，使用同一 entry revision 做 optimistic concurrency。Rust 重新解碼 PNG、取得可信尺寸、計算 SHA-256，先寫 temporary sibling，再於 DB transaction 內更新 revision 與 metadata；load 只接受 DB 中由 active project 指向的固定 `media/images/<uuid>.png`。Frontend 驗證回傳內容的 PNG signature，使用 CSP 已允許的 `data:image/png;base64,...` 顯示，不需 `blob:` 或 filesystem capability；失敗以明確 preview error 結束 loading。刪除 sense 成功後清理失去 DB reference 的檔案。
+
+## 義項與例句音檔
+
+`database::audio` 負責本機轉檔、檔案界線、完整性與附件交易。`AudioOwner` 是 `{ kind: "sense" | "example", id }`；新增／移除要求 entry ID 與 expected revision，回傳更新後的 entry 和可選的附件 metadata。音訊 bytes 不進入 entry aggregate。透過唯一的 frontend adapter 呼叫；檔案選擇沿用 dialog 權限。
+
+匯入前 flush autosave，Rust 驗證擁有者與 revision，取得當次 project session token，釋放 session mutex 後在 blocking task 轉檔。來源須為 regular file，限 256 MiB；複製至隔離暫存目錄後，以隨附的 FFprobe 檢查唯一音軌、codec 與最長 30 分鐘，再以 FFmpeg/libmp3lame 轉成 64 kbps CBR／mono／44.1 kHz MP3。兩個程序共用 5 分鐘 deadline；逾時 kill 並 reap，損毀輸入或截斷輸出不提交。輸出以 FFprobe 再驗證，允許至多 100 ms 的 MP3 frame padding，最多 16 MiB。
+
+完成後重新鎖定 session，比對 session token、擁有者及 revision。輸出先寫至 project-local temporary sibling 並 sync，再於 SQLite transaction 內新增 metadata、遞增 revision，搬至 `media/audio/<uuid>.mp3`；提交失敗移除新檔。檔案 metadata 包含來源檔名、長度、大小、SHA-256、排序與建立時間。例句使用 upsert/delete diff，避免 autosave cascade 刪除音檔。
+
+讀取只接受 UUID MP3 project-relative 路徑，拒絕 media/audio 目錄及檔案 symlink，檢查檔案大小與 SHA-256。Frontend 收到 typed `audio/mpeg` base64 後建立 Blob URL；CSP 只新增 `media-src blob:`。播放延遲載入，每次播放請求停止前一筆，忽略過期回應，unmount 時 pause 並 revoke URL。刪除義項／例句後清理失去 reference 的音檔；entry soft delete 保留 bytes 供 Undo。音檔不參與 CSV／LaTeX／PDF 匯出。
+
+固定 FFmpeg 8.0.1 與 LAME 3.100 來源 URL／SHA-256 由 `scripts/audio/prepare.sh` 管理，禁用網路與非必要 codecs，不啟用 GPL／nonfree，Windows 靜態連結工具 runtime。`pnpm audio:prepare` 首次由來源建置工具，開發／build 先檢查工具；Windows 開發需 MSYS2 MINGW64，CI 安裝相同依賴。安裝包包含 tools、binary SHA-256 manifest、licenses、完整來源 archives 與 build recipe；終端使用者不需安裝或下載轉檔工具。既有 CI 的平台 jobs 驗證真實轉檔與 WebView 播放，Linux fast-checks 不建置桌面音訊工具。
 
 ## SQLite schema
 
@@ -120,7 +136,7 @@ Frontend adapter 對 Rust unit response 接受 Tauri JSON `null`，再映射為 
 
 Entry forms 在 frontend 依 writing-system settings 自動補齊並固定排序；example 先建立 primary form，再允許加入尚未使用的 writing system。Phonemic／phonetic delimiter 是 presentation concern，不寫回 lexical text。Document-level input policy 透過既有及動態 controls 統一關閉 autocorrect、autocapitalize、autocomplete 與 spellcheck。
 
-Migration 2 新增 `metadata_options`。Migration 3 新增 `projects.analysis_language` 與 `export_settings`。Migration 4 新增 entry section override、versioned sort settings 與 manual layout。Migration 5 新增並以 Rust Unicode folding 回填 `senses.search_key`。Migration 6 新增 `sense_images`，媒體檔則放在 project 的 `media/images/`。舊 schema 開啟時仍遵守先建立一致性 SQLite backup、再於 transaction 套用 migration 的規則。
+Migration 2 新增 `metadata_options`。Migration 3 新增 `projects.analysis_language` 與 `export_settings`。Migration 4 新增 entry section override、versioned sort settings 與 manual layout。Migration 5 新增並以 Rust Unicode folding 回填 `senses.search_key`。Migration 6 新增 `sense_images`，媒體檔則放在 project 的 `media/images/`。Migration 7 新增 `audio_attachments`，以互斥的 sense/example 外鍵及 cascade delete 維持擁有者，音檔位於 `media/audio/`。舊 schema 開啟時仍遵守先建立一致性 SQLite backup、再於 transaction 套用 migration 的規則。
 
 ## Ordering module
 

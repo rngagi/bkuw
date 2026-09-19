@@ -242,3 +242,9 @@ textarea { min-height: 72px; resize: vertical; }
 .latex-requirements code { display: block; overflow-wrap: anywhere; max-width: 100%; }
 .latex-requirements progress { accent-color: var(--primary); width: 100%; }
 .overleaf-help ol { padding-inline-start: 22px; margin: 0; }
+
+.audio-editor { margin-block: 0.75rem; }
+.audio-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; padding-block: 0.4rem; border-bottom: 1px solid var(--border); }
+.audio-file { display: flex; flex-direction: column; min-width: 8rem; flex: 1; overflow-wrap: anywhere; }
+.audio-file small, .audio-time { color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.audio-row input[type="range"] { width: 8rem; accent-color: var(--primary); }

@@ -4,6 +4,13 @@ import { initReactI18next } from "react-i18next";
 const resources = {
   en: {
     translation: {
+      audio: {
+        title: "Audio", help: "MP3 · 64 kbps · mono. Up to 256 MiB and 30 minutes per source file.", add: "Add audio",
+        importing: "Converting {{current}} of {{total}}…", failed: "Audio could not be imported. Please retry.",
+        play: "Play {{name}}", pause: "Pause {{name}}", seek: "Playback position for {{name}}", remove: "Remove {{name}}",
+        playFailed: "Audio could not be played. Check that the project audio file is available and intact.",
+      },
+
       app: { name: "bkuw", tagline: "Arrange words. Keep the fieldwork local." },
       common: {
         add: "Add", cancel: "Cancel", close: "Close", create: "Create", delete: "Delete",
@@ -216,6 +223,10 @@ const resources = {
         },
       },
       error: {
+        audio_invalid: "The audio is unsupported, damaged, or empty.", audio_limit: "Use a file no larger than 256 MiB and shorter than 30 minutes.",
+        audio_timeout: "Audio conversion timed out. Try a shorter file.", audio_tools: "The bundled audio tools are missing or damaged. Reinstall bkuw.",
+        audio_not_found: "The audio or its owner no longer exists.", audio_stale: "The project changed. Select the audio again.",
+
         latex_install_existing: "A TeX installation already exists. Check again and repair it using its package manager.",
 
         "latex_environment": "The LaTeX environment could not be checked. Try again.",
@@ -254,6 +265,13 @@ const resources = {
   },
   "zh-TW": {
     translation: {
+      audio: {
+        title: "音檔", help: "MP3 · 64 kbps · 單聲道。每個來源檔案上限 256 MiB、30 分鐘。", add: "添加音檔",
+        importing: "正在轉換第 {{current}}／{{total}} 個音檔…", failed: "無法匯入音檔，請重試。",
+        play: "播放 {{name}}", pause: "暫停 {{name}}", seek: "{{name}} 的播放位置", remove: "刪除 {{name}}",
+        playFailed: "無法播放，請確認專案內的音檔仍存在且未損毀。",
+      },
+
       app: { name: "bkuw", tagline: "整理詞語，讓田野資料留在本機。" },
       common: {
         add: "新增", cancel: "取消", close: "關閉", create: "建立", delete: "刪除", open: "開啟",
@@ -457,6 +475,10 @@ const resources = {
         },
       },
       error: {
+        audio_invalid: "音檔格式不支援、內容損毀或沒有聲音資料。", audio_limit: "請使用不超過 256 MiB、短於 30 分鐘的音檔。",
+        audio_timeout: "音檔轉換逾時，請改用較短的檔案。", audio_tools: "內建音檔工具遺失或損毀，請重新安裝 bkuw。",
+        audio_not_found: "音檔或所屬的義項／例句已不存在。", audio_stale: "專案已切換，請重新選取音檔。",
+
         latex_install_existing: "已有 TeX 安裝。請重新檢查並用原有發行版的套件管理工具修復。",
 
         "latex_environment": "無法檢查 LaTeX 環境，請重試。",

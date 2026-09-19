@@ -504,3 +504,67 @@ pub async fn install_font_packs(
         )
     })?
 }
+
+#[tauri::command]
+pub fn list_audio(
+    state: State<'_, AppState>,
+    owner: crate::domain::AudioOwner,
+) -> AppResult<Vec<crate::domain::AudioAttachment>> {
+    active_session(&state)?
+        .as_ref()
+        .expect("checked")
+        .list_audio(&owner)
+}
+
+#[tauri::command]
+pub async fn import_audio(
+    app: AppHandle,
+    request: crate::domain::ImportAudioRequest,
+) -> AppResult<crate::domain::AudioMutation> {
+    run_blocking(move || {
+        let state = app.state::<AppState>();
+        let token = active_session(&state)?
+            .as_ref()
+            .expect("checked")
+            .audio_import_token(&request)?;
+        let resources = app
+            .path()
+            .resource_dir()
+            .map_err(|_| AppError::new("audio_tools", "Audio resources are unavailable."))?;
+        let tools =
+            crate::database::audio::AudioTools::bundled(&resources.join("resources/audio"))?;
+        let prepared =
+            crate::database::audio::prepare(&tools, std::path::Path::new(&request.source_path))?;
+        active_session(&state)?
+            .as_mut()
+            .expect("checked")
+            .attach_audio(request, &token, prepared)
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn load_audio(
+    app: AppHandle,
+    audio_id: String,
+) -> AppResult<crate::domain::AudioContent> {
+    run_blocking(move || {
+        let state = app.state::<AppState>();
+        active_session(&state)?
+            .as_ref()
+            .expect("checked")
+            .load_audio(&audio_id)
+    })
+    .await
+}
+
+#[tauri::command]
+pub fn remove_audio(
+    state: State<'_, AppState>,
+    request: crate::domain::RemoveAudioRequest,
+) -> AppResult<crate::domain::AudioMutation> {
+    active_session(&state)?
+        .as_mut()
+        .expect("checked")
+        .remove_audio(request)
+}

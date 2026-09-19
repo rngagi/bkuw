@@ -15,7 +15,8 @@
     "release:check": "node scripts/release/version.mjs check",
     "release:prepare": "node scripts/release/version.mjs prepare",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "audio:prepare": "node scripts/audio/ensure.mjs"
   },
   "engines": {
     "node": ">=24 <25"
