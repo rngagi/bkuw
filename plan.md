@@ -25,7 +25,7 @@
 ## 逐步匯出與 LaTeX 安裝引導
 
 - [x] 五步驟匯出、本機 PDF 優先、必要套件／字型檢查、官方安裝器交接與雙語安裝／Overleaf 教學。驗證：`pnpm check`、`pnpm test`、`pnpm test:rust`。
-- [ ] Milestone：desktop E2E、真實 XeLaTeX 編譯及 `pnpm tauri build --no-bundle`。
+- [x] 本機驗證：desktop E2E、含繁中／IPA／圖片的真實 XeLaTeX 編譯及 `pnpm tauri build --no-bundle`。
 - [ ] 外部人工驗收：Windows x64／macOS Apple Silicon 官方安裝精靈與安裝後離線編譯、Overleaf 匯入含繁中／IPA／圖片的 ZIP。
 
 ## 候選 backlog
