@@ -11,11 +11,14 @@ SOURCES="$ROOT/.cache/audio-sources"
 BUILD="$ROOT/.cache/audio-build/$TARGET"
 PREFIX="$BUILD/install"
 OUTPUT="$ROOT/src-tauri/resources/audio"
+PYTHON=python3
+if ! command -v "$PYTHON" >/dev/null 2>&1; then PYTHON=python; fi
+command -v "$PYTHON" >/dev/null 2>&1 || { echo "Python 3 is required to build audio tools." >&2; exit 1; }
 mkdir -p "$SOURCES" "$BUILD" "$PREFIX" "$OUTPUT/sources"
 fetch() {
   local name="$1" url="$2" expected="$3"
   if [ ! -f "$SOURCES/$name" ]; then curl --fail --location --retry 3 "$url" -o "$SOURCES/$name"; fi
-  python3 - "$SOURCES/$name" "$expected" <<'VERIFY'
+  "$PYTHON" - "$SOURCES/$name" "$expected" <<'VERIFY'
 import hashlib, sys
 from pathlib import Path
 if hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest() != sys.argv[2]:
@@ -61,7 +64,7 @@ cp "$BUILD/lame-3.100/COPYING" "$OUTPUT/LAME-LICENSE.txt"
 # Exact sources plus this build recipe permit rebuilding/relinking the tools.
 cp "$SOURCES/ffmpeg-8.0.1.tar.xz" "$SOURCES/lame-3.100.tar.gz" "$OUTPUT/sources/"
 cp "$ROOT/scripts/audio/prepare.sh" "$OUTPUT/sources/"
-python3 - "$OUTPUT" "$TARGET" "$SUFFIX" <<'MANIFEST'
+"$PYTHON" - "$OUTPUT" "$TARGET" "$SUFFIX" <<'MANIFEST'
 import hashlib, json, sys
 from pathlib import Path
 root, target, suffix = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
