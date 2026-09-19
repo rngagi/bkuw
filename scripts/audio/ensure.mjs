@@ -20,8 +20,8 @@ try {
   });
 } catch { /* A clean checkout builds its pinned tools once. */ }
 if (!ready) {
-  const command = process.platform === "win32" ? "C:/msys64/usr/bin/bash.exe" : "bash";
-  const args = process.platform === "win32" ? ["-lc", 'cd "$(cygpath -u "$BKUW_AUDIO_ROOT")" && bash scripts/audio/prepare.sh'] : ["scripts/audio/prepare.sh"];
+  const command = process.platform === "win32" ? "msys2" : "bash";
+  const args = process.platform === "win32" ? ["-c", 'cd "$(cygpath -u "$BKUW_AUDIO_ROOT")" && bash scripts/audio/prepare.sh'] : ["scripts/audio/prepare.sh"];
   const result = spawnSync(command, args, { cwd: root, stdio: "inherit", env: { ...process.env, BKUW_AUDIO_ROOT: root, MSYSTEM: "MINGW64", CHERE_INVOKING: "1" } });
   if (result.error) throw result.error;
   if (result.status !== 0) process.exit(result.status ?? 1);
