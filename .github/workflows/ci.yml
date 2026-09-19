@@ -140,6 +140,7 @@ jobs:
           workspaces: src-tauri
           shared-key: desktop-${{ matrix.target }}
       - name: Install Windows audio build dependencies
+        id: msys2
         if: runner.os == 'Windows'
         uses: msys2/setup-msys2@v2
         with:
@@ -155,6 +156,8 @@ jobs:
           key: audio-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/audio/**') }}
       - run: pnpm install --frozen-lockfile
       - run: pnpm audio:prepare
+        env:
+          BKUW_MSYS2_LOCATION: ${{ steps.msys2.outputs.msys2-location }}
       - run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
       - run: pnpm test:rust
       - run: pnpm tauri build --no-bundle --features e2e --config src-tauri/tauri.e2e.conf.json --target ${{ matrix.target }}

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const target = process.platform === "darwin" && process.arch === "arm64" ? "aarch64-apple-darwin"
@@ -20,8 +21,9 @@ try {
   });
 } catch { /* A clean checkout builds its pinned tools once. */ }
 if (!ready) {
-  const command = process.platform === "win32" ? "msys2" : "bash";
-  const args = process.platform === "win32" ? ["-c", 'cd "$(cygpath -u "$BKUW_AUDIO_ROOT")" && bash scripts/audio/prepare.sh'] : ["scripts/audio/prepare.sh"];
+  const msys2Root = process.env.BKUW_MSYS2_LOCATION ?? "C:/msys64";
+  const command = process.platform === "win32" ? join(msys2Root, "usr", "bin", "bash.exe") : "bash";
+  const args = process.platform === "win32" ? ["-lc", 'cd "$(cygpath -u "$BKUW_AUDIO_ROOT")" && bash scripts/audio/prepare.sh'] : ["scripts/audio/prepare.sh"];
   const result = spawnSync(command, args, { cwd: root, stdio: "inherit", env: { ...process.env, BKUW_AUDIO_ROOT: root, MSYSTEM: "MINGW64", CHERE_INVOKING: "1" } });
   if (result.error) throw result.error;
   if (result.status !== 0) process.exit(result.status ?? 1);
