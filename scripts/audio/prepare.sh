@@ -11,19 +11,18 @@ SOURCES="$ROOT/.cache/audio-sources"
 BUILD="$ROOT/.cache/audio-build/$TARGET"
 PREFIX="$BUILD/install"
 OUTPUT="$ROOT/src-tauri/resources/audio"
-PYTHON=python3
-if ! command -v "$PYTHON" >/dev/null 2>&1; then PYTHON=python; fi
-command -v "$PYTHON" >/dev/null 2>&1 || { echo "Python 3 is required to build audio tools." >&2; exit 1; }
 mkdir -p "$SOURCES" "$BUILD" "$PREFIX" "$OUTPUT/sources"
+sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
 fetch() {
   local name="$1" url="$2" expected="$3"
   if [ ! -f "$SOURCES/$name" ]; then curl --fail --location --retry 3 "$url" -o "$SOURCES/$name"; fi
-  "$PYTHON" - "$SOURCES/$name" "$expected" <<'VERIFY'
-import hashlib, sys
-from pathlib import Path
-if hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest() != sys.argv[2]:
-    raise SystemExit("Audio source SHA-256 mismatch")
-VERIFY
+  test "$(sha256 "$SOURCES/$name")" = "$expected" || { echo "Audio source SHA-256 mismatch" >&2; exit 1; }
 }
 fetch ffmpeg-8.0.1.tar.xz https://ffmpeg.org/releases/ffmpeg-8.0.1.tar.xz 05ee0b03119b45c0bdb4df654b96802e909e0a752f72e4fe3794f487229e5a41
 fetch lame-3.100.tar.gz https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e
@@ -64,12 +63,15 @@ cp "$BUILD/lame-3.100/COPYING" "$OUTPUT/LAME-LICENSE.txt"
 # Exact sources plus this build recipe permit rebuilding/relinking the tools.
 cp "$SOURCES/ffmpeg-8.0.1.tar.xz" "$SOURCES/lame-3.100.tar.gz" "$OUTPUT/sources/"
 cp "$ROOT/scripts/audio/prepare.sh" "$OUTPUT/sources/"
-"$PYTHON" - "$OUTPUT" "$TARGET" "$SUFFIX" <<'MANIFEST'
-import hashlib, json, sys
-from pathlib import Path
-root, target, suffix = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
-manifest = {"target": target, "ffmpeg": "8.0.1", "lame": "3.100", "recipeSha256": hashlib.sha256((root / "sources/prepare.sh").read_bytes()).hexdigest(), "sha256": {}}
-for name in ["ffmpeg" + suffix, "ffprobe" + suffix]:
-    manifest["sha256"][name] = hashlib.sha256((root / name).read_bytes()).hexdigest()
-(root / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+cat > "$OUTPUT/manifest.json" <<MANIFEST
+{
+  "target": "$TARGET",
+  "ffmpeg": "8.0.1",
+  "lame": "3.100",
+  "recipeSha256": "$(sha256 "$OUTPUT/sources/prepare.sh")",
+  "sha256": {
+    "ffmpeg$SUFFIX": "$(sha256 "$OUTPUT/ffmpeg$SUFFIX")",
+    "ffprobe$SUFFIX": "$(sha256 "$OUTPUT/ffprobe$SUFFIX")"
+  }
+}
 MANIFEST
