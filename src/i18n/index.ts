@@ -21,8 +21,7 @@ const resources = {
         moveUp: "Move up", moveDown: "Move down", none: "None", loading: "Loading…", details: "Details", back: "Back", next: "Next",
       },
       start: {
-        title: "Your lexical projects, stored on this device",
-        body: "Create a project for a language or open an existing .bkuw folder.",
+        title: "Your fieldwork helper",
         createProject: "Create project", importCsv: "Create from CSV", openProject: "Open project",
         parentFolder: "Parent folder", chooseFolder: "Choose folder", projectName: "Project name",
         languageName: "Language name", languageCode: "ISO 639-3 language code",
@@ -52,6 +51,7 @@ const resources = {
         body: "Download and verify every font pack now so dictionary exports remain portable. Installed packs stay on this device and can be reused offline.",
         overallProgress: "Overall font installation progress", completed: "{{completed}} of {{total}} font packs ready",
         installAll: "Download all fonts", installing: "Installing fonts…", useOffline: "Use bkuw offline",
+        status: { checking: "Checking portable fonts…", ready: "Portable fonts ready", attention: "Portable fonts need attention" },
         phase: {
           downloading: "Downloading {{font}}: {{downloaded}} / {{total}} bytes",
           verifying: "Verifying {{font}}…", installed: "Installed {{font}}", failed: "Could not install {{font}}",
@@ -285,7 +285,7 @@ const resources = {
         none: "無", loading: "載入中…", back: "上一步", next: "下一步",
       },
       start: {
-        title: "儲存在這台裝置上的詞彙專案", body: "為一種語言建立專案，或開啟既有的 .bkuw 資料夾。",
+        title: "你的田調小幫手",
         createProject: "建立專案", importCsv: "從 CSV 建立專案", openProject: "開啟專案", parentFolder: "上層資料夾",
         chooseFolder: "選擇資料夾", projectName: "專案名稱", languageName: "語言名稱", languageCode: "ISO 639-3 語言代碼",
         languageCodeHelp: "選填的三字母代碼，例如 yue 或 bod。", lookupLanguageCode: "查詢 ISO 639-3 代碼",
@@ -313,6 +313,7 @@ const resources = {
         body: "現在一次下載並驗證全部字型套件，讓詞典匯出保持可攜。已完成的套件會留在這台裝置，之後可離線重用。",
         overallProgress: "全部字型安裝進度", completed: "已完成 {{completed}}／{{total}} 套字型",
         installAll: "下載全部字型", installing: "正在安裝字型…", useOffline: "離線使用 bkuw",
+        status: { checking: "正在檢查可攜字型…", ready: "可攜字型已就緒", attention: "可攜字型需要處理" },
         phase: {
           downloading: "正在下載 {{font}}：{{downloaded}}／{{total}} bytes",
           verifying: "正在驗證 {{font}}…", installed: "已安裝 {{font}}", failed: "無法安裝 {{font}}",

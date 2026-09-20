@@ -11,7 +11,7 @@
 - [x] Unicode-safe autosave、IME composition handling、soft delete／Undo 與英文／台灣繁中 UI。
 - [x] Project alphabet、entry section override、opt-in manual ordering 與 virtualized entry list。
 - [x] rngagi-corpus v0.3 CSV、portable XeLaTeX／Overleaf ZIP／PDF 與 managed font packs。
-- [x] 首次啟動 portable font setup、六套字型批次驗證／下載／離線例外，以及 Project Settings 字型管理入口。
+- [x] 啟動時背景檢查 portable fonts、語言選單旁的狀態／管理入口、六套字型批次驗證／下載／離線例外，以及 Project Settings 字型管理入口。
 - [x] EntrySortSettings V2：依 writing system 或第一個有值的語意類別分組，工作區與 LaTeX／PDF 共用順序。
 - [x] UTF-8 自由 CSV 建立新專案：分隔符、writing systems、欄位 mapping、相鄰分組、排除列、staging transaction 與 stale preview 防護。
 - [x] CSV inspection／preview 錯誤以本地化訊息指出實際來源列、欄名、欄數與個別分組衝突，不只顯示通用解析失敗。

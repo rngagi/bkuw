@@ -1,21 +1,26 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import * as AlertDialog from "@radix-ui/react-alert-dialog";
 import { FileSpreadsheet, FolderOpen, Plus, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/Button";
+import { FontManagerButton, type FontStatus } from "../fonts/FontManagerButton";
 import { backend, CommandError } from "../../lib/tauri";
 import type { ProjectSnapshot } from "../../types/domain";
 import { LocaleSelect } from "./LocaleSelect";
 import { CsvImportWizard } from "./CsvImportWizard";
 
 interface ProjectStartProps {
+  fontStatus?: FontStatus;
+  onManageFonts?(): void;
   onProject(snapshot: ProjectSnapshot, isNew: boolean): void;
   onError(error: unknown): void;
 }
 
-export function ProjectStart({ onProject, onError }: ProjectStartProps) {
+export function ProjectStart({ fontStatus, onManageFonts, onProject, onError }: ProjectStartProps) {
   const { t } = useTranslation();
+  const canAnimateBrand = typeof window !== "undefined" && typeof window.matchMedia === "function";
+  const [brandAnimationDone, setBrandAnimationDone] = useState(!canAnimateBrand);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [parentDir, setParentDir] = useState("");
   const [name, setName] = useState("");
@@ -24,6 +29,15 @@ export function ProjectStart({ onProject, onError }: ProjectStartProps) {
   const [busy, setBusy] = useState(false);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
   const [csvImportOpen, setCsvImportOpen] = useState(false);
+
+  useEffect(() => {
+    if (!canAnimateBrand || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setBrandAnimationDone(true);
+      return;
+    }
+    const timer = window.setTimeout(() => setBrandAnimationDone(true), 1_500);
+    return () => window.clearTimeout(timer);
+  }, [canAnimateBrand]);
 
   async function chooseParent() {
     const folder = await backend.chooseFolder();
@@ -61,20 +75,23 @@ export function ProjectStart({ onProject, onError }: ProjectStartProps) {
     }
   }
 
-  if (csvImportOpen) return <CsvImportWizard onCancel={() => setCsvImportOpen(false)} onProject={(snapshot) => onProject(snapshot, false)} onError={onError} />;
+  if (csvImportOpen) return <CsvImportWizard fontStatus={fontStatus} onManageFonts={onManageFonts} onCancel={() => setCsvImportOpen(false)} onProject={(snapshot) => onProject(snapshot, false)} onError={onError} />;
 
   return (
     <main className="start-screen">
-      <header className="start-header"><strong>bkuw</strong><LocaleSelect /></header>
+      <header className="start-header"><strong>bkuw</strong><div className="header-preferences"><LocaleSelect />{fontStatus && onManageFonts && <FontManagerButton status={fontStatus} onClick={onManageFonts} />}</div></header>
       <section className="start-content" aria-labelledby="start-title">
-        <div className="brand-mark" aria-hidden="true">b</div>
-        <h1 id="start-title">{t("start.title")}</h1>
-        <p>{t("start.body")}</p>
-        <div className="start-actions">
-          <Button variant="primary" onClick={() => setDialogOpen(true)}><Plus size={17} /> {t("start.createProject")}</Button>
-          <Button onClick={() => setCsvImportOpen(true)}><FileSpreadsheet size={17} /> {t("start.importCsv")}</Button>
-          <Button onClick={() => void openProject()}><FolderOpen size={17} /> {t("start.openProject")}</Button>
+        <div className="brand-mark" role="img" aria-label="bkuw">
+          {Array.from("bkuw").map((letter, index) => <span className="brand-letter" data-letter-index={index} key={`${letter}-${index}`}>{letter}</span>)}
         </div>
+        {brandAnimationDone && <>
+          <h1 className="start-reveal start-title-reveal" id="start-title">{t("start.title")}</h1>
+          <div className="start-actions start-reveal start-actions-reveal">
+            <Button variant="primary" onClick={() => setDialogOpen(true)}><Plus size={17} /> {t("start.createProject")}</Button>
+            <Button onClick={() => setCsvImportOpen(true)}><FileSpreadsheet size={17} /> {t("start.importCsv")}</Button>
+            <Button onClick={() => void openProject()}><FolderOpen size={17} /> {t("start.openProject")}</Button>
+          </div>
+        </>}
       </section>
       <Dialog.Root open={dialogOpen} onOpenChange={setDialogOpen}>
         <Dialog.Portal>

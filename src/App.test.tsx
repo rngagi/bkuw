@@ -137,8 +137,24 @@ describe("App keyboard and delete workflow", () => {
     await waitFor(() => expect(backendMock.restoreEntry).toHaveBeenCalledWith(entry.id));
 
     fireEvent.click(screen.getByRole("button", { name: "Close project" }));
-    await screen.findByRole("heading", { name: "Your lexical projects, stored on this device" });
+    await screen.findByRole("heading", { name: "Your fieldwork helper" });
     expect(backendMock.closeProject).toHaveBeenCalled();
+  });
+
+  it("shows the fieldwork helper start screen with the bkuw wordmark", () => {
+    render(<App />);
+
+    expect(screen.getByRole("img", { name: "bkuw" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Your fieldwork helper" })).toBeInTheDocument();
+    expect(screen.queryByText("Create a project for a language or open an existing .bkuw folder.")).not.toBeInTheDocument();
+  });
+
+  it("keeps font preparation out of onboarding and opens it from the header icon", async () => {
+    render(<App />);
+
+    expect(screen.getByRole("heading", { name: "Your fieldwork helper" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Portable fonts ready" }));
+    expect(await screen.findByRole("heading", { name: "Prepare portable fonts" })).toBeInTheDocument();
   });
 
   it("shows a modal when a project name already exists", async () => {

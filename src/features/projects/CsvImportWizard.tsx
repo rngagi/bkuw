@@ -3,11 +3,14 @@ import type { TFunction } from "i18next";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/Button";
+import { FontManagerButton, type FontStatus } from "../fonts/FontManagerButton";
 import { backend, CommandError } from "../../lib/tauri";
 import { createId, type CsvColumnMapping, type CsvDelimiter, type CsvImportPreview, type CsvImportResult, type CsvInspection, type CsvMappingTarget, type CsvPreviewIssue, type CsvPreviewRequest, type ProjectSnapshot, type WritingSystem } from "../../types/domain";
 import { LocaleSelect } from "./LocaleSelect";
 
 interface Props {
+  fontStatus?: FontStatus;
+  onManageFonts?(): void;
   onCancel(): void;
   onProject(snapshot: ProjectSnapshot): void;
   onError(error: unknown): void;
@@ -89,7 +92,7 @@ function suggestedMappings(inspection: CsvInspection, systems: WritingSystem[]):
   });
 }
 
-export function CsvImportWizard({ onCancel, onProject, onError }: Props) {
+export function CsvImportWizard({ fontStatus, onManageFonts, onCancel, onProject, onError }: Props) {
   const { t, i18n } = useTranslation();
   const [step, setStep] = useState(0);
   const [inspection, setInspection] = useState<CsvInspection | null>(null);
@@ -208,7 +211,7 @@ export function CsvImportWizard({ onCancel, onProject, onError }: Props) {
 
   return (
     <main className="csv-wizard">
-      <header className="start-header"><strong>bkuw</strong><div className="header-actions"><LocaleSelect /><Button size="small" variant="ghost" onClick={onCancel}><X size={16} />{t("common.close")}</Button></div></header>
+      <header className="start-header"><strong>bkuw</strong><div className="header-actions"><div className="header-preferences"><LocaleSelect />{fontStatus && onManageFonts && <FontManagerButton status={fontStatus} onClick={onManageFonts} />}</div><Button size="small" variant="ghost" onClick={onCancel}><X size={16} />{t("common.close")}</Button></div></header>
       <div className="csv-wizard-shell">
         <div className="csv-wizard-heading"><div><p className="eyebrow">{t("csv.step", { current: Math.min(step + 1, 5), total: 5 })}</p><h1>{t("csv.title")}</h1></div>{inspection && <span className="csv-file-name"><FileSpreadsheet size={16} />{inspection.fileName}</span>}</div>
         {localError && <p className="error-banner" role="alert">{localError}</p>}

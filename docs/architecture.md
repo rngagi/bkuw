@@ -176,7 +176,7 @@ LaTeX renderer 從零建立通用 XeLaTeX source，不複製 `docs/main.tex` 的
 
 Font manager 是另一個 deep module。固定 catalog 包含 TeX Gyre Termes、Charis SIL、Noto Serif、Noto Serif CJK TC、Chiron Sung HK 與 Chiron Hei HK，並記錄 pack ID、上游固定 commit/release、HTTPS URL、archive members、逐檔與 archive SHA-256、版本、LaTeX faces 與授權檔。兩個 Chiron packs 使用上游 fixed tag 的 static OTF Regular／Bold 與 SIL OFL 1.1 授權；不從浮動 branch 下載。下載先進 app-local staging directory；只有 archive 與每個 extracted/downloaded file 全部通過雜湊驗證，才以 manifest 啟用 cache。cache 每次使用前依 manifest 重驗，損毀 pack 視為 invalid。React 不接觸網路或 filesystem，只能列出狀態與請求安裝；Rust HTTP client 只能使用 catalog 內建 URL。
 
-Startup gate 先列出六套狀態；未全部 installed 時才顯示 setup page。Batch install command 逐 pack 重用 verified completion、以 typed Tauri channel 回報 downloading bytes、verifying、installed／failed；失敗後 UI 才開放當次離線繼續，不保存「已完成」旗標。Hant `Auto` 與 zh-TW analysis font resolver 指向既有 `chiron-sung-hk` pack；upstream catalog identity 不改名。
+App mount 後只在背景列出一次六套字型狀態，不作為 startup gate，也不延後 ProjectStart 的 wordmark 動畫或 project onboarding。語言選單旁的固定圖示是字型管理入口；缺少或 invalid 時顯示狀態點，setup page 只由使用者開啟。Batch install command 逐 pack 重用 verified completion、以 typed Tauri channel 回報 downloading bytes、verifying、installed／failed；失敗後 UI 才開放當次離線繼續，不保存「已完成」旗標。Hant `Auto` 與 zh-TW analysis font resolver 指向既有 `chiron-sung-hk` pack；upstream catalog identity 不改名。
 
 TeX Gyre Termes 是所有 LaTeX/PDF export 的 mandatory base pack，缺少或 invalid 時 preview 產生 fatal blocking issue。分析語言與每個 writing system 依 profile/script 決定其他必要 packs；phonemic／phonetic 類型不接受 preset override，固定解析為 Charis SIL。需要的字型檔與相應 license 都放進 `fonts/<pack-id>/`，LaTeX folder 與 Overleaf ZIP 因此不依賴 OS font registry。
 

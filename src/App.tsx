@@ -7,6 +7,7 @@ import { Button } from "./components/ui/Button";
 import { EntryEditor, type EntryEditorHandle } from "./features/entries/EntryEditor";
 import { EntryList } from "./features/entries/EntryList";
 import { ExportDialog } from "./features/export/ExportDialog";
+import { FontManagerButton, type FontStatus } from "./features/fonts/FontManagerButton";
 import { FontSetup } from "./features/fonts/FontSetup";
 import { LocaleSelect } from "./features/projects/LocaleSelect";
 import { ProjectStart } from "./features/projects/ProjectStart";
@@ -60,8 +61,9 @@ function App() {
   const [error, setError] = useState<{ key: string; detail?: string } | null>(null);
   const [deletedId, setDeletedId] = useState<string | null>(null);
   const [loadingEntry, setLoadingEntry] = useState(false);
-  const [fontSetupReady, setFontSetupReady] = useState(() => !("__TAURI_INTERNALS__" in window));
+  const [fontStatus, setFontStatus] = useState<FontStatus>(() => "__TAURI_INTERNALS__" in window ? "checking" : "ready");
   const [fontManagerOpen, setFontManagerOpen] = useState(false);
+  const fontCheckStarted = useRef(false);
   const editorRef = useRef<EntryEditorHandle>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -71,6 +73,23 @@ function App() {
   }, []);
 
   useEffect(() => installTauriZoomShortcuts(() => setError({ key: "error.zoom_failed" })), []);
+
+  const checkFonts = useCallback(async () => {
+    if (!("__TAURI_INTERNALS__" in window)) { setFontStatus("ready"); return; }
+    setFontStatus("checking");
+    try {
+      const packs = await backend.listFontPacks();
+      setFontStatus(packs.every((pack) => pack.state === "installed") ? "ready" : "attention");
+    } catch {
+      setFontStatus("attention");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (fontCheckStarted.current) return;
+    fontCheckStarted.current = true;
+    void checkFonts();
+  }, [checkFonts]);
 
   const refreshEntries = useCallback(async (query: string) => {
     try {
@@ -216,15 +235,13 @@ function App() {
     return () => unlisten?.();
   }, [showError, snapshot]);
 
-  if (!fontSetupReady) return <FontSetup onContinue={() => setFontSetupReady(true)} />;
-
-  if (!snapshot) return <><ProjectStart onProject={(project, isNew) => { setSnapshot(project); setEntries(project.entries); setError(null); setOnboarding(isNew); setSettingsOpen(isNew); }} onError={showError} />{error && <ErrorBanner error={error} className="start-error" onClose={() => setError(null)} />}</>;
+  if (!snapshot) return <><ProjectStart fontStatus={fontStatus} onManageFonts={() => setFontManagerOpen(true)} onProject={(project, isNew) => { setSnapshot(project); setEntries(project.entries); setError(null); setOnboarding(isNew); setSettingsOpen(isNew); }} onError={showError} />{error && <ErrorBanner error={error} className="start-error" onClose={() => setError(null)} />}{fontManagerOpen && <div className="font-manager-overlay"><FontSetup autoContinue={false} canClose onContinue={() => { setFontManagerOpen(false); void checkFonts(); }} /></div>}</>;
 
   return (
     <main className="app-shell">
       <header className="app-header">
         <div className="project-title"><strong>bkuw</strong><span aria-hidden="true">/</span><span>{snapshot.project.name}</span></div>
-        <div className="header-actions"><LocaleSelect />{snapshot.entrySortSettings.mode === "manual" && <Button size="small" onClick={() => setSortOrderOpen(true)}><ListOrdered size={15} />{t("sorting.manageManual")}</Button>}<Button size="small" onClick={() => setExportOpen(true)}><FileOutput size={15} />{t("export.title")}</Button><Button size="small" onClick={() => { setOnboarding(false); setSettingsOpen(true); }}><Settings size={15} />{t("common.settings")}</Button><Button size="small" variant="ghost" onClick={() => void closeProject()}><FolderX size={15} />{t("workspace.closeProject")}</Button></div>
+        <div className="header-actions"><div className="header-preferences"><LocaleSelect /><FontManagerButton status={fontStatus} onClick={() => setFontManagerOpen(true)} /></div>{snapshot.entrySortSettings.mode === "manual" && <Button size="small" onClick={() => setSortOrderOpen(true)}><ListOrdered size={15} />{t("sorting.manageManual")}</Button>}<Button size="small" onClick={() => setExportOpen(true)}><FileOutput size={15} />{t("export.title")}</Button><Button size="small" onClick={() => { setOnboarding(false); setSettingsOpen(true); }}><Settings size={15} />{t("common.settings")}</Button><Button size="small" variant="ghost" onClick={() => void closeProject()}><FolderX size={15} />{t("workspace.closeProject")}</Button></div>
       </header>
       {error && <ErrorBanner error={error} onClose={() => setError(null)} />}
       <Group orientation="horizontal" className="workspace">
@@ -241,7 +258,7 @@ function App() {
       <SettingsDialog open={settingsOpen} onboarding={onboarding} snapshot={snapshot} onOpenChange={(open) => { setSettingsOpen(open); if (!open) setOnboarding(false); }} onSave={saveSettings} onManageManual={() => setSortOrderOpen(true)} onManageFonts={() => { setSettingsOpen(false); setFontManagerOpen(true); }} />
       <SortOrderDialog open={sortOrderOpen} snapshot={snapshot} onOpenChange={setSortOrderOpen} onSave={saveManualSortLayout} />
       <ExportDialog open={exportOpen} snapshot={snapshot} onOpenChange={setExportOpen} onFlush={flush} onSetAnalysisLanguage={setAnalysisLanguage} onNavigateEntry={(id) => { setExportOpen(false); void selectEntry(id); }} />
-      {fontManagerOpen && <div className="font-manager-overlay"><FontSetup autoContinue={false} canClose onContinue={() => setFontManagerOpen(false)} /></div>}
+      {fontManagerOpen && <div className="font-manager-overlay"><FontSetup autoContinue={false} canClose onContinue={() => { setFontManagerOpen(false); void checkFonts(); }} /></div>}
     </main>
   );
 }
