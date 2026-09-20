@@ -41,7 +41,7 @@
 - [ ] Production signing、Apple notarization 與 auto-update。
 - [ ] Publish corpus website：在 bkuw 內提供簡單的 Publish／Update 流程，完成 Cloudflare 登入後部署網站與 corpus metadata。網站程式與 metadata 使用 Workers Static Assets；圖片與音檔從一開始以 R2 作為 media storage，之後只同步雜湊變更的檔案，並由 bkuw 管理 deployment state，不要求使用者操作 Wrangler 或處理 storage migration。
 
-Cloud sync、accounts、authentication、collaboration、server backend、mobile、ASR、ELAN-style timeline、waveform segmentation、Git syncing 與自動上傳 lexical data 仍屬明確排除範圍，除非另行核准產品方向。
+Cloud sync、collaboration、mobile、ASR、ELAN-style timeline、waveform segmentation、Git syncing，以及未經使用者主動觸發的自動上傳 lexical data 仍屬明確排除範圍。Publish corpus website 所需的 Cloudflare authorization、部署與 media upload 是已列入 backlog 的唯一雲端例外。
 
 ## 驗證命令
 

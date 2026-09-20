@@ -153,4 +153,4 @@ bkuw 自行管理 portable font packs，不依賴 OS 已安裝字型，也不把
 
 ## 明確排除
 
-目前不包含 accounts、authentication、cloud sync、team collaboration、permissions、server backend、匯入既有專案、Big5 CSV、mobile、AI transcription、ASR、ELAN-style timeline、waveform segmentation、Git syncing、code signing、notarization、auto-update 或自動上傳 lexical data。受信任的 `main` version commit 通過 exact-SHA CI 後可自動建立 unsigned Draft GitHub Release；正式發布前須人工確認安裝包、checksums 與警告內容。
+目前不包含 accounts、authentication、cloud sync、team collaboration、permissions、server backend、匯入既有專案、Big5 CSV、mobile、AI transcription、ASR、ELAN-style timeline、waveform segmentation、Git syncing、code signing、notarization、auto-update，或未經使用者主動觸發的自動上傳 lexical data。Publish corpus website 所需的 Cloudflare authorization、部署與 media upload 是已列入 backlog 的唯一雲端例外。受信任的 `main` version commit 通過 exact-SHA CI 後可自動建立 unsigned Draft GitHub Release；正式發布前須人工確認安裝包、checksums 與警告內容。
