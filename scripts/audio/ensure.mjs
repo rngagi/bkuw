@@ -12,7 +12,7 @@ try {
   const manifest = JSON.parse(readFileSync(new URL("../../src-tauri/resources/audio/manifest.json", import.meta.url)));
   const suffix = process.platform === "win32" ? ".exe" : "";
   const recipe = createHash("sha256").update(readFileSync(new URL("./prepare.sh", import.meta.url))).digest("hex");
-  for (const file of ["FFmpeg-LICENSE.txt", "LAME-LICENSE.txt", "sources/ffmpeg-8.0.1.tar.xz", "sources/lame-3.100.tar.gz", "sources/prepare.sh"]) {
+  for (const file of ["FFmpeg-LICENSE.txt", "Opus-LICENSE.txt", "sources/ffmpeg-8.0.1.tar.xz", "sources/opus-1.6.1.tar.gz", "sources/prepare.sh"]) {
     readFileSync(new URL(`../../src-tauri/resources/audio/${file}`, import.meta.url));
   }
   ready = manifest.target === target && manifest.recipeSha256 === recipe && ["ffmpeg", "ffprobe"].every((tool) => {

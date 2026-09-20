@@ -35,6 +35,8 @@ pub fn run() {
             commands::save_entry,
             commands::list_audio,
             commands::import_audio,
+            commands::begin_audio_recording,
+            commands::save_audio_recording,
             commands::load_audio,
             commands::remove_audio,
             commands::list_sense_images,

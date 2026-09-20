@@ -40,11 +40,11 @@ pnpm release:check
 pnpm release:prepare -- 0.5.0
 ```
 
-`pnpm audio:prepare` 首次會下載經 SHA-256 驗證的 FFmpeg／LAME 原始碼並建置精簡工具；之後可離線使用。`tauri dev` 與一般 build 會自動檢查；直接執行 Rust 音檔測試前也需先準備工具。工具、授權與完整來源會隨安裝包提供，使用者不需另外安裝。
+`pnpm audio:prepare` 首次會下載經 SHA-256 驗證的 FFmpeg／Opus 原始碼並建置精簡工具；之後可離線使用。`tauri dev` 與一般 build 會自動檢查；直接執行 Rust 音檔測試前也需先準備工具。工具、授權與完整來源會隨安裝包提供，使用者不需另外安裝。
 
 ## 義項與例句音檔
 
-義項與例句可添加多個 WAV、MP3、M4A/AAC、FLAC、OGG/Opus 或 AIFF 音檔，全部在本機轉成單聲道 MP3 64 kbps，並可播放、拖曳進度與刪除。每檔最多 256 MiB、30 分鐘；專案只保存壓縮版，不修改來源檔。程式內錄音仍在 backlog。
+義項與例句可添加多個 WAV、MP3、M4A/AAC、FLAC、OGG/Opus、AIFF 或 WebM 音檔，也可直接錄音、試聽、重錄後儲存。全部在本機轉成單聲道 WebM／Opus 64 kbps VBR，並可播放、拖曳進度與刪除。匯入每檔最多 256 MiB、30 分鐘；錄音暫存最多 64 MiB、30 分鐘。專案只保存 WebM，不修改來源檔，不保留舊 MP3 相容層或 WAV 播放副本。
 
 ## 介面縮放
 

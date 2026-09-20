@@ -48,11 +48,11 @@ Phonemic text 儲存時不包含 delimiter、顯示時加 `/…/`；phonetic tex
 
 每個 sense 與 example 可添加多個音檔，依添加順序排列；音檔不綁定 writing system，entry 層級沒有音檔。
 
-從電腦選取 WAV、MP3、M4A/AAC、FLAC、OGG/Opus、AIFF 的常見音訊檔，使用隨附工具離線轉成 MP3、64 kbps CBR、單聲道、44.1 kHz。支援 PCM、MP3、AAC、ALAC、FLAC、Vorbis、Opus；空檔、損毀、無法解碼或含多個音軌的來源拒絕匯入。每個來源最多 256 MiB、30 分鐘，轉檔最多 5 分鐘。保留 MP3 編碼所需的少量末端 frame padding，不裁切原始語音。專案只保存壓縮版與 NFC 來源檔名，不修改電腦上的來源檔，不做降噪、音量正規化或靜音裁切。
+從電腦選取 WAV、MP3、M4A/AAC、FLAC、OGG/Opus、AIFF、WebM 的常見音訊檔，使用隨附工具離線轉成 WebM／Opus、64 kbps VBR、單聲道、48 kHz。支援 PCM、MP3、AAC、ALAC、FLAC、Vorbis、Opus；空檔、損毀、無法解碼或含多個音軌的來源拒絕匯入。每個來源最多 256 MiB、30 分鐘，轉檔最多 5 分鐘；容許最多 50 ms 的編碼延遲。專案只保存 WebM 與 NFC 來源檔名，不修改電腦上的來源檔，不做降噪、音量正規化或靜音裁切。上傳提示只顯示接受的來源格式與限制，不顯示內部儲存參數。
 
 可一次選取多檔，逐檔顯示進度與錯誤，成功的音檔即使其他檔案失敗也會保留。每筆顯示檔名、長度、大小，提供播放／暫停、拖曳進度及刪除。同時只播放一筆，離開詞條或專案時停止。播放失敗有英文與台灣繁中訊息。編輯義項／例句不會刪除音檔；刪除其擁有者時清理附件，詞條軟刪除則保留音檔供還原。
 
-程式內直接錄音維持 backlog；本次沒有麥克風權限、剪輯、音檔匯出或變更 corpus CSV contract。
+義項與例句提供程式內錄音；詞條本身不提供音檔。使用者按錄音後才請求麥克風權限，同時只允許一段錄音並停止其他播放。停止後可試聽、重新錄音、取消或儲存；儲存前僅留在記憶體，儲存時由 Rust 驗證並轉成相同 WebM／Opus 附件。錄音最多 30 分鐘、暫存最多 64 MiB；取消或離開畫面會釋放麥克風與暫存。保存失敗保留試聽內容供重試。沒有剪輯、音檔匯出或 corpus CSV contract 變更。專案只儲存及播放 WebM，不提供舊 MP3 或暫時 WAV 播放相容層。
 
 ## 核心使用流程
 
@@ -143,11 +143,11 @@ bkuw 自行管理 portable font packs，不依賴 OS 已安裝字型，也不把
 
 ## 後續候選
 
-程式內錄音、匯入既有專案、跨 repository contract test、多 analysis-language translations、進階搜尋、IPA helper、tags、filters、duplicate detection、backup manager、簽章與自動更新尚未排入已承諾 milestone；以 `plan.md` 為準。
+匯入既有專案、跨 repository contract test、多 analysis-language translations、進階搜尋、IPA helper、tags、filters、duplicate detection、backup manager、簽章與自動更新尚未排入已承諾 milestone；以 `plan.md` 為準。
 
 ## 明確排除
 
-目前不包含 accounts、authentication、cloud sync、team collaboration、permissions、server backend、程式內錄音、匯入既有專案、Big5 CSV、mobile、AI transcription、ASR、ELAN-style timeline、waveform segmentation、Git syncing、code signing、notarization、auto-update 或自動上傳 lexical data。受信任的 `main` version commit 通過 exact-SHA CI 後可自動建立 unsigned Draft GitHub Release；正式發布前須人工確認安裝包、checksums 與警告內容。
+目前不包含 accounts、authentication、cloud sync、team collaboration、permissions、server backend、匯入既有專案、Big5 CSV、mobile、AI transcription、ASR、ELAN-style timeline、waveform segmentation、Git syncing、code signing、notarization、auto-update 或自動上傳 lexical data。受信任的 `main` version commit 通過 exact-SHA CI 後可自動建立 unsigned Draft GitHub Release；正式發布前須人工確認安裝包、checksums 與警告內容。
 
 ### LaTeX 安裝協助
 

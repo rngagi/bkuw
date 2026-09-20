@@ -661,3 +661,15 @@ pub struct AudioContent {
     pub mime_type: String,
     pub data_base64: String,
 }
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordingRequest {
+    pub entry_id: String,
+    pub owner: AudioOwner,
+    pub expected_revision: i64,
+    pub session_token: String,
+    pub mime_type: String,
+    pub original_filename: String,
+    pub data_base64: String,
+}

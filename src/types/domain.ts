@@ -344,6 +344,7 @@ export const audioAttachmentSchema = z.object({
   durationMs: z.number(), byteSize: z.number(), sortOrder: z.number(), createdAt: z.string(),
 });
 export const audioMutationSchema = z.object({ entry: lexicalEntrySchema, audio: audioAttachmentSchema.nullable() });
-export const audioContentSchema = z.object({ mimeType: z.literal("audio/mpeg"), dataBase64: z.string() });
+export const audioContentSchema = z.object({ mimeType: z.literal("audio/webm"), dataBase64: z.string() });
+export type AudioMutation = z.infer<typeof audioMutationSchema>;
 export type AudioOwner = z.infer<typeof audioOwnerSchema>;
 export type AudioAttachment = z.infer<typeof audioAttachmentSchema>;

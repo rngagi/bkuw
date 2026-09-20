@@ -559,6 +559,55 @@ pub async fn load_audio(
 }
 
 #[tauri::command]
+pub fn begin_audio_recording(
+    state: State<'_, AppState>,
+    request: crate::domain::ImportAudioRequest,
+) -> AppResult<String> {
+    active_session(&state)?
+        .as_ref()
+        .expect("checked")
+        .audio_import_token(&request)
+}
+
+#[tauri::command]
+pub async fn save_audio_recording(
+    app: AppHandle,
+    request: crate::domain::RecordingRequest,
+) -> AppResult<crate::domain::AudioMutation> {
+    run_blocking(move || {
+        let state = app.state::<AppState>();
+        let attachment = crate::domain::ImportAudioRequest {
+            entry_id: request.entry_id.clone(),
+            owner: request.owner.clone(),
+            expected_revision: request.expected_revision,
+            source_path: String::new(),
+        };
+        let token = active_session(&state)?
+            .as_ref()
+            .expect("checked")
+            .audio_import_token(&attachment)?;
+        if token != request.session_token {
+            return Err(AppError::new(
+                "audio_stale",
+                "The project changed during recording.",
+            ));
+        }
+        let resources = app
+            .path()
+            .resource_dir()
+            .map_err(|_| AppError::new("audio_tools", "Audio resources are unavailable."))?;
+        let tools =
+            crate::database::audio::AudioTools::bundled(&resources.join("resources/audio"))?;
+        let prepared = crate::database::audio::prepare_recording(&tools, &request)?;
+        active_session(&state)?
+            .as_mut()
+            .expect("checked")
+            .attach_audio(attachment, &token, prepared)
+    })
+    .await
+}
+
+#[tauri::command]
 pub fn remove_audio(
     state: State<'_, AppState>,
     request: crate::domain::RemoveAudioRequest,

@@ -18,7 +18,7 @@ describe("AudioEditor", () => {
     await i18n.changeLanguage("en");
     backendMock.listAudio.mockResolvedValue([]);
     backendMock.chooseAudioFiles.mockResolvedValue([]);
-    backendMock.loadAudio.mockResolvedValue({ mimeType: "audio/mpeg", dataBase64: "SUQz" });
+    backendMock.loadAudio.mockResolvedValue({ mimeType: "audio/webm", dataBase64: "GkXfow==" });
     props.onFlush.mockResolvedValue(entry);
     let counter = 0;
     vi.stubGlobal("URL", { createObjectURL: vi.fn(() => `blob:test-${++counter}`), revokeObjectURL: vi.fn() });
@@ -69,7 +69,7 @@ describe("AudioEditor", () => {
     fireEvent.click(screen.getByRole("button", { name: "Play 語音.wav" }));
     await screen.findByRole("button", { name: "Pause 語音.wav" });
     fireEvent.change(screen.getByRole("slider", { name: "Playback position for 語音.wav" }), { target: { value: "1.2" } });
-    expect(container.querySelector("audio")?.currentTime).toBe(1.2);
+    expect(container.querySelector<HTMLAudioElement>(".audio-row audio")?.currentTime).toBe(1.2);
     fireEvent.click(screen.getByRole("button", { name: "Play second.wav" }));
     await screen.findByRole("button", { name: "Pause second.wav" });
     expect(screen.getByRole("button", { name: "Play 語音.wav" })).toBeInTheDocument();
@@ -85,7 +85,7 @@ describe("AudioEditor", () => {
     fireEvent.click(screen.getByRole("button", { name: "Play 語音.wav" }));
     fireEvent.click(screen.getByRole("button", { name: "Play second.wav" }));
     await screen.findByRole("button", { name: "Pause second.wav" });
-    await act(async () => pending.resolve({ mimeType: "audio/mpeg", dataBase64: "SUQz" }));
+    await act(async () => pending.resolve({ mimeType: "audio/webm", dataBase64: "GkXfow==" }));
     expect(screen.getByRole("button", { name: "Play 語音.wav" })).toBeInTheDocument();
     expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(1);
   });

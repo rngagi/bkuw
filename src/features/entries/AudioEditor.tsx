@@ -1,9 +1,11 @@
 import { Music2, Pause, Play, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/Button";
 import { backend, CommandError } from "../../lib/tauri";
 import type { AudioAttachment, AudioOwner, LexicalEntry } from "../../types/domain";
+import { claimPlayback, isCurrentPlayback, isMicrophoneBusy, releasePlayback, subscribeMicrophone } from "../../lib/audioCapture";
+import { AudioRecorder } from "./AudioRecorder";
 
 interface Props {
   entryId: string;
@@ -14,6 +16,7 @@ interface Props {
 
 export function AudioEditor({ entryId, owner, onFlush, onEntryMutated }: Props) {
   const { t } = useTranslation();
+  const microphoneBusy = useSyncExternalStore(subscribeMicrophone, isMicrophoneBusy);
   const [items, setItems] = useState<AudioAttachment[]>([]);
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<{ name: string; key: string }[]>([]);
@@ -87,17 +90,17 @@ export function AudioEditor({ entryId, owner, onFlush, onEntryMutated }: Props) 
     }
   }
   return <div className="audio-editor">
-    <div className="subsection-heading"><div><h4>{t("audio.title")}</h4><small>{t("audio.help")}</small></div><Button type="button" size="small" disabled={busy} onClick={() => void add()}><Music2 size={14} />{t("audio.add")}</Button></div>
+    <div className="subsection-heading"><div><h4>{t("audio.title")}</h4><small>{t("audio.help")}</small></div><Button type="button" size="small" disabled={busy || microphoneBusy} onClick={() => void add()}><Music2 size={14} />{t("audio.add")}</Button></div>
+    <AudioRecorder key={`${entryId}:${owner.kind}:${owner.id}`} entryId={entryId} owner={owner} disabled={busy} onFlush={onFlush} onSaved={(result) => { onEntryMutated(result.entry); if (result.audio) setItems((value) => [...value, result.audio!]); }} />
     {progress && <p role="status">{t("audio.importing", progress)}</p>}
     {errors.map((error, index) => <p key={index} className="image-error" role="alert">{error.name && `${error.name}: `}{t(error.key, { defaultValue: t("audio.failed") })}</p>)}
     {items.map((item) => <AudioRow key={item.id} item={item} busy={busy} onRemove={() => void remove(item.id)} />)}
   </div>;
 }
 
-let activePlayer: HTMLAudioElement | null = null;
-let playbackRequest = 0;
 function AudioRow({ item, busy, onRemove }: { item: AudioAttachment; busy: boolean; onRemove(): void }) {
   const { t } = useTranslation();
+  const microphoneBusy = useSyncExternalStore(subscribeMicrophone, isMicrophoneBusy);
   const player = useRef<HTMLAudioElement>(null);
   const url = useRef<string | null>(null);
   const alive = useRef(true);
@@ -110,8 +113,7 @@ function AudioRow({ item, busy, onRemove }: { item: AudioAttachment; busy: boole
     const element = player.current;
     return () => {
       alive.current = false;
-      element?.pause();
-      if (activePlayer === element) { activePlayer = null; playbackRequest++; }
+      releasePlayback(element);
       if (url.current) { URL.revokeObjectURL(url.current); url.current = null; }
       element?.removeAttribute("src");
     };
@@ -120,22 +122,21 @@ function AudioRow({ item, busy, onRemove }: { item: AudioAttachment; busy: boole
     const element = player.current;
     if (!element || loading) return;
     if (!element.paused) { element.pause(); return; }
-    const request = ++playbackRequest;
-    activePlayer?.pause();
-    activePlayer = element;
+    const request = claimPlayback(element);
+    if (request === null) return;
     setError(false);
     setLoading(true);
     try {
       if (!url.current) {
         const content = await backend.loadAudio(item.id);
-        if (!alive.current || request !== playbackRequest) return;
+        if (!alive.current || !isCurrentPlayback(request)) return;
         const bytes = Uint8Array.from(atob(content.dataBase64), (value) => value.charCodeAt(0));
         url.current = URL.createObjectURL(new Blob([bytes], { type: content.mimeType }));
         element.src = url.current;
       }
-      if (alive.current && request === playbackRequest) await element.play();
+      if (alive.current && isCurrentPlayback(request)) await element.play();
     } catch {
-      if (alive.current && request === playbackRequest) setError(true);
+      if (alive.current && isCurrentPlayback(request)) setError(true);
     } finally {
       if (alive.current) setLoading(false);
     }
@@ -144,7 +145,7 @@ function AudioRow({ item, busy, onRemove }: { item: AudioAttachment; busy: boole
   return <div className="audio-row">
     <audio ref={player} preload="none" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} onTimeUpdate={() => setPosition(player.current?.currentTime ?? 0)} onError={() => { setPlaying(false); setError(true); }} />
     <div className="audio-file"><span title={name}>{name}</span><small>{time(item.durationMs / 1000)} · {(item.byteSize / 1024).toFixed(1)} KiB</small></div>
-    <Button type="button" size="icon" variant="ghost" disabled={loading} onClick={() => void toggle()} aria-label={t(playing ? "audio.pause" : "audio.play", { name })}>{playing ? <Pause size={15} /> : <Play size={15} />}</Button>
+    <Button type="button" size="icon" variant="ghost" disabled={loading || microphoneBusy} onClick={() => void toggle()} aria-label={t(playing ? "audio.pause" : "audio.play", { name })}>{playing ? <Pause size={15} /> : <Play size={15} />}</Button>
     <input type="range" min={0} max={item.durationMs / 1000} step={0.1} value={position} disabled={!url.current} aria-label={t("audio.seek", { name })} onChange={(event) => { const seconds = Number(event.target.value); if (player.current) player.current.currentTime = seconds; setPosition(seconds); }} />
     <span className="audio-time">{time(position)}</span>
     <Button type="button" size="icon" variant="danger" disabled={busy} onClick={onRemove} aria-label={t("audio.remove", { name })}><Trash2 size={14} /></Button>

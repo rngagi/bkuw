@@ -11,8 +11,8 @@
 - Photos belong to senses. Accept PNG/JPEG/WebP input, lightly resize oversized images in the frontend, and store only validated project-local PNG files plus database metadata.
 - Preserve user text in NFC. Derived search keys may fold case and diacritics but must never replace display text.
 - The UI must remain complete in both English (`en`) and Taiwan Traditional Chinese (`zh-TW`).
-- Audio attachments belong to senses or examples only, with multiple files per owner. Import supported local files into validated project-local `media/audio/<uuid>.mp3` at mono 64 kbps CBR / 44.1 kHz; recording remains backlog. Keep conversion and integrity checks behind the Rust project/database module.
-- The current product includes audio import/playback, corpus CSV and XeLaTeX/Overleaf/PDF export. Recording, cloud services, authentication, collaboration, mobile clients, production signing, notarization, and automatic upload remain excluded until explicitly planned.
+- Audio attachments belong to senses or examples only, with multiple files per owner. Import supported local files and in-app microphone recordings into validated project-local `media/audio/<uuid>.webm` using mono Opus at 64 kbps VBR / 48 kHz. Store and play WebM only, without legacy MP3 or temporary WAV playback copies. Keep conversion and integrity checks behind the Rust project/database module.
+- The current product includes audio import/playback and in-app recording, corpus CSV and XeLaTeX/Overleaf/PDF export. Cloud services, authentication, collaboration, mobile clients, production signing, notarization, and automatic upload remain excluded until explicitly planned.
 
 ## Architecture and security
 

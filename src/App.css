@@ -244,6 +244,8 @@ textarea { min-height: 72px; resize: vertical; }
 .overleaf-help ol { padding-inline-start: 22px; margin: 0; }
 
 .audio-editor { margin-block: 0.75rem; }
+.audio-recorder { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-block: 0.5rem; font-size: 13px; }
+.audio-recorder [role="status"] { color: var(--primary); font-variant-numeric: tabular-nums; }
 .audio-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; padding-block: 0.4rem; border-bottom: 1px solid var(--border); }
 .audio-file { display: flex; flex-direction: column; min-width: 8rem; flex: 1; overflow-wrap: anywhere; }
 .audio-file small, .audio-time { color: var(--muted-foreground); font-variant-numeric: tabular-nums; }

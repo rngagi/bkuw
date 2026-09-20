@@ -240,7 +240,7 @@ export const backend = {
 
   async chooseAudioFiles(): Promise<string[]> {
     const selected = await open({ multiple: true, directory: false, filters: [
-      { name: "WAV / MP3 / M4A / AAC / FLAC / OGG / Opus / AIFF", extensions: ["wav", "mp3", "m4a", "aac", "flac", "ogg", "opus", "aif", "aiff", "aifc"] },
+      { name: "WAV / MP3 / M4A / AAC / FLAC / OGG / Opus / AIFF / WebM", extensions: ["wav", "mp3", "m4a", "aac", "flac", "ogg", "opus", "aif", "aiff", "aifc", "webm"] },
     ] });
     return selected ? (Array.isArray(selected) ? selected : [selected]) : [];
   },
@@ -249,6 +249,12 @@ export const backend = {
   },
   importAudio(request: { entryId: string; owner: AudioOwner; expectedRevision: number; sourcePath: string }) {
     return call("import_audio", { request }, audioMutationSchema);
+  },
+  beginAudioRecording(request: { entryId: string; owner: AudioOwner; expectedRevision: number }) {
+    return call("begin_audio_recording", { request: { ...request, sourcePath: "" } }, z.string());
+  },
+  saveAudioRecording(request: { entryId: string; owner: AudioOwner; expectedRevision: number; sessionToken: string; mimeType: string; originalFilename: string; dataBase64: string }) {
+    return call("save_audio_recording", { request }, audioMutationSchema);
   },
   loadAudio(audioId: string) {
     return call("load_audio", { audioId }, audioContentSchema);

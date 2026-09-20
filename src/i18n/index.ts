@@ -5,7 +5,10 @@ const resources = {
   en: {
     translation: {
       audio: {
-        title: "Audio", help: "MP3 · 64 kbps · mono. Up to 256 MiB and 30 minutes per source file.", add: "Add audio",
+        pausePreview: "Pause preview",
+        title: "Audio", help: "Accepts WAV, MP3, M4A, AAC, FLAC, OGG, Opus, AIFF and WebM. Up to 256 MiB and 30 minutes per file.", add: "Add audio",
+        record: "Record", requesting: "Waiting for microphone…", stopping: "Finishing recording…", saving: "Saving recording…", recording: "Recording {{time}} / 30:00", stop: "Stop recording", preview: "Preview recording", saveRecording: "Save recording", rerecord: "Record again", recordName: "Recording {{date}}",
+        recordBusy: "Another recording is in progress.", recordUnsupported: "Recording is unavailable in this browser. You can import an audio file.", recordDenied: "Microphone access was denied. Allow microphone access in system settings, then retry.", recordFailed: "Recording could not be completed. Check your microphone and retry.", recordEmpty: "No audio was captured. Please record again.", recordLimit: "The recording exceeded the 64 MiB limit. Please make a shorter recording.",
         importing: "Converting {{current}} of {{total}}…", failed: "Audio could not be imported. Please retry.",
         play: "Play {{name}}", pause: "Pause {{name}}", seek: "Playback position for {{name}}", remove: "Remove {{name}}",
         playFailed: "Audio could not be played. Check that the project audio file is available and intact.",
@@ -266,7 +269,10 @@ const resources = {
   "zh-TW": {
     translation: {
       audio: {
-        title: "音檔", help: "MP3 · 64 kbps · 單聲道。每個來源檔案上限 256 MiB、30 分鐘。", add: "添加音檔",
+        pausePreview: "暫停試聽",
+        title: "音檔", help: "支援 WAV、MP3、M4A、AAC、FLAC、OGG、Opus、AIFF、WebM。每個檔案上限 256 MiB、30 分鐘。", add: "添加音檔",
+        record: "錄音", requesting: "等待麥克風授權…", stopping: "正在結束錄音…", saving: "正在儲存錄音…", recording: "錄音中 {{time}}／30:00", stop: "停止錄音", preview: "試聽錄音", saveRecording: "儲存錄音", rerecord: "重新錄音", recordName: "錄音 {{date}}",
+        recordBusy: "另一段錄音正在進行中。", recordUnsupported: "此瀏覽器無法錄音，你仍可匯入音檔。", recordDenied: "麥克風存取遭拒，請在系統設定中允許麥克風權限後重試。", recordFailed: "無法完成錄音，請確認麥克風後重試。", recordEmpty: "未錄到音訊，請重新錄音。", recordLimit: "錄音超過 64 MiB 上限，請縮短錄音長度。",
         importing: "正在轉換第 {{current}}／{{total}} 個音檔…", failed: "無法匯入音檔，請重試。",
         play: "播放 {{name}}", pause: "暫停 {{name}}", seek: "{{name}} 的播放位置", remove: "刪除 {{name}}",
         playFailed: "無法播放，請確認專案內的音檔仍存在且未損毀。",

@@ -81,13 +81,15 @@ App-level zoom shortcut controller 使用 Tauri WebView `setZoom`，只額外授
 
 `database::audio` 負責本機轉檔、檔案界線、完整性與附件交易。`AudioOwner` 是 `{ kind: "sense" | "example", id }`；新增／移除要求 entry ID 與 expected revision，回傳更新後的 entry 和可選的附件 metadata。音訊 bytes 不進入 entry aggregate。透過唯一的 frontend adapter 呼叫；檔案選擇沿用 dialog 權限。
 
-匯入前 flush autosave，Rust 驗證擁有者與 revision，取得當次 project session token，釋放 session mutex 後在 blocking task 轉檔。來源須為 regular file，限 256 MiB；複製至隔離暫存目錄後，以隨附的 FFprobe 檢查唯一音軌、codec 與最長 30 分鐘，再以 FFmpeg/libmp3lame 轉成 64 kbps CBR／mono／44.1 kHz MP3。兩個程序共用 5 分鐘 deadline；逾時 kill 並 reap，損毀輸入或截斷輸出不提交。輸出以 FFprobe 再驗證，允許至多 100 ms 的 MP3 frame padding，最多 16 MiB。
+匯入前 flush autosave，Rust 驗證擁有者與 revision，取得當次 project session token，釋放 session mutex 後在 blocking task 轉檔。來源須為 regular file，限 256 MiB；複製至隔離暫存目錄後，以隨附的 FFprobe 檢查唯一音軌、codec 與最長 30 分鐘，再以 FFmpeg/libopus 轉成 64 kbps VBR／mono／48 kHz WebM。兩個程序共用 5 分鐘 deadline；逾時 kill 並 reap，損毀輸入或截斷輸出不提交。輸出以 FFprobe 再驗證，允許至多 50 ms 的 Opus 編碼延遲，最多 32 MiB。
 
-完成後重新鎖定 session，比對 session token、擁有者及 revision。輸出先寫至 project-local temporary sibling 並 sync，再於 SQLite transaction 內新增 metadata、遞增 revision，搬至 `media/audio/<uuid>.mp3`；提交失敗移除新檔。檔案 metadata 包含來源檔名、長度、大小、SHA-256、排序與建立時間。例句使用 upsert/delete diff，避免 autosave cascade 刪除音檔。
+完成後重新鎖定 session，比對 session token、擁有者及 revision。輸出先寫至 project-local temporary sibling 並 sync，再於 SQLite transaction 內新增 metadata、遞增 revision，搬至 `media/audio/<uuid>.webm`；提交失敗移除新檔。檔案 metadata 包含來源檔名、長度、大小、SHA-256、排序與建立時間。例句使用 upsert/delete diff，避免 autosave cascade 刪除音檔。
 
-讀取只接受 UUID MP3 project-relative 路徑，拒絕 media/audio 目錄及檔案 symlink，檢查檔案大小與 SHA-256。Frontend 收到 typed `audio/mpeg` base64 後建立 Blob URL；CSP 只新增 `media-src blob:`。播放延遲載入，每次播放請求停止前一筆，忽略過期回應，unmount 時 pause 並 revoke URL。刪除義項／例句後清理失去 reference 的音檔；entry soft delete 保留 bytes 供 Undo。音檔不參與 CSV／LaTeX／PDF 匯出。
+讀取只接受 UUID WebM project-relative 路徑，拒絕 media/audio 目錄及檔案 symlink，檢查檔案大小與 SHA-256。Frontend 收到 typed `audio/webm` base64 後建立 Blob URL；CSP 只新增 `media-src blob:`。播放延遲載入，每次播放請求停止前一筆，忽略過期回應，unmount 時 pause 並 revoke URL。刪除義項／例句後清理失去 reference 的音檔；entry soft delete 保留 bytes 供 Undo。音檔不參與 CSV／LaTeX／PDF 匯出。不提供舊 MP3 路徑或暫時 WAV 播放副本。
 
-固定 FFmpeg 8.0.1 與 LAME 3.100 來源 URL／SHA-256 由 `scripts/audio/prepare.sh` 管理，禁用網路與非必要 codecs，不啟用 GPL／nonfree，Windows 靜態連結工具 runtime。`pnpm audio:prepare` 首次由來源建置工具，開發／build 先檢查工具；Windows 開發需 MSYS2 MINGW64，CI 安裝相同依賴。安裝包包含 tools、binary SHA-256 manifest、licenses、完整來源 archives 與 build recipe；終端使用者不需安裝或下載轉檔工具。既有 CI 的平台 jobs 驗證真實轉檔與 WebView 播放，Linux fast-checks 不建置桌面音訊工具。
+錄音由 `audioCapture.ts` 管理 MediaRecorder、單一麥克風與播放互斥、30 分鐘／64 MiB 上限及取消清理。按錄音先 flush 並取得 project session token，才呼叫 getUserMedia；MediaRecorder 使用 WebM／Opus，平台不支援時可使用 MP4 暫存，儲存結果一律為 WebM。無 duration 的 streaming container 在完整解碼後驗證長度。停止後以記憶體 Blob 試聽；儲存時重新 flush，傳送 token、owner、revision 與 bounded base64，由 Rust 在隔離暫存目錄驗證／轉檔，再經原有附件 transaction 提交。跨 project session 的結果拒絕儲存。macOS Info.plist 提供麥克風用途說明；未新增 shell、網路或廣域檔案權限。
+
+固定 FFmpeg 8.0.1 與 Opus 1.6.1 來源 URL／SHA-256 由 `scripts/audio/prepare.sh` 管理，禁用網路與非必要 codecs，不啟用 GPL／nonfree，Windows 靜態連結工具 runtime。`pnpm audio:prepare` 首次由來源建置工具，開發／build 先檢查工具；Windows 開發需 MSYS2 MINGW64，CI 安裝相同依賴。安裝包包含 tools、binary SHA-256 manifest、licenses、完整來源 archives 與 build recipe；終端使用者不需安裝或下載轉檔工具。既有 CI 的平台 jobs 驗證真實轉檔與 WebView 播放，Linux fast-checks 不建置桌面音訊工具。
 
 ## SQLite schema
 

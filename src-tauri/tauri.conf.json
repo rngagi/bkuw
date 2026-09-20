@@ -36,8 +36,10 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": [
-      "resources/audio/"
-    ]
+    "resources": {
+      "resources/audio/": "resources/audio/",
+      "resources/en.lproj/InfoPlist.strings": "en.lproj/InfoPlist.strings",
+      "resources/zh-TW.lproj/InfoPlist.strings": "zh-TW.lproj/InfoPlist.strings"
+    }
   }
 }

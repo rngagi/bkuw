@@ -34,13 +34,18 @@
 - [x] 本機 macOS Apple Silicon：隨附工具、8 種格式轉檔與 WebView 播放／拖曳 E2E；完整 desktop E2E 4 tests passed，以及 `pnpm tauri build --no-bundle` 通過。
 - [ ] Windows x64 CI／實機驗收：隨附工具建置、所有格式匯入、播放／拖曳及離線安裝包；人工試聽真實詞彙與例句。
 
+## WebM 與程式內錄音
+
+- [x] 義項／例句匯入與錄音統一儲存 WebM／Opus，移除 MP3 相容層；上傳提示只顯示接受格式。驗證：`pnpm check`、`pnpm test`（95 passed）、`pnpm test:rust`（72 passed，1 個既有 XeLaTeX 測試 ignored）。
+- [x] 本機 WebView 真實 MediaRecorder、WebM 播放／拖曳 E2E（完整 desktop E2E 4 passed）與 `pnpm tauri build --no-bundle`。
+- [ ] Windows x64 實機麥克風權限、錄製、試聽與儲存，以及 macOS 真實麥克風人工試聽。
+
 ## 候選 backlog
 
 以下尚未承諾版本或優先順序；開始實作前須先確認 scope 與 acceptance criteria。
 
 - [ ] 將 CSV 匯入既有專案，以及 versioned bkuw → rngagi-corpus upload workflow。
 - [ ] bkuw／rngagi-corpus cross-repository contract fixture 與 CI。
-- [ ] 義項／例句的程式內直接錄音；沿用 MP3 音檔附件流程。
 - [ ] 多 analysis-language gloss／translation。
 - [ ] Example search、進階 FTS 與 fuzzy search。
 - [ ] IPA helper、tags、filters 與 duplicate detection。

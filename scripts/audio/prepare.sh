@@ -25,8 +25,8 @@ fetch() {
   test "$(sha256 "$SOURCES/$name")" = "$expected" || { echo "Audio source SHA-256 mismatch" >&2; exit 1; }
 }
 fetch ffmpeg-8.0.1.tar.xz https://ffmpeg.org/releases/ffmpeg-8.0.1.tar.xz 05ee0b03119b45c0bdb4df654b96802e909e0a752f72e4fe3794f487229e5a41
-fetch lame-3.100.tar.gz https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e
-if [ ! -d "$BUILD/lame-3.100" ]; then tar -xf "$SOURCES/lame-3.100.tar.gz" -C "$BUILD"; fi
+fetch opus-1.6.1.tar.gz https://downloads.xiph.org/releases/opus/opus-1.6.1.tar.gz 6ffcb593207be92584df15b32466ed64bbec99109f007c82205f0194572411a1
+if [ ! -d "$BUILD/opus-1.6.1" ]; then tar -xf "$SOURCES/opus-1.6.1.tar.gz" -C "$BUILD"; fi
 if [ ! -d "$BUILD/ffmpeg-8.0.1" ]; then tar -xf "$SOURCES/ffmpeg-8.0.1.tar.xz" -C "$BUILD"; fi
 JOBS=4
 if [ "$TARGET" = aarch64-apple-darwin ]; then
@@ -34,40 +34,39 @@ if [ "$TARGET" = aarch64-apple-darwin ]; then
   export MACOSX_DEPLOYMENT_TARGET=11.0
   JOBS=$(sysctl -n hw.logicalcpu)
 fi
-cd "$BUILD/lame-3.100"
+cd "$BUILD/opus-1.6.1"
 if [ -f Makefile ]; then make clean; fi
-# LAME's old config.sub predates Apple Silicon; explicit host skips that detection.
-LAME_HOST=()
-if [ "$TARGET" = aarch64-apple-darwin ]; then LAME_HOST=(--host=aarch64-apple-darwin); fi
-./configure --prefix="$PREFIX" --disable-shared --enable-static --disable-frontend --disable-decoder --disable-asm "${LAME_HOST[@]}"
+./configure --prefix="$PREFIX" --disable-shared --enable-static --disable-extra-programs --disable-doc --disable-intrinsics
 make -j"$JOBS"
 make install
 cd "$BUILD/ffmpeg-8.0.1"
 if [ -f ffbuild/config.mak ]; then make clean; fi
 STATIC_FLAGS=""
 if [ "$TARGET" = x86_64-pc-windows-msvc ]; then STATIC_FLAGS="-static"; fi
+export PKG_CONFIG_PATH="$PREFIX/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
 ./configure --prefix="$PREFIX" --disable-everything --disable-autodetect --disable-network \
   --disable-shared --enable-static --disable-doc --disable-debug --disable-x86asm \
-  --disable-ffplay --enable-ffmpeg --enable-ffprobe --enable-libmp3lame \
+  --disable-ffplay --enable-ffmpeg --enable-ffprobe --enable-libopus \
   --extra-cflags="-I$PREFIX/include" --extra-ldflags="-L$PREFIX/lib $STATIC_FLAGS" \
-  --enable-protocol=file,pipe --enable-demuxer=wav,mp3,mov,aac,flac,ogg,aiff \
+  --enable-protocol=file,pipe --enable-demuxer=wav,mp3,mov,aac,flac,ogg,aiff,matroska \
   --enable-decoder=mp3,mp3float,aac,alac,flac,vorbis,opus,pcm_s8,pcm_u8,pcm_s16le,pcm_s16be,pcm_s24le,pcm_s24be,pcm_s32le,pcm_s32be,pcm_f32le,pcm_f32be,pcm_f64le,pcm_f64be,pcm_alaw,pcm_mulaw \
-  --enable-parser=mpegaudio,aac,flac,opus,vorbis --enable-encoder=libmp3lame \
-  --enable-muxer=mp3 --enable-filter=aresample,aformat,anull,atrim
+  --enable-parser=mpegaudio,aac,flac,opus,vorbis --enable-encoder=libopus \
+  --enable-muxer=webm --enable-filter=aresample,aformat,anull,atrim
 make -j"$JOBS"
 SUFFIX=""
 if [ "$TARGET" = x86_64-pc-windows-msvc ]; then SUFFIX=.exe; fi
 cp "ffmpeg$SUFFIX" "ffprobe$SUFFIX" "$OUTPUT/"
 cp COPYING.LGPLv2.1 "$OUTPUT/FFmpeg-LICENSE.txt"
-cp "$BUILD/lame-3.100/COPYING" "$OUTPUT/LAME-LICENSE.txt"
+cp "$BUILD/opus-1.6.1/COPYING" "$OUTPUT/Opus-LICENSE.txt"
 # Exact sources plus this build recipe permit rebuilding/relinking the tools.
-cp "$SOURCES/ffmpeg-8.0.1.tar.xz" "$SOURCES/lame-3.100.tar.gz" "$OUTPUT/sources/"
+cp "$SOURCES/ffmpeg-8.0.1.tar.xz" "$SOURCES/opus-1.6.1.tar.gz" "$OUTPUT/sources/"
+rm -f "$OUTPUT/LAME-LICENSE.txt" "$OUTPUT/sources/lame-3.100.tar.gz"
 cp "$ROOT/scripts/audio/prepare.sh" "$OUTPUT/sources/"
 cat > "$OUTPUT/manifest.json" <<MANIFEST
 {
   "target": "$TARGET",
   "ffmpeg": "8.0.1",
-  "lame": "3.100",
+  "opus": "1.6.1",
   "recipeSha256": "$(sha256 "$OUTPUT/sources/prepare.sh")",
   "sha256": {
     "ffmpeg$SUFFIX": "$(sha256 "$OUTPUT/ffmpeg$SUFFIX")",

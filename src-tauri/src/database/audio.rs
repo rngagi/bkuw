@@ -14,7 +14,7 @@ use wait_timeout::ChildExt;
 
 const MAX_SOURCE_BYTES: u64 = 256 * 1024 * 1024;
 const MAX_DURATION: f64 = 1800.0;
-const MAX_MP3_BYTES: u64 = 16 * 1024 * 1024;
+const MAX_AUDIO_BYTES: u64 = 32 * 1024 * 1024;
 
 fn invalid() -> AppError {
     AppError::new(
@@ -139,7 +139,7 @@ pub(crate) fn prepare(tools: &AudioTools, source: &Path) -> AppResult<PreparedAu
         .unwrap_or("")
         .to_ascii_lowercase();
     if ![
-        "wav", "mp3", "m4a", "aac", "flac", "ogg", "opus", "aif", "aiff", "aifc",
+        "wav", "mp3", "m4a", "aac", "flac", "ogg", "opus", "aif", "aiff", "aifc", "webm",
     ]
     .contains(&extension.as_str())
     {
@@ -169,7 +169,10 @@ pub(crate) fn prepare(tools: &AudioTools, source: &Path) -> AppResult<PreparedAu
     drop(copy);
     let deadline = Instant::now() + Duration::from_secs(300);
     let info = probe(tools, &copied, deadline)?;
-    duration(&info, MAX_DURATION)?;
+    // MediaRecorder streams may omit duration; validate the decoded output below.
+    if !info["format"]["duration"].is_null() {
+        duration(&info, MAX_DURATION)?;
+    }
     let streams = info["streams"].as_array().ok_or_else(invalid)?;
     let audio = streams
         .iter()
@@ -184,7 +187,7 @@ pub(crate) fn prepare(tools: &AudioTools, source: &Path) -> AppResult<PreparedAu
     {
         return Err(invalid());
     }
-    let path = directory.path().join("converted.mp3");
+    let path = directory.path().join("converted.webm");
     run(
         Command::new(&tools.ffmpeg)
             .args([
@@ -206,33 +209,32 @@ pub(crate) fn prepare(tools: &AudioTools, source: &Path) -> AppResult<PreparedAu
                 "-map_metadata",
                 "-1",
                 "-c:a",
-                "libmp3lame",
+                "libopus",
                 "-b:a",
                 "64k",
+                "-vbr",
+                "on",
                 "-ac",
                 "1",
                 "-ar",
-                "44100",
+                "48000",
                 "-t",
                 "1800.1",
                 "-f",
-                "mp3",
+                "webm",
             ])
             .arg(&path),
         deadline,
     )?;
     let encoded = probe(tools, &path, deadline)?;
-    // MP3 frame padding adds at most a few frames; never accept the 1800.1s safety cut.
-    let seconds = duration(&encoded, MAX_DURATION + 0.1)?;
+    // Allow Opus encoder delay, but reject the 1800.1s safety cut.
+    let seconds = duration(&encoded, MAX_DURATION + 0.05)?;
     let stream = &encoded["streams"][0];
-    if stream["codec_name"] != "mp3"
-        || stream["sample_rate"] != "44100"
-        || stream["channels"] != 1
-        || stream["bit_rate"] != "64000"
+    if stream["codec_name"] != "opus" || stream["sample_rate"] != "48000" || stream["channels"] != 1
     {
         return Err(invalid());
     }
-    if fs::metadata(&path)?.len() > MAX_MP3_BYTES {
+    if fs::metadata(&path)?.len() > MAX_AUDIO_BYTES {
         return Err(limit());
     }
     let original_filename = normalize_text(
@@ -247,6 +249,34 @@ pub(crate) fn prepare(tools: &AudioTools, source: &Path) -> AppResult<PreparedAu
         original_filename,
         duration_ms: (seconds * 1000.0).round() as u64,
     })
+}
+
+pub(crate) fn prepare_recording(
+    tools: &AudioTools,
+    request: &crate::domain::RecordingRequest,
+) -> AppResult<PreparedAudio> {
+    const MAX_RECORDING_BYTES: usize = 64 * 1024 * 1024;
+    let extension = match request.mime_type.split(';').next().unwrap_or("").trim() {
+        "audio/webm" => "webm",
+        "audio/mp4" => "m4a",
+        _ => return Err(invalid()),
+    };
+    if request.data_base64.len() > MAX_RECORDING_BYTES.div_ceil(3) * 4 {
+        return Err(limit());
+    }
+    let bytes = BASE64.decode(&request.data_base64).map_err(|_| invalid())?;
+    if bytes.len() > MAX_RECORDING_BYTES {
+        return Err(limit());
+    }
+    if request.original_filename.trim().is_empty() || request.original_filename.len() > 512 {
+        return Err(invalid());
+    }
+    let directory = tempfile::tempdir()?;
+    let source = directory.path().join(format!("recording.{extension}"));
+    fs::write(&source, bytes)?;
+    let mut prepared = prepare(tools, &source)?;
+    prepared.original_filename = normalize_text(&request.original_filename);
+    Ok(prepared)
 }
 
 fn owner_parts(owner: &AudioOwner) -> (Option<&str>, Option<&str>) {
@@ -317,7 +347,7 @@ impl ProjectSession {
         }
         self.audio_import_token(&request)?;
         let id = new_id();
-        let relative_path = format!("media/audio/{id}.mp3");
+        let relative_path = format!("media/audio/{id}.webm");
         let destination = self.audio_path(&relative_path)?;
         let bytes = fs::read(&prepared.path)?;
         let hash = hex::encode(Sha256::digest(&bytes));
@@ -357,16 +387,16 @@ impl ProjectSession {
         let (relative, hash, expected_size) = self.connection.query_row("SELECT a.relative_path,a.sha256,a.byte_size FROM audio_attachments a LEFT JOIN examples x ON x.id=a.example_id JOIN senses s ON s.id=COALESCE(a.sense_id,x.sense_id) JOIN lexical_entries e ON e.id=s.entry_id WHERE a.id=?1 AND e.deleted_at IS NULL", params![id], |row| Ok((row.get::<_,String>(0)?,row.get::<_,String>(1)?,row.get::<_,u64>(2)?))).optional()?.ok_or_else(|| AppError::new("audio_not_found", "The audio was not found."))?;
         let path = self.audio_path(&relative)?;
         let file = File::open(path).map_err(|_| invalid())?;
-        if expected_size > MAX_MP3_BYTES || file.metadata()?.len() != expected_size {
+        if expected_size > MAX_AUDIO_BYTES || file.metadata()?.len() != expected_size {
             return Err(invalid());
         }
         let mut bytes = Vec::new();
-        file.take(MAX_MP3_BYTES + 1).read_to_end(&mut bytes)?;
+        file.take(MAX_AUDIO_BYTES + 1).read_to_end(&mut bytes)?;
         if bytes.len() as u64 != expected_size || hex::encode(Sha256::digest(&bytes)) != hash {
             return Err(invalid());
         }
         Ok(AudioContent {
-            mime_type: "audio/mpeg".into(),
+            mime_type: "audio/webm".into(),
             data_base64: BASE64.encode(bytes),
         })
     }
@@ -388,7 +418,7 @@ impl ProjectSession {
     }
     fn audio_path(&self, relative: &str) -> AppResult<PathBuf> {
         let filename = relative.strip_prefix("media/audio/").ok_or_else(invalid)?;
-        let id = filename.strip_suffix(".mp3").ok_or_else(invalid)?;
+        let id = filename.strip_suffix(".webm").ok_or_else(invalid)?;
         if Uuid::parse_str(id).is_err() || filename.contains(['/', '\\']) {
             return Err(invalid());
         }
@@ -493,7 +523,7 @@ mod tests {
         session.attach_audio(request, &token, prepared).unwrap()
     }
     #[test]
-    fn supported_formats_convert_to_verified_mono_64k_mp3_without_changing_source() {
+    fn supported_formats_convert_to_verified_mono_opus_without_changing_source() {
         let tools = tools();
         for extension in ["wav", "mp3", "m4a", "aac", "flac", "ogg", "opus", "aiff"] {
             let source = fixture(extension);
@@ -504,6 +534,60 @@ mod tests {
             assert!(fs::metadata(&converted.path).unwrap().len() < 6000);
             assert_eq!(fs::read(&source).unwrap(), original);
         }
+    }
+    #[test]
+    fn webm_import_and_recording_use_the_same_validated_storage() {
+        let tools = tools();
+        let (_directory, mut session, entry) = session();
+        let converted = prepare(&tools, &fixture("wav")).unwrap();
+        let recording = crate::domain::RecordingRequest {
+            entry_id: entry.id.clone(),
+            owner: AudioOwner::Example(entry.senses[0].examples[0].id.clone()),
+            expected_revision: entry.revision,
+            session_token: session.session_token.clone(),
+            mime_type: "audio/webm;codecs=opus".into(),
+            original_filename: "錄音 e\u{301}".into(),
+            data_base64: BASE64.encode(fs::read(&converted.path).unwrap()),
+        };
+        let prepared = prepare_recording(&tools, &recording).unwrap();
+        assert_eq!(prepared.original_filename, "錄音 é");
+        let info = probe(
+            &tools,
+            &prepared.path,
+            Instant::now() + Duration::from_secs(10),
+        )
+        .unwrap();
+        assert_eq!(info["streams"][0]["codec_name"], "opus");
+        assert_eq!(info["streams"][0]["channels"], 1);
+        assert_eq!(info["streams"][0]["sample_rate"], "48000");
+        let request = ImportAudioRequest {
+            entry_id: entry.id.clone(),
+            owner: recording.owner.clone(),
+            expected_revision: entry.revision,
+            source_path: String::new(),
+        };
+        let result = session
+            .attach_audio(request, &recording.session_token, prepared)
+            .unwrap();
+        let id = result.audio.unwrap().id;
+        assert_eq!(session.load_audio(&id).unwrap().mime_type, "audio/webm");
+        assert!(
+            session
+                .root
+                .join(format!("media/audio/{id}.webm"))
+                .is_file()
+        );
+        assert!(
+            session
+                .audio_path(&format!("media/audio/{id}.mp3"))
+                .is_err()
+        );
+        let mut invalid_recording = recording.clone();
+        invalid_recording.data_base64 = BASE64.encode(b"not audio");
+        assert!(prepare_recording(&tools, &invalid_recording).is_err());
+        invalid_recording = recording;
+        invalid_recording.mime_type = "video/webm".into();
+        assert!(prepare_recording(&tools, &invalid_recording).is_err());
     }
     #[test]
     fn attachments_survive_autosave_soft_delete_reopen_and_project_move() {
@@ -547,7 +631,7 @@ mod tests {
                 expected_revision: restored.revision,
             })
             .unwrap();
-        assert!(!moved.join(format!("media/audio/{second_id}.mp3")).exists());
+        assert!(!moved.join(format!("media/audio/{second_id}.webm")).exists());
         let mut entry = removed.entry;
         entry.senses[0].examples.clear();
         let entry = session
@@ -556,7 +640,7 @@ mod tests {
                 entry,
             })
             .unwrap();
-        assert!(!moved.join(format!("media/audio/{third_id}.mp3")).exists());
+        assert!(!moved.join(format!("media/audio/{third_id}.webm")).exists());
         assert!(session.load_audio(&first_id).is_ok());
         let mut entry = entry;
         entry.senses.clear();
@@ -566,7 +650,7 @@ mod tests {
                 entry,
             })
             .unwrap();
-        assert!(!moved.join(format!("media/audio/{first_id}.mp3")).exists());
+        assert!(!moved.join(format!("media/audio/{first_id}.webm")).exists());
     }
     #[test]
     fn rejects_stale_owner_revision_and_corrupt_project_media() {
@@ -600,7 +684,7 @@ mod tests {
         );
         assert_eq!(session.list_audio(&owner).unwrap().len(), 1);
         let audio = result.audio.unwrap();
-        let path = session.root.join(format!("media/audio/{}.mp3", audio.id));
+        let path = session.root.join(format!("media/audio/{}.webm", audio.id));
         let mut bytes = fs::read(&path).unwrap();
         bytes[30] ^= 0xff;
         fs::write(&path, bytes).unwrap();
@@ -686,8 +770,8 @@ mod tests {
         let owner = AudioOwner::Sense(entry.senses[0].id.clone());
         let result = attach(&mut session, &entry, owner);
         let id = result.audio.unwrap().id;
-        let path = session.root.join(format!("media/audio/{id}.mp3"));
-        let outside = directory.path().join("outside.mp3");
+        let path = session.root.join(format!("media/audio/{id}.webm"));
+        let outside = directory.path().join("outside.webm");
         fs::rename(&path, &outside).unwrap();
         std::os::unix::fs::symlink(&outside, &path).unwrap();
         assert!(session.load_audio(&id).is_err());
