@@ -44,6 +44,6 @@
 
 - Use shadcn/ui conventions, Radix primitives, Tailwind CSS, and Lucide icons only.
 - Keep the workspace flat, restrained, keyboard-efficient, and suitable for long data-entry sessions.
-- Never use gradients, glassmorphism, oversized cards, or decorative animation.
+- Never use gradients, glassmorphism, oversized cards, or decorative animation, except for the startup bkuw wordmark animation. This exception must respect reduced-motion preferences and must not make project onboarding wait for font checks.
 - Use the semantic muted-red primary token; do not hard-code the brand color throughout components.
 - User-facing strings, validation messages, errors, empty states, and confirmations must use translation keys.

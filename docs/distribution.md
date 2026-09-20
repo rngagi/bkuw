@@ -2,23 +2,23 @@
 
 ## GitHub Actions 產物
 
-`.github/workflows/ci.yml` 在 `main` push 與 pull request 執行 checks、tests、release-mode desktop E2E 與 no-bundle app build。一般 CI 不建立 NSIS／DMG，也不呼叫 `actions/upload-artifact`；因此每次 push 不會留下安裝包 artifacts。macOS Intel 不在支援與建置範圍內，也不會上傳任何使用者資料。
+`.github/workflows/ci.yml` 在 `main` push 與 pull request 依變更路徑執行 checks、tests、release-mode desktop E2E 與 no-bundle app build。一般 Markdown 變更略過 application jobs；`src-tauri` 內的文件屬例外，仍觸發 application 與 portable XeLaTeX checks。同一 pull request 的過期 run 會取消。一般 CI 不建立 NSIS／DMG，也不呼叫 `actions/upload-artifact`；因此每次 push 不會留下安裝包 artifacts。macOS Intel 不在支援與建置範圍內，也不會上傳任何使用者資料。
 
-準備新版本時只使用單一命令，不手動逐檔改版本或 push tag：
+準備新版本時只使用單一命令，不手動逐檔改版本或 push tag。以下 `<version>` 請替換成預定的新版本：
 
 ```bash
-pnpm release:prepare -- 0.4.3
+pnpm release:prepare -- <version>
 git diff --check
-git commit -am "chore: prepare v0.4.3"
+git commit -am "chore: prepare bkuw <version>"
 git push origin main
 ```
 
-`release:prepare` 要求乾淨的 `main` worktree，確認新版本是遞增的 stable semantic version，並一起更新 `package.json`、`Cargo.toml`、`Cargo.lock` 與 Tauri config。版本一致性也可獨立以 `pnpm release:check -- 0.4.3` 驗證。
+`release:prepare` 要求乾淨的 `main` worktree，確認新版本是遞增的 stable semantic version，並一起更新 `package.json`、`Cargo.toml`、`Cargo.lock` 與 Tauri config。版本一致性也可獨立以 `pnpm release:check -- <version>` 驗證。
 
 version commit 的 `main` CI 成功後，`.github/workflows/release.yml` 自動：
 
 1. 確認來源是本 repository 的 trusted `main` push，且 portable-template、Windows x64 與 macOS Apple Silicon jobs 全數成功。
-2. 讀取 exact CI commit 的一致版本，並和 Git history 中前一個 package version 比較；只有版本確實遞增且對應 tag 尚不存在時才繼續。因此 version commit 後同一批 push 即使還有 workflow／文件修正，也不會漏掉 release candidate；一般未升版 commit 會正常結束，不打包。
+2. 讀取 exact CI commit 的一致版本，和該 commit 的第一個 parent 比較；只有四個 canonical versions 在這個 commit 同步遞增且對應 tag 尚不存在時才繼續。若 push 的最末 commit 只是 workflow／文件修正而未升版，planner 不會回溯尋找較早的 version commit，也不會打包。
 3. 在 release workflow 的 macOS Apple Silicon runner 建置 `.app`／`.dmg`，並在 Windows x64 runner 建置 NSIS installer。
 4. 僅在這次 release run 上傳 `bkuw-macos-apple-silicon` 與 `bkuw-windows-x64` 暫存 artifacts，保存 7 天供失敗恢復。
 5. Final job 收集一個 `.dmg` 與一個 `.exe`、產生並重驗 `SHA256SUMS.txt`；兩個平台都成功後，才建立以 exact commit 為 target、含三個 assets 與 categorized changelog 的 Draft GitHub Release。Draft 階段尚未 materialize Git tag，人工 Publish 時 GitHub 才建立 tag。

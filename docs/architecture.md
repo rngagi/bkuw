@@ -47,6 +47,8 @@ list_audio(owner: AudioOwner) -> AudioAttachment[]
 import_audio(request: ImportAudioRequest) -> AudioMutation
 load_audio(audioId) -> AudioContent
 remove_audio(request: RemoveAudioRequest) -> AudioMutation
+begin_audio_recording(request) -> string (project session token)
+save_audio_recording(request) -> AudioMutation
 delete_entry(id, expectedRevision) -> DeletedEntry
 restore_entry(id) -> LexicalEntry
 save_export_settings(settings) -> ExportSettingsV1
@@ -89,7 +91,7 @@ App-level zoom shortcut controller 使用 Tauri WebView `setZoom`，只額外授
 
 錄音由 `audioCapture.ts` 管理 MediaRecorder、單一麥克風與播放互斥、30 分鐘／64 MiB 上限及取消清理。按錄音先 flush 並取得 project session token，才呼叫 getUserMedia；MediaRecorder 使用 WebM／Opus，平台不支援時可使用 MP4 暫存，儲存結果一律為 WebM。無 duration 的 streaming container 在完整解碼後驗證長度。停止後以記憶體 Blob 試聽；儲存時重新 flush，傳送 token、owner、revision 與 bounded base64，由 Rust 在隔離暫存目錄驗證／轉檔，再經原有附件 transaction 提交。跨 project session 的結果拒絕儲存。macOS Info.plist 提供麥克風用途說明；未新增 shell、網路或廣域檔案權限。
 
-固定 FFmpeg 8.0.1 與 Opus 1.6.1 來源 URL／SHA-256 由 `scripts/audio/prepare.sh` 管理，禁用網路與非必要 codecs，不啟用 GPL／nonfree，Windows 靜態連結工具 runtime。`pnpm audio:prepare` 首次由來源建置工具，開發／build 先檢查工具；Windows 開發需 MSYS2 MINGW64，CI 安裝相同依賴。安裝包包含 tools、binary SHA-256 manifest、licenses、完整來源 archives 與 build recipe；終端使用者不需安裝或下載轉檔工具。既有 CI 的平台 jobs 驗證真實轉檔與 WebView 播放，Linux fast-checks 不建置桌面音訊工具。
+固定 FFmpeg 8.0.1 與 Opus 1.6.1 來源 URL／SHA-256 由 `scripts/audio/prepare.sh` 管理，禁用網路與非必要 codecs，不啟用 GPL／nonfree，Windows 靜態連結工具 runtime。`pnpm audio:prepare` 首次由來源建置工具，開發／build 先檢查工具；Windows 開發需 MSYS2 MINGW64，`ensure.mjs` 以 `BKUW_MSYS2_LOCATION` 指定安裝目錄，預設 `C:/msys64`；CI／release 傳入 setup action 回傳的實際位置。建置以 shell 工具產生 manifest，不依賴 Python。安裝包包含 tools、binary SHA-256 manifest、licenses、完整來源 archives 與 build recipe；終端使用者不需安裝或下載轉檔工具。既有 CI 的平台 jobs 驗證真實轉檔與 WebView 播放，Linux fast-checks 不建置桌面音訊工具。
 
 ## SQLite schema
 
@@ -108,6 +110,7 @@ App-level zoom shortcut controller 使用 Tauri WebView `setZoom`，只額外授
 - `entry_forms`：entry、writing system、NFC text、derived search key、metadata、sort order。
 - `senses`：entry、gloss、definition、POS、語意類別、sort order。
 - `sense_images`：sense、project-relative PNG path、原始檔名、尺寸、byte size、SHA-256、sort order、created timestamp。
+- `audio_attachments`：sense 或 example 擇一擁有、project-relative WebM path、來源檔名、長度、byte size、SHA-256、sort order、created timestamp。
 - `examples`：sense、translation、notes、sort order。
 - `example_forms`：example、writing system、NFC text、sort order。
 - `entry_relations`：source、optional target、relation type、fallback text、notes、sort order。
@@ -190,25 +193,26 @@ CSV 的外部相容契約見 `docs/corpus-csv-contract.md`。目前沒有跨 rep
 
 ```text
 src/
-├── app/
+├── App.tsx
 ├── components/ui/
 ├── features/projects/
 ├── features/settings/
 ├── features/entries/
 ├── features/export/
+├── features/fonts/
 ├── i18n/
 ├── lib/
 └── types/
 ```
 
-React Hook Form 管理 entry aggregate draft，Zod 負責 frontend validation。React context 管理 active project/selection；目前不引入 Zustand 或 TanStack Query。列表只 virtualize DOM，不引入 server paging。
+React Hook Form 管理 entry aggregate draft，Zod 負責 frontend validation。`App.tsx` 的 React state 管理 active project/selection；目前不引入 Zustand 或 TanStack Query。列表只 virtualize DOM，不引入 server paging。
 
 ## Verification strategy
 
 - Rust integration tests 透過 project/database module interface 使用 temporary project 與真實 SQLite。
 - Vitest + React Testing Library 測互動、autosave、translations、validation 與 nested editors。
 - WebdriverIO Tauri service 執行主要 desktop workflow smoke test。
-- GitHub Actions 先在 Ubuntu 執行 TypeScript、Rust format 與 frontend unit checks，再於 Windows x64 與 macOS Apple Silicon jobs 執行 platform-specific Clippy、Rust tests 與 release-mode desktop E2E；一般 CI 不建立或上傳 installer artifacts，也不建立 macOS Intel 產物。純 Markdown 變更略過 application jobs，portable XeLaTeX test 只在 `src-tauri` 或 CI workflow 變更時執行，同一 pull request 的舊 CI run 會取消。成功的 trusted `main` push CI 會觸發 release planner；planner 僅在 exact HEAD 相對第一個 parent 同步增加四個 canonical versions，且對應 tag 尚不存在時，才於 Windows／macOS jobs 建置並暫存 NSIS／DMG。受限 `contents: write` 的 final job 驗證檔名與 SHA-256，最後建立以 exact SHA 為 target、含自動 changelog 的 Draft Release；GitHub 只在人工 Publish 時 materialize tag。`publish-draft` module 可安全更新尚未 materialize tag 的草稿 target，或更新 tag 已指向相同 commit 的既有草稿；manual recovery 可重用指定 release run 的 installer artifacts，無須重新打包。發布前保留人工確認閘門。
+- GitHub Actions 先在 Ubuntu 執行 TypeScript、Rust format 與 frontend unit checks，再於 Windows x64 與 macOS Apple Silicon jobs 執行 platform-specific Clippy、Rust tests 與 release-mode desktop E2E；一般 CI 不建立或上傳 installer artifacts，也不建立 macOS Intel 產物。一般 Markdown 變更略過 application jobs；`src-tauri` 內的文件仍觸發 application 與 portable XeLaTeX test，後者也會在 CI workflow 變更時執行，同一 pull request 的舊 CI run 會取消。成功的 trusted `main` push CI 會觸發 release planner；planner 僅在 exact HEAD 相對第一個 parent 同步增加四個 canonical versions，且對應 tag 尚不存在時，才於 Windows／macOS jobs 建置並暫存 NSIS／DMG。受限 `contents: write` 的 final job 驗證檔名與 SHA-256，最後建立以 exact SHA 為 target、含自動 changelog 的 Draft Release；GitHub 只在人工 Publish 時 materialize tag。`publish-draft` module 可安全更新尚未 materialize tag 的草稿 target，或更新 tag 已指向相同 commit 的既有草稿；manual recovery 可重用指定 release run 的 installer artifacts，無須重新打包。發布前保留人工確認閘門。
 
 ### Export wizard and local TeX setup
 

@@ -110,7 +110,7 @@ Project 自動排序可選擇以 writing system 或語意類別分組。Writing-
 - 使用 shadcn/ui 慣例、Radix primitives、Tailwind CSS、Lucide icons。
 - 使用 system UI font；lexical forms 可依 writing system 選擇字型。
 - primary accent 從 muted dark red `#b32b2b` 起始，僅作 semantic token。
-- 禁止 gradients、glassmorphism、oversized cards、decorative shadows 與無必要動畫。
+- 禁止 gradients、glassmorphism、oversized cards、decorative shadows 與無必要動畫。唯一動畫例外是啟動畫面的 bkuw 字樣：使用隨附的 Pacifico 字型，尊重 `prefers-reduced-motion`，且不等待字型背景檢查才顯示專案入口。
 - 不以紅色作為狀態的唯一線索；所有互動需具備 keyboard focus 與 accessible label。
 
 ## 語言支援
@@ -141,16 +141,16 @@ bkuw 自行管理 portable font packs，不依賴 OS 已安裝字型，也不把
 
 關閉主視窗時必須先完成有效草稿的 autosave 並釋放 project lock，之後程式才結束；Windows 與 macOS 的標準關窗操作皆須可用。
 
-## 後續候選
-
-匯入既有專案、跨 repository contract test、多 analysis-language translations、進階搜尋、IPA helper、tags、filters、duplicate detection、backup manager、簽章與自動更新尚未排入已承諾 milestone；以 `plan.md` 為準。
-
-## 明確排除
-
-目前不包含 accounts、authentication、cloud sync、team collaboration、permissions、server backend、匯入既有專案、Big5 CSV、mobile、AI transcription、ASR、ELAN-style timeline、waveform segmentation、Git syncing、code signing、notarization、auto-update 或自動上傳 lexical data。受信任的 `main` version commit 通過 exact-SHA CI 後可自動建立 unsigned Draft GitHub Release；正式發布前須人工確認安裝包、checksums 與警告內容。
-
 ### LaTeX 安裝協助
 
 缺少 XeLaTeX 時，使用者可按「安裝 LaTeX」。bkuw 從固定 HTTPS 來源串流下載完整 MacTeX 2026（macOS Apple Silicon）或 TeX Live 2025 final installer（Windows x64），驗證內建 SHA-256 後開啟官方精靈。Windows 使用同版本 final repository，請保留 full scheme；完整安裝需數 GB 網路與磁碟空間。系統授權交給官方精靈處理，App 不收集密碼。
 
 下載有進度、取消與失敗重試。開啟精靈只表示等待安裝；回到 App 或手動按「重新檢查」才確認是否可編譯。若官方精靈取消或關閉，可選「安裝精靈已關閉，允許重新下載」再試。已有 TeX 時提供套件管理修復說明，不覆蓋安裝。可另外儲存 PowerShell／shell 腳本與雙語安裝說明，採相同固定 URL 與 SHA-256 驗證。安裝與字型下載完成後，本機編譯保持離線可用。
+
+## 後續候選
+
+候選工作、優先順序與尚待完成的人工驗收集中在 [執行清單](../plan.md)，不在產品規格重複維護。
+
+## 明確排除
+
+目前不包含 accounts、authentication、cloud sync、team collaboration、permissions、server backend、匯入既有專案、Big5 CSV、mobile、AI transcription、ASR、ELAN-style timeline、waveform segmentation、Git syncing、code signing、notarization、auto-update 或自動上傳 lexical data。受信任的 `main` version commit 通過 exact-SHA CI 後可自動建立 unsigned Draft GitHub Release；正式發布前須人工確認安裝包、checksums 與警告內容。

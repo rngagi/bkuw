@@ -1,26 +1,20 @@
 # bkuw 執行清單
 
-本文件只保留目前基線、尚未發布的工作與候選 backlog。已發布版本的詳細變更由 Git history、GitHub Releases 與 `docs/roadmap.md` 保存，不在這裡重複整份歷史驗收紀錄。
+本文件集中維護最近工作、尚待完成的驗收與候選 backlog。程式變更歷史見 [CHANGELOG.md](CHANGELOG.md)，發布狀態以 [GitHub Releases](https://github.com/rngagi/bkuw/releases) 為準。
 
 規則：只有完成條件成立，且列出的驗證通過後才能勾選。行為或架構改變時，同步更新 `docs/product-spec.md` 與 `docs/architecture.md`。
 
-## 目前基線
+## 目前基線與最近工作
 
-- [x] Local-first project lifecycle、SQLite migrations／backup／lock 與 typed Tauri adapter。
-- [x] Dynamic writing systems、multi-form entries、sense-level POS、examples 與 root/base relations。
-- [x] Unicode-safe autosave、IME composition handling、soft delete／Undo 與英文／台灣繁中 UI。
-- [x] Project alphabet、entry section override、opt-in manual ordering 與 virtualized entry list。
-- [x] rngagi-corpus v0.3 CSV、portable XeLaTeX／Overleaf ZIP／PDF 與 managed font packs。
-- [x] 啟動時背景檢查 portable fonts、語言選單旁的狀態／管理入口、六套字型批次驗證／下載／離線例外，以及 Project Settings 字型管理入口。
-- [x] EntrySortSettings V2：依 writing system 或第一個有值的語意類別分組，工作區與 LaTeX／PDF 共用順序。
-- [x] UTF-8 自由 CSV 建立新專案：分隔符、writing systems、欄位 mapping、相鄰分組、排除列、staging transaction 與 stale preview 防護。
-- [x] CSV inspection／preview 錯誤以本地化訊息指出實際來源列、欄名、欄數與個別分組衝突，不只顯示通用解析失敗。
-- [x] LaTeX／PDF 單義項省略編號、例／譯分行與 analysis-language labels。
-- [x] LaTeX／PDF 可選擇逐義項顯示語意類別；以語意類別自動分組時由 UI 與 Rust 輸出層強制隱藏重複標示。
-- [x] Form／sense 搜尋、精簡詞表摘要、sense-level 相片與 optional LaTeX／PDF photo export。
-- [x] Sense 相片使用 CSP-compatible app preview；LaTeX／PDF 匯出產生適合雙欄版面的衍生 JPEG／PNG，且不修改 project-local PNG。
-- [x] Windows `Ctrl+-/=/0` 與 macOS `Cmd+-/=/0` WebView 縮放，包含持久化、bounded levels、IME／既有快捷鍵保護及 narrow Tauri capability。
-- [x] Windows x64／macOS Apple Silicon CI validation 不產生 artifacts；version commit 的 exact-SHA `main` CI 成功後自動建置 NSIS／DMG，完成才建立 checksums 與 exact-SHA Draft Release，人工 Publish 時才 materialize tag，並支援 artifact recovery。macOS Intel 不在支援或建置範圍內。
+現行功能以 [產品規格](docs/product-spec.md) 與 [架構](docs/architecture.md) 為準；歷史版本摘要已整併至 [變更紀錄](CHANGELOG.md)，不再維護重複的功能清單。
+
+- `c452786`：義項／例句改用 WebM／Opus，加入程式內錄音；驗證紀錄與剩餘人工驗收見下節。
+- `4df892b`：更新啟動畫面，字型背景檢查與語言選單旁的管理入口；已隨提交更新產品與架構文件。
+- `2d9335f`、`14ad8c7`、`0d82852`：移除音訊建置 Python 依賴，修正 Windows MSYS2 工具鏈與 Actions runtime 路徑。
+
+以上記錄程式已提交的內容，不代表外部驗收或正式發布完成。下列已勾選項目與測試數字沿用既有驗證紀錄，本次文件整理不新增驗收勾選。
+
+啟動畫面字樣動畫已經使用者確認為 UI 規範例外，並同步記錄於 `AGENTS.md` 與產品規格；必須保留 reduced-motion 支援，其餘介面仍遵守原有動畫限制。
 
 ## 逐步匯出與 LaTeX 安裝引導
 
@@ -28,17 +22,12 @@
 - [x] 本機驗證：desktop E2E、含繁中／IPA／圖片的真實 XeLaTeX 編譯及 `pnpm tauri build --no-bundle`。
 - [ ] 外部人工驗收：Windows x64／macOS Apple Silicon 官方安裝精靈與安裝後離線編譯、Overleaf 匯入含繁中／IPA／圖片的 ZIP。
 
-## 義項與例句音檔
-
-- [x] 多音檔匯入、離線 MP3 64 kbps 轉檔、播放／拖曳／刪除、雙語介面、migration 與附件保留。驗證：`pnpm check`、`pnpm test`（88 passed）、`pnpm test:rust`（71 passed，1 個既有 XeLaTeX 測試依預設 ignored）。
-- [x] 本機 macOS Apple Silicon：隨附工具、8 種格式轉檔與 WebView 播放／拖曳 E2E；完整 desktop E2E 4 tests passed，以及 `pnpm tauri build --no-bundle` 通過。
-- [ ] Windows x64 CI／實機驗收：隨附工具建置、所有格式匯入、播放／拖曳及離線安裝包；人工試聽真實詞彙與例句。
-
-## WebM 與程式內錄音
+## 義項／例句音檔與程式內錄音
 
 - [x] 義項／例句匯入與錄音統一儲存 WebM／Opus，移除 MP3 相容層；上傳提示只顯示接受格式。驗證：`pnpm check`、`pnpm test`（95 passed）、`pnpm test:rust`（72 passed，1 個既有 XeLaTeX 測試 ignored）。
 - [x] 本機 WebView 真實 MediaRecorder、WebM 播放／拖曳 E2E（完整 desktop E2E 4 passed）與 `pnpm tauri build --no-bundle`。
-- [ ] Windows x64 實機麥克風權限、錄製、試聽與儲存，以及 macOS 真實麥克風人工試聽。
+- [ ] Windows x64 CI／實機驗收：隨附工具建置、所有格式匯入、播放／拖曳及離線安裝包。
+- [ ] Windows x64 實機麥克風權限、錄製、試聽與儲存，以及 macOS 真實麥克風人工試聽；使用真實詞彙與例句確認音質。
 
 ## 候選 backlog
 
@@ -47,7 +36,7 @@
 - [ ] 將 CSV 匯入既有專案，以及 versioned bkuw → rngagi-corpus upload workflow。
 - [ ] bkuw／rngagi-corpus cross-repository contract fixture 與 CI。
 - [ ] 多 analysis-language gloss／translation。
-- [ ] Example search、進階 FTS 與 fuzzy search。
+- [ ] Example search、進階 FTS、fuzzy search 與 language-specific collation controls。
 - [ ] IPA helper、tags、filters 與 duplicate detection。
 - [ ] Trash／backup manager。
 - [ ] Production signing、Apple notarization 與 auto-update。
