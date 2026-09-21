@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import i18n from "../../i18n";
+import { CommandError } from "../../lib/tauri";
 import type { ProjectSnapshot, PublishSettings, PublishState } from "../../types/domain";
 
 const { backendMock } = vi.hoisted(() => ({
@@ -47,9 +48,15 @@ describe("PublishDialog", () => {
     });
   });
 
-  async function reachSettings() {
+  async function reachAddress() {
     render(<PublishDialog open snapshot={snapshot} onOpenChange={vi.fn()} onFlush={vi.fn()} />);
     await screen.findByText("Your dictionary website will be public to anyone who knows its URL.");
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    await screen.findByLabelText(/^Worker name/);
+  }
+
+  async function reachSettings() {
+    await reachAddress();
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
     await screen.findByLabelText("Website title");
   }
@@ -59,6 +66,7 @@ describe("PublishDialog", () => {
     render(<PublishDialog open snapshot={snapshot} onOpenChange={vi.fn()} onFlush={flush} />);
     await screen.findByText("Your dictionary website will be public to anyone who knows its URL.");
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Next" }));
     expect(screen.getByLabelText(/Orthography/)).toBeDisabled();
     fireEvent.click(screen.getByLabelText("Show entry notes")); fireEvent.click(screen.getByLabelText("IPA"));
     fireEvent.click(screen.getByRole("button", { name: "Check" }));
@@ -81,5 +89,20 @@ describe("PublishDialog", () => {
     const next = await screen.findByRole("button", { name: "Next" }); expect(next).toBeDisabled();
     fireEvent.click(screen.getByLabelText("I verified my email and can sign in")); fireEvent.click(screen.getByLabelText("I completed the R2 setup"));
     expect(next).toBeEnabled(); fireEvent.click(next); expect(await screen.findByLabelText("Account ID")).toBeInTheDocument();
+  });
+
+  it("explains the URL parts and derives the bucket from the Worker name", async () => {
+    await reachAddress();
+    expect(screen.getByText("The Worker name identifies this dictionary. The account subdomain is shared by every Worker in the same Cloudflare account.")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/^Worker name/), { target: { value: "renamed-dictionary" } });
+    expect(screen.getByText("renamed-dictionary-media")).toBeInTheDocument();
+    expect(screen.getByText("https://renamed-dictionary.test-dictionary.workers.dev")).toBeInTheDocument();
+  });
+
+  it("shows safe Cloudflare error details", async () => {
+    backendMock.publishSite.mockRejectedValue(new CommandError("cloudflare_api", "Cloudflare failed", "10021: Missing main module filename"));
+    await reachSettings(); fireEvent.click(screen.getByRole("button", { name: "Check" }));
+    await screen.findByText("2 entries"); fireEvent.click(screen.getByRole("button", { name: "Publish" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("10021: Missing main module filename");
   });
 });

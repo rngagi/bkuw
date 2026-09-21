@@ -932,13 +932,14 @@ impl ProjectSession {
             )
             .optional()?;
         if let Some(json) = stored {
-            let settings = serde_json::from_str(&json).map_err(|error| {
+            let mut settings: PublishSettingsV1 = serde_json::from_str(&json).map_err(|error| {
                 AppError::with_details(
                     "publish_settings_invalid",
                     "The saved website settings are invalid.",
                     error.to_string(),
                 )
             })?;
+            settings.bucket_name = crate::publish::media_bucket_name(&settings.worker_name);
             return Ok(settings);
         }
         let stem = crate::publish::resource_stem(&project.name, &project.id);
@@ -957,14 +958,15 @@ impl ProjectSession {
             include_relations: false,
             writing_system_ids: writing_systems.into_iter().map(|value| value.id).collect(),
             worker_name: stem.clone(),
-            bucket_name: format!("{stem}-media"),
+            bucket_name: crate::publish::media_bucket_name(&stem),
         })
     }
 
     pub fn save_publish_settings(
         &mut self,
-        settings: PublishSettingsV1,
+        mut settings: PublishSettingsV1,
     ) -> AppResult<PublishSettingsV1> {
+        settings.bucket_name = crate::publish::media_bucket_name(&settings.worker_name);
         crate::publish::validate_settings(&settings, &self.snapshot()?.writing_systems)?;
         if let Some(deployment) = self.load_publish_deployment()?
             && (settings.worker_name != deployment.worker_name
@@ -2515,9 +2517,14 @@ mod tests {
         settings.title = "Public Test Dictionary".into();
         settings.info_markdown = Some("# About\n\nPublic information.".into());
         settings.include_entry_notes = true;
-        session
-            .save_publish_settings(settings.clone())
+        settings.bucket_name = "user-entered-name".into();
+        let settings = session
+            .save_publish_settings(settings)
             .expect("save settings");
+        assert_eq!(
+            settings.bucket_name,
+            crate::publish::media_bucket_name(&settings.worker_name)
+        );
         session
             .save_publish_deployment(&PublishDeploymentState {
                 version: 1,

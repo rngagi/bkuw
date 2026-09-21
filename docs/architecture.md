@@ -218,7 +218,7 @@ Rust `publish` 是 Cloudflare 發佈的單一 deep module。公開 Tauri seam �
 
 正式 public template 位於 `src-tauri/templates/publish-site/` 並由 Rust `include_str!` 納入 binary；被 `.gitignore` 排除的 prototype 不是 runtime dependency。`schemaVersion: 1` corpus 與 template 一起產生，Static Assets manifest 使用 Cloudflare 規定的 base64-content-plus-extension SHA-256 前 32 hex。Direct Upload 以 upload JWT 上傳 Cloudflare 指定 buckets，完成後以 completion JWT 原子部署同一 Worker；Worker 綁定 `ASSETS` 與 `MEDIA` R2 bucket。
 
-R2 物件固定為 `media/images/<sha256>.png` 與 `media/audio/<sha256>.webm`。本機讀取前 canonicalize project path 並重算 SHA-256；遠端 bucket 必須具有相同 project ID 的 `.bkuw/owner.json`，Worker settings 的 `workers/tag` 也必須相同，否則 fail closed。媒體 Worker 只處理 `/media/`，支援 GET、HEAD、Range、ETag、正確 Content-Type 與 immutable cache。Cloudflare client 對 429／5xx 及暫時性網路錯誤做有界 retry 並尊重秒數形式 `Retry-After`；Worker deployment 的未知結果先讀 ownership state，再以精確 corpus SHA-256 health check 決定是否進入 cleanup。
+R2 bucket 固定由 Worker 名稱衍生為 `<worker-name>-media`；Rust 在載入與儲存設定時重算，frontend 只能顯示衍生值。R2 物件固定為 `media/images/<sha256>.png` 與 `media/audio/<sha256>.webm`。本機讀取前 canonicalize project path 並重算 SHA-256；遠端 bucket 必須具有相同 project ID 的 `.bkuw/owner.json`，Worker settings 的 `workers/tag` 也必須相同，否則 fail closed。媒體 Worker 只處理 `/media/`，支援 GET、HEAD、Range、ETag、正確 Content-Type 與 immutable cache。Cloudflare client 對 429／5xx 及暫時性網路錯誤做有界 retry 並尊重秒數形式 `Retry-After`；Worker module multipart 一律帶入明確 filename，未知 deployment 結果先讀 ownership state，再以精確 corpus SHA-256 health check 決定是否進入 cleanup。
 
 發佈成功前不刪遠端媒體。Health check 最多 60 秒，比對首頁、完整 corpus bytes digest 與至少一個媒體 HEAD；通過後才將已驗證 project bucket 的 stale `media/` keys 刪除。失敗的 delete 記錄 `cleanup_pending`，不撤回已成功部署的網站。Static Assets 單檔超過 25 MiB 在 preview 阻擋；v1 不分片。
 

@@ -31,7 +31,7 @@
 
 ## Cloudflare 公開辭典網站
 
-- [x] 發佈精靈、Token credential、Migration 8、publication snapshot、Workers Static Assets、R2 media Worker、正式網站 template 與雙語 UI。驗證：`pnpm check`、`pnpm test`（101 passed）、`pnpm test:rust`（81 passed，1 個既有 XeLaTeX 測試 ignored）。
+- [x] 發佈精靈、Token credential、Migration 8、publication snapshot、Workers Static Assets、R2 media Worker、正式網站 template 與雙語 UI。首次發佈會用含 filename 的 ES module multipart 建立 Worker；精靈同頁說明 account subdomain、Worker name 與完整網址，R2 bucket 固定由 `<worker>-media` 衍生。驗證：`pnpm check`、`pnpm test`（103 passed）、`pnpm test:rust`（82 passed，1 個既有 XeLaTeX 測試 ignored）。
 - [x] 本機驗證：`pnpm test:e2e:build`、`pnpm test:e2e`（4 passed）、`pnpm tauri build --no-bundle`，並開啟 build 供人工測試。
 - [ ] 使用自己的 Cloudflare 帳號完成首次發佈與一次差異更新；驗證 workers.dev、搜尋、deep-link、亮暗、info、writing systems、notes、relations、圖片、兩種 audio 與舊媒體清理。
 

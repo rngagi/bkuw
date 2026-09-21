@@ -48,7 +48,13 @@ export function PublishDialog({ open, snapshot, onOpenChange, onFlush, onDeploym
   useEffect(() => { heading.current?.focus(); }, [step]);
 
   function showError(value: unknown) {
-    setError(value instanceof CommandError ? t(`error.${value.code}`, { defaultValue: value.message }) : t("error.generic"));
+    if (value instanceof CommandError) {
+      const message = t(`error.${value.code}`, { defaultValue: value.message });
+      const details = value.details?.trim();
+      setError(details ? `${message}\n${details}` : message);
+    } else {
+      setError(t("error.generic"));
+    }
   }
   function patch(value: Partial<PublishSettings>) { setSettings((current) => current ? { ...current, ...value } : current); setPreview(null); setResult(null); }
   async function connect() {
@@ -56,7 +62,7 @@ export function PublishDialog({ open, snapshot, onOpenChange, onFlush, onDeploym
     try {
       const connection = await backend.connectCloudflare({ accountId, apiToken: tokenInput.current?.value ?? "", requestedSubdomain: subdomain.trim() || null });
       if (tokenInput.current) tokenInput.current.value = "";
-      setTokenReady(false); setState((current) => current ? { ...current, connection } : current); setStep(2);
+      setTokenReady(false); setSubdomain(connection.workersSubdomain ?? subdomain); setState((current) => current ? { ...current, connection } : current); setStep(2);
     } catch (value) { showError(value); } finally { setBusy(null); }
   }
   async function saveAndPreview() {
@@ -91,6 +97,7 @@ export function PublishDialog({ open, snapshot, onOpenChange, onFlush, onDeploym
   const primaryId = snapshot.writingSystems.find((item) => item.displayRole === "primary")?.id ?? snapshot.writingSystems[0]?.id;
   const blockers = preview?.issues.filter((item) => item.severity === "error") ?? [];
   const canCancel = progress && !["deploying", "verifying", "cleaning", "complete"].includes(progress.phase);
+  const publicUrl = settings?.workerName && subdomain ? `https://${settings.workerName}.${subdomain}.workers.dev` : null;
 
   return <Dialog.Root open={open} onOpenChange={(value) => { if (busy === "publish") return; onOpenChange(value); }}>
     <Dialog.Portal>
@@ -119,16 +126,27 @@ export function PublishDialog({ open, snapshot, onOpenChange, onFlush, onDeploym
             <p className="field-help">{t("publish.r2Help")}</p>
             <label className="check-row"><input type="checkbox" checked={r2Ready} onChange={(event) => setR2Ready(event.target.checked)} />{t("publish.r2Ready")}</label>
           </div>
-          <div className="dialog-actions"><Button variant="primary" disabled={!emailVerified || !r2Ready} onClick={() => setStep(state?.connection.connected ? 2 : 1)}>{t("common.next")}</Button></div>
+          <div className="dialog-actions"><Button variant="primary" disabled={!emailVerified || !r2Ready} onClick={() => setStep(state?.deployment && state.connection.connected ? 2 : 1)}>{t("common.next")}</Button></div>
         </section>}
 
         {settings && step === 1 && <section className="publish-section">
-          <h3>{t("publish.connectHeading")}</h3><p>{t("publish.accountIdHelp")}</p>
-          <label className="field"><span>{t("publish.accountId")}</span><input value={accountId} maxLength={32} spellCheck={false} onChange={(event) => setAccountId(event.target.value.trim())} placeholder="0123456789abcdef0123456789abcdef" /></label>
-          <div className="publish-token-action"><Button variant="secondary" disabled={accountId.length !== 32} onClick={() => void backend.openCloudflareTokenPage(accountId).catch(showError)}><ExternalLink size={15} />{t("publish.createToken")}</Button><p>{t("publish.permissions")}</p></div>
-          <label className="field"><span>{t("publish.apiToken")}</span><input ref={tokenInput} type="password" autoComplete="off" onChange={(event) => setTokenReady(event.target.value.length >= 20)} /></label>
-          <label className="field"><span>{t("publish.subdomain")}</span><input value={subdomain} onChange={(event) => setSubdomain(event.target.value.toLowerCase())} /><small>{t("publish.subdomainHelp")}</small></label>
-          <div className="dialog-actions"><Button variant="ghost" onClick={() => setStep(0)}>{t("common.back")}</Button><Button variant="primary" disabled={busy !== null || accountId.length !== 32 || !tokenReady} onClick={() => void connect()}>{busy === "connect" ? t("publish.checking") : t("publish.connect")}</Button></div>
+          <h3>{t("publish.connectHeading")}</h3>
+          {state?.connection.connected ? <div className="publish-connection"><span><Check size={15} />{t("publish.connected", { account: state.connection.accountId })}</span><Button size="small" variant="ghost" onClick={() => void disconnect()}>{t("publish.disconnect")}</Button></div> : <>
+            <p>{t("publish.accountIdHelp")}</p>
+            <label className="field"><span>{t("publish.accountId")}</span><input value={accountId} maxLength={32} spellCheck={false} onChange={(event) => setAccountId(event.target.value.trim())} placeholder="0123456789abcdef0123456789abcdef" /></label>
+            <div className="publish-token-action"><Button variant="secondary" disabled={accountId.length !== 32} onClick={() => void backend.openCloudflareTokenPage(accountId).catch(showError)}><ExternalLink size={15} />{t("publish.createToken")}</Button><p>{t("publish.permissions")}</p></div>
+            <label className="field"><span>{t("publish.apiToken")}</span><input ref={tokenInput} type="password" autoComplete="off" onChange={(event) => setTokenReady(event.target.value.length >= 20)} /></label>
+          </>}
+          <div className="publish-address-card">
+            <h3>{t("publish.addressHeading")}</h3><p>{t("publish.addressHelp")}</p>
+            <div className="publish-resource-grid">
+              <label className="field"><span>{t("publish.subdomain")}</span><input value={subdomain} disabled={Boolean(state?.connection.connected)} maxLength={63} onChange={(event) => setSubdomain(event.target.value.toLowerCase())} /><small>{t("publish.subdomainHelp")}</small></label>
+              <label className="field"><span>{t("publish.workerName")}</span><input value={settings.workerName} disabled={Boolean(state?.deployment)} maxLength={58} onChange={(event) => { const workerName = event.target.value.toLowerCase(); patch({ workerName, bucketName: `${workerName}-media` }); }} /><small>{t("publish.workerNameHelp")}</small></label>
+              <label className="field full"><span>{t("publish.bucketName")}</span><output>{settings.bucketName}</output><small>{t("publish.bucketNameHelp")}</small></label>
+            </div>
+            {publicUrl && <div className="publish-url-preview"><strong>{t("publish.publicUrl")}</strong><code>{publicUrl}</code><p>{t("publish.publicUrlHelp", { worker: settings.workerName, subdomain })}</p></div>}
+          </div>
+          <div className="dialog-actions"><Button variant="ghost" onClick={() => setStep(0)}>{t("common.back")}</Button>{state?.connection.connected ? <Button variant="primary" onClick={() => setStep(2)}>{t("common.next")}</Button> : <Button variant="primary" disabled={busy !== null || accountId.length !== 32 || !tokenReady || !settings.workerName.trim() || !subdomain.trim()} onClick={() => void connect()}>{busy === "connect" ? t("publish.checking") : t("publish.connect")}</Button>}</div>
         </section>}
 
         {settings && step === 2 && <section className="publish-section">
@@ -149,11 +167,7 @@ export function PublishDialog({ open, snapshot, onOpenChange, onFlush, onDeploym
             const primary = system.id === primaryId, checked = settings.writingSystemIds.includes(system.id);
             return <label className="check-row" key={system.id}><input type="checkbox" checked={checked} disabled={primary} onChange={(event) => patch({ writingSystemIds: event.target.checked ? [...settings.writingSystemIds, system.id] : settings.writingSystemIds.filter((id) => id !== system.id) })} />{system.name}{primary && <small>{t("publish.primaryRequired")}</small>}</label>;
           })}</fieldset>
-          <div className="publish-resource-grid">
-            <label className="field"><span>Worker</span><input value={settings.workerName} disabled={Boolean(state?.deployment)} onChange={(event) => patch({ workerName: event.target.value.toLowerCase() })} /></label>
-            <label className="field"><span>R2 bucket</span><input value={settings.bucketName} disabled={Boolean(state?.deployment)} onChange={(event) => patch({ bucketName: event.target.value.toLowerCase() })} /></label>
-          </div>
-          <div className="dialog-actions"><Button variant="ghost" onClick={() => setStep(0)}>{t("common.back")}</Button><Button variant="primary" disabled={busy !== null || !settings.title.trim()} onClick={() => void saveAndPreview()}>{busy === "preview" ? t("publish.checking") : t("publish.check")}</Button></div>
+          <div className="dialog-actions"><Button variant="ghost" onClick={() => setStep(1)}>{t("common.back")}</Button><Button variant="primary" disabled={busy !== null || !settings.title.trim()} onClick={() => void saveAndPreview()}>{busy === "preview" ? t("publish.checking") : t("publish.check")}</Button></div>
         </section>}
 
         {settings && step === 3 && preview && <section className="publish-section">

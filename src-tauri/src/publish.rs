@@ -214,6 +214,10 @@ pub fn resource_stem(project_name: &str, project_id: &str) -> String {
     .to_owned()
 }
 
+pub fn media_bucket_name(worker_name: &str) -> String {
+    format!("{worker_name}-media")
+}
+
 pub fn validate_settings(settings: &PublishSettingsV1, systems: &[WritingSystem]) -> AppResult<()> {
     if settings.version != 1 {
         return Err(AppError::new(
@@ -233,8 +237,14 @@ pub fn validate_settings(settings: &PublishSettingsV1, systems: &[WritingSystem]
             "Choose a supported website language.",
         ));
     }
-    validate_resource_name(&settings.worker_name, 63, "publish_worker_name_invalid")?;
+    validate_resource_name(&settings.worker_name, 58, "publish_worker_name_invalid")?;
     validate_resource_name(&settings.bucket_name, 64, "publish_bucket_name_invalid")?;
+    if settings.bucket_name != media_bucket_name(&settings.worker_name) {
+        return Err(AppError::new(
+            "publish_bucket_name_invalid",
+            "The R2 bucket name must match the Worker name followed by -media.",
+        ));
+    }
     let selected = settings.writing_system_ids.iter().collect::<BTreeSet<_>>();
     let known = systems
         .iter()
@@ -1165,6 +1175,7 @@ impl<'a> CloudflareClient<'a> {
             .part(
                 "main.js",
                 multipart::Part::text(script)
+                    .file_name("main.js")
                     .mime_str("application/javascript+module")
                     .map_err(http_error)?,
             );
@@ -1418,6 +1429,7 @@ impl<'a> CloudflareClient<'a> {
             .part(
                 "main.js",
                 multipart::Part::text(script)
+                    .file_name("main.js")
                     .mime_str("application/javascript+module")
                     .map_err(http_error)?,
             );
@@ -1612,7 +1624,7 @@ mod tests {
     use std::{
         io::{Read, Write},
         net::TcpListener,
-        sync::{Arc, atomic::AtomicUsize},
+        sync::{Arc, Mutex, atomic::AtomicUsize},
     };
     use tempfile::tempdir;
 
@@ -1642,11 +1654,55 @@ mod tests {
         )
     }
 
+    fn capture_request(response: String) -> (String, Arc<Mutex<String>>, thread::JoinHandle<()>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let captured = Arc::new(Mutex::new(String::new()));
+        let server_capture = Arc::clone(&captured);
+        let handle = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = Vec::new();
+            let mut chunk = [0_u8; 4096];
+            let expected = loop {
+                let read = stream.read(&mut chunk).unwrap();
+                request.extend_from_slice(&chunk[..read]);
+                if let Some(header_end) = request.windows(4).position(|value| value == b"\r\n\r\n")
+                {
+                    let headers = String::from_utf8_lossy(&request[..header_end]);
+                    let length = headers
+                        .lines()
+                        .find_map(|line| {
+                            let (name, value) = line.split_once(':')?;
+                            name.eq_ignore_ascii_case("content-length")
+                                .then(|| value.trim().to_owned())
+                        })
+                        .and_then(|value| value.parse::<usize>().ok())
+                        .unwrap_or(0);
+                    break header_end + 4 + length;
+                }
+            };
+            while request.len() < expected {
+                let read = stream.read(&mut chunk).unwrap();
+                request.extend_from_slice(&chunk[..read]);
+            }
+            *server_capture.lock().unwrap() = String::from_utf8_lossy(&request).into_owned();
+            stream.write_all(response.as_bytes()).unwrap();
+        });
+        (format!("http://{address}"), captured, handle)
+    }
+
     #[test]
     fn resource_names_are_stable_and_valid() {
         assert_eq!(
             resource_stem("德固達 Test!", "550bec18-116e-4abf"),
             "bkuw-test-550bec18"
+        );
+        assert_eq!(media_bucket_name("dictionary"), "dictionary-media");
+        assert_eq!(
+            validate_resource_name(&"a".repeat(59), 58, "publish_worker_name_invalid")
+                .unwrap_err()
+                .code,
+            "publish_worker_name_invalid"
         );
     }
 
@@ -1731,6 +1787,18 @@ mod tests {
         client.create_owned_worker("worker", "project").unwrap();
         server.join().unwrap();
         assert_eq!(count.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn worker_module_upload_includes_the_main_module_filename() {
+        let created = r#"{"success":true,"result":{"etag":"version-1"},"errors":null}"#;
+        let (root, captured, server) = capture_request(response("200 OK", created, ""));
+        let client = CloudflareClient::new_with_root("account", "token", root).unwrap();
+        client.create_owned_worker("worker", "project").unwrap();
+        server.join().unwrap();
+        let request = captured.lock().unwrap();
+        assert!(request.contains("name=\"main.js\"; filename=\"main.js\""));
+        assert!(request.contains("application/javascript+module"));
     }
 
     #[test]
