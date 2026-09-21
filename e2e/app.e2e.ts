@@ -155,12 +155,14 @@ describe("bkuw desktop shell", () => {
         "過,經歷,guo,我經歷過。,我經歷過。,kuo˥˩,verb,,\r\n",
       );
 
-      const fontStatuses = await browser.tauri.execute(({ core }) => core.invoke("list_font_packs")) as any[];
-      for (const packId of ["tex-gyre-termes", "noto-serif-cjk-tc", "noto-serif", "charis-sil"]) {
-        if (fontStatuses.some((pack) => pack.id === packId && pack.state === "installed")) continue;
+      const fontPreview = await browser.tauri.execute(
+        ({ core }) => core.invoke("preview_export", { kind: "latex" }),
+      ) as any;
+      for (const pack of fontPreview.requiredFontPacks) {
+        if (pack.state === "installed") continue;
         const installed = await browser.tauri.execute(
           ({ core }, id) => core.invoke("install_font_pack", { packId: id }),
-          packId,
+          pack.id,
         ) as any;
         expect(installed.state).toBe("installed");
       }
