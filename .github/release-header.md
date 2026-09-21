@@ -1,3 +1,17 @@
+# bkuw 0.6.3
+
+## 變更記錄 / Changelog
+
+### 中文
+
+- 義項與例句加入程式內錄音，停止後可試聽、重錄、取消或儲存；匯入與錄音統一轉為單聲道 WebM／Opus 64 kbps VBR、48 kHz，新增 WebM 來源支援。移除舊 MP3 儲存相容層，不建立 WAV 播放副本。音檔仍不包含在 CSV／LaTeX／PDF 匯出中。
+- 更新啟動畫面與隨附 Pacifico 字型的字樣呈現；支援減少動態效果偏好。字型檢查改為背景執行，語言選單旁提供狀態與管理入口，不再阻擋建立或開啟專案。
+
+### English
+
+- Added in-app recording for senses and examples, with preview, re-record, cancel and save. Imports and recordings now use mono WebM/Opus at 64 kbps VBR / 48 kHz, including WebM source support. Removed legacy MP3 storage compatibility; no WAV playback copies are created. Audio remains excluded from CSV, LaTeX and PDF exports.
+- Refreshed the startup screen with a bundled Pacifico wordmark and reduced-motion support. Font checks now run in the background, with status and management beside the language selector, without blocking project creation or opening.
+
 # bkuw 0.6.2
 
 ## 變更記錄 / Changelog

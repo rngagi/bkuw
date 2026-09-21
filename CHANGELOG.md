@@ -2,21 +2,17 @@
 
 本文件記錄程式變更，不宣告版本已發布；公開版本、發布日期與安裝包以 [GitHub Releases](https://github.com/rngagi/bkuw/releases) 為準。現行行為見 [產品規格](docs/product-spec.md)，驗收狀態見 [執行清單](plan.md)。歷史條目中的 MP3 儲存與舊發布流程只描述當時實作。
 
-## 0.6.2 版本準備後的變更
+## 0.6.3
 
 ### 中文
 
 - 義項與例句加入程式內錄音，停止後可試聽、重錄、取消或儲存；匯入與錄音統一轉為單聲道 WebM／Opus 64 kbps VBR、48 kHz，新增 WebM 來源支援。移除舊 MP3 儲存相容層，不建立 WAV 播放副本。音檔仍不包含在 CSV／LaTeX／PDF 匯出中。
 - 更新啟動畫面與隨附 Pacifico 字型的字樣呈現；支援減少動態效果偏好。字型檢查改為背景執行，語言選單旁提供狀態與管理入口，不再阻擋建立或開啟專案。
-- 音訊工具建置移除 Python 依賴；Windows 使用指定的 MSYS2 MINGW64，CI／release 取得 setup 回傳的實際安裝位置。
-
-對應提交：`2d9335f`、`14ad8c7`、`0d82852`、`c452786`、`4df892b`。啟動畫面字樣動畫已經使用者確認為 UI 規範例外，並同步更新 `AGENTS.md` 與產品規格。
 
 ### English
 
 - Added in-app recording for senses and examples, with preview, re-record, cancel and save. Imports and recordings now use mono WebM/Opus at 64 kbps VBR / 48 kHz, including WebM source support. Removed legacy MP3 storage compatibility; no WAV playback copies are created. Audio remains excluded from CSV, LaTeX and PDF exports.
 - Refreshed the startup screen with a bundled Pacifico wordmark and reduced-motion support. Font checks now run in the background, with status and management beside the language selector, without blocking project creation or opening.
-- Removed Python from audio builds and resolved the configured MSYS2 MINGW64 location on Windows, including the setup action's actual runtime path in CI and release builds.
 
 ## 0.6.2
 
