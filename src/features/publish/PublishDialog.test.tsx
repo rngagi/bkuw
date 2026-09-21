@@ -9,7 +9,7 @@ const { backendMock } = vi.hoisted(() => ({
     getPublishState: vi.fn(), openPublishHelp: vi.fn(), openCloudflareTokenPage: vi.fn(),
     connectCloudflare: vi.fn(), updateWorkersSubdomain: vi.fn(), disconnectCloudflare: vi.fn(), savePublishSettings: vi.fn(),
     previewPublish: vi.fn(), publishSite: vi.fn(), cancelPublish: vi.fn(),
-    openPublicWebsite: vi.fn(), retryPublishCleanup: vi.fn(),
+    copyText: vi.fn(), openPublicWebsite: vi.fn(), retryPublishCleanup: vi.fn(),
   },
 }));
 vi.mock("../../lib/tauri", () => ({
@@ -40,6 +40,8 @@ describe("PublishDialog", () => {
   beforeEach(async () => {
     await i18n.changeLanguage("en"); vi.resetAllMocks();
     backendMock.getPublishState.mockResolvedValue(connected);
+    backendMock.copyText.mockResolvedValue(undefined);
+    backendMock.openPublicWebsite.mockResolvedValue(undefined);
     backendMock.updateWorkersSubdomain.mockImplementation(async (workersSubdomain) => ({ ...connected.connection, workersSubdomain }));
     backendMock.savePublishSettings.mockImplementation(async (value) => value);
     backendMock.previewPublish.mockResolvedValue({ snapshotToken: "snapshot", publicUrl: "https://bkuw-test-12345678.test-dictionary.workers.dev", entryCount: 2, senseCount: 3, exampleCount: 1, imageCount: 1, audioCount: 2, uploadMediaCount: 3, unchangedMediaCount: 0, deleteMediaCount: 0, uploadBytes: 1024, issues: [] });
@@ -83,6 +85,11 @@ describe("PublishDialog", () => {
     expect(await screen.findByText("Website published")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "https://bkuw-test-12345678.test-dictionary.workers.dev" })).toBeInTheDocument();
     expect(screen.getAllByText("Done")).toHaveLength(8);
+    fireEvent.click(screen.getByRole("button", { name: "Copy URL" }));
+    await waitFor(() => expect(backendMock.copyText).toHaveBeenCalledWith("https://bkuw-test-12345678.test-dictionary.workers.dev"));
+    expect(screen.getByRole("button", { name: "Copied" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open website" }));
+    await waitFor(() => expect(backendMock.openPublicWebsite).toHaveBeenCalledWith("https://bkuw-test-12345678.test-dictionary.workers.dev"));
   });
 
   it("requires the novice account checklist before continuing", async () => {

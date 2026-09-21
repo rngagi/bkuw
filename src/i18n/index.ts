@@ -243,7 +243,7 @@ const resources = {
         check: "Check", count: { entries: "{{count}} entries", senses: "{{count}} senses", examples: "{{count}} examples", images: "{{count}} images", audio: "{{count}} audio files" },
         transferTitle: "Planned media transfer", transfer: "Upload {{upload}}, keep {{keep}}, remove after verification {{remove}} · {{bytes}} to upload",
         progressHeading: "Publishing progress", phase: { validating: "Validating", preparing: "Preparing Cloudflare resources", uploadingMedia: "Uploading media", uploadingAssets: "Uploading website", deploying: "Deploying Worker", verifying: "Checking the public website", cleaning: "Cleaning old media", complete: "Complete" }, phaseStatus: { pending: "Not started", active: "In progress", done: "Done", failed: "Failed here" },
-        publish: "Publish", update: "Update website", publishing: "Publishing…", complete: "Website published", resultStats: "Uploaded {{upload}}, retained {{keep}}, removed {{remove}} media files.", cleanupPending: "The website is live, but old media cleanup did not finish. bkuw will retry before the next update.", retryCleanup: "Retry cleanup", cleaning: "Cleaning…", copyUrl: "Copy URL", openSite: "Open website",
+        publish: "Publish", update: "Update website", publishing: "Publishing…", complete: "Website published", resultStats: "Uploaded {{upload}}, retained {{keep}}, removed {{remove}} media files.", cleanupPending: "The website is live, but old media cleanup did not finish. bkuw will retry before the next update.", retryCleanup: "Retry cleanup", cleaning: "Cleaning…", copyUrl: "Copy URL", copied: "Copied", copyFailed: "The URL could not be copied.", openSite: "Open website", openFailed: "The website could not be opened.",
         primary_form_missing: "An entry has no form in the primary writing system.", corpus_too_large: "corpus.json exceeds the 25 MiB Static Assets file limit.",
       },
       error: {
@@ -522,7 +522,7 @@ const resources = {
         check: "檢查", count: { entries: "{{count}} 個詞項", senses: "{{count}} 個義項", examples: "{{count}} 個例句", images: "{{count}} 張圖片", audio: "{{count}} 個音檔" },
         transferTitle: "預計媒體傳輸", transfer: "新增或更新 {{upload}}、保留 {{keep}}、線上驗證後刪除 {{remove}} · 上傳 {{bytes}}",
         progressHeading: "發佈進度", phase: { validating: "驗證", preparing: "準備 Cloudflare 資源", uploadingMedia: "上傳媒體", uploadingAssets: "上傳網站", deploying: "部署 Worker", verifying: "檢查公開網站", cleaning: "清理舊媒體", complete: "完成" }, phaseStatus: { pending: "尚未開始", active: "執行中", done: "已完成", failed: "失敗位置" },
-        publish: "發佈", update: "更新網站", publishing: "正在發佈…", complete: "網站已發佈", resultStats: "上傳 {{upload}}、保留 {{keep}}、刪除 {{remove}} 個媒體檔。", cleanupPending: "網站已上線，但舊媒體尚未清理完成。bkuw 會在下次更新前重試。", retryCleanup: "重試清理", cleaning: "清理中…", copyUrl: "複製網址", openSite: "開啟網站",
+        publish: "發佈", update: "更新網站", publishing: "正在發佈…", complete: "網站已發佈", resultStats: "上傳 {{upload}}、保留 {{keep}}、刪除 {{remove}} 個媒體檔。", cleanupPending: "網站已上線，但舊媒體尚未清理完成。bkuw 會在下次更新前重試。", retryCleanup: "重試清理", cleaning: "清理中…", copyUrl: "複製網址", copied: "已複製", copyFailed: "無法複製網址。", openSite: "開啟網站", openFailed: "無法開啟網站。",
         primary_form_missing: "有詞項缺少主要書寫系統的詞形。", corpus_too_large: "corpus.json 超過 Static Assets 單檔 25 MiB 上限。",
       },
       error: {

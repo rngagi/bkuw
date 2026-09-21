@@ -34,12 +34,13 @@ export function PublishDialog({ open, snapshot, onOpenChange, onFlush, onDeploym
   const [preview, setPreview] = useState<PublishPreview | null>(null);
   const [progress, setProgress] = useState<PublishProgress | null>(null);
   const [result, setResult] = useState<PublishResult | null>(null);
+  const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    setStep(0); setPreview(null); setProgress(null); setResult(null); setError(null); setTokenReady(false);
+    setStep(0); setPreview(null); setProgress(null); setResult(null); setCopied(false); setError(null); setTokenReady(false);
     setBusy("loading");
     backend.getPublishState().then((value) => {
       setState(value); setSettings(clone(value.settings)); setAccountId(value.connection.accountId ?? value.deployment?.accountId ?? "");
@@ -104,6 +105,23 @@ export function PublishDialog({ open, snapshot, onOpenChange, onFlush, onDeploym
     try { await backend.retryPublishCleanup(); setState(await backend.getPublishState()); }
     catch (value) { showError(value); } finally { setBusy(null); }
   }
+  async function copyPublicUrl(url: string) {
+    setError(null);
+    try {
+      await backend.copyText(url);
+      setCopied(true);
+    } catch {
+      setError(t("publish.copyFailed"));
+    }
+  }
+  async function openPublicWebsite(url: string) {
+    setError(null);
+    try {
+      await backend.openPublicWebsite(url);
+    } catch {
+      setError(t("publish.openFailed"));
+    }
+  }
   const primaryId = snapshot.writingSystems.find((item) => item.displayRole === "primary")?.id ?? snapshot.writingSystems[0]?.id;
   const blockers = preview?.issues.filter((item) => item.severity === "error") ?? [];
   const canCancel = progress && !["deploying", "verifying", "cleaning", "complete"].includes(progress.phase);
@@ -129,7 +147,7 @@ export function PublishDialog({ open, snapshot, onOpenChange, onFlush, onDeploym
         {settings && step === 0 && <section className="publish-section">
           <div className="publish-callout"><Info size={20} /><div><strong>{t("publish.publicWarning")}</strong><p>{t("publish.costWarning")}</p><p>{t("publish.manualOnly")}</p></div></div>
           <div className="publish-reference-links"><Button size="small" variant="ghost" onClick={() => void backend.openPublishHelp("workersPricing")}><ExternalLink size={14} />{t("publish.workersPricing")}</Button><Button size="small" variant="ghost" onClick={() => void backend.openPublishHelp("r2GettingStarted")}><ExternalLink size={14} />{t("publish.r2Guide")}</Button><Button size="small" variant="ghost" onClick={() => void backend.openPublishHelp("accountSetup")}><ExternalLink size={14} />{t("publish.accountGuide")}</Button></div>
-          {state?.deployment && <div className="publish-existing"><strong>{t("publish.currentSite")}</strong><a href={state.deployment.publicUrl} onClick={(event) => { event.preventDefault(); void backend.openPublicWebsite(state.deployment!.publicUrl); }}>{state.deployment.publicUrl}</a><span>{t("publish.lastPublished", { date: new Date(state.deployment.lastPublishedAt).toLocaleString() })}</span>{state.deployment.cleanupPending && <Button size="small" variant="secondary" disabled={busy !== null} onClick={() => void retryCleanup()}>{busy === "cleanup" ? t("publish.cleaning") : t("publish.retryCleanup")}</Button>}</div>}
+          {state?.deployment && <div className="publish-existing"><strong>{t("publish.currentSite")}</strong><a href={state.deployment.publicUrl} onClick={(event) => { event.preventDefault(); void openPublicWebsite(state.deployment!.publicUrl); }}>{state.deployment.publicUrl}</a><span>{t("publish.lastPublished", { date: new Date(state.deployment.lastPublishedAt).toLocaleString() })}</span>{state.deployment.cleanupPending && <Button size="small" variant="secondary" disabled={busy !== null} onClick={() => void retryCleanup()}>{busy === "cleanup" ? t("publish.cleaning") : t("publish.retryCleanup")}</Button>}</div>}
           <div className="publish-checklist">
             <h3>{t("publish.accountChecklist")}</h3>
             <Button variant="secondary" onClick={() => void backend.openPublishHelp("signup")}><ExternalLink size={15} />{t("publish.createAccount")}</Button>
@@ -200,8 +218,8 @@ export function PublishDialog({ open, snapshot, onOpenChange, onFlush, onDeploym
             })}</ol>
             {progress && !result && <div className="publish-progress" role="status"><div><span>{t(`publish.phase.${progress.phase}`)}</span><span>{progress.totalBytes ? `${bytes(progress.uploadedBytes)} / ${bytes(progress.totalBytes)}` : progress.totalItems ? `${progress.completedItems}/${progress.totalItems}` : ""}</span></div><progress max={Math.max(progress.totalItems, 1)} value={progress.completedItems} /></div>}
           </div>
-          {result && <div className="publish-success"><CloudUpload size={28} /><div><strong>{t("publish.complete")}</strong><a href={result.publicUrl} onClick={(event) => { event.preventDefault(); void backend.openPublicWebsite(result.publicUrl); }}>{result.publicUrl}</a><p>{t("publish.resultStats", { upload: result.uploadedMediaCount, keep: result.unchangedMediaCount, remove: result.deletedMediaCount })}</p>{result.cleanupPending && <p className="warning-banner">{t("publish.cleanupPending")}</p>}</div></div>}
-          <div className="dialog-actions"><Button variant="ghost" disabled={busy === "publish"} onClick={() => setStep(2)}>{t("common.back")}</Button>{canCancel && <Button variant="secondary" onClick={() => void backend.cancelPublish()}>{t("common.cancel")}</Button>}{result ? <><Button variant="secondary" onClick={() => void navigator.clipboard.writeText(result.publicUrl)}><Copy size={15} />{t("publish.copyUrl")}</Button><Button variant="primary" onClick={() => void backend.openPublicWebsite(result.publicUrl)}><ExternalLink size={15} />{t("publish.openSite")}</Button></> : <Button variant="primary" disabled={busy !== null || blockers.length > 0} onClick={() => void publish()}>{busy === "publish" ? t("publish.publishing") : state?.deployment ? t("publish.update") : t("publish.publish")}</Button>}</div>
+          {result && <div className="publish-success"><CloudUpload size={28} /><div><strong>{t("publish.complete")}</strong><a href={result.publicUrl} onClick={(event) => { event.preventDefault(); void openPublicWebsite(result.publicUrl); }}>{result.publicUrl}</a><p>{t("publish.resultStats", { upload: result.uploadedMediaCount, keep: result.unchangedMediaCount, remove: result.deletedMediaCount })}</p>{result.cleanupPending && <p className="warning-banner">{t("publish.cleanupPending")}</p>}</div></div>}
+          <div className="dialog-actions"><Button variant="ghost" disabled={busy === "publish"} onClick={() => setStep(2)}>{t("common.back")}</Button>{canCancel && <Button variant="secondary" onClick={() => void backend.cancelPublish()}>{t("common.cancel")}</Button>}{result ? <><Button variant="secondary" onClick={() => void copyPublicUrl(result.publicUrl)}><Copy size={15} />{t(copied ? "publish.copied" : "publish.copyUrl")}</Button><Button variant="primary" onClick={() => void openPublicWebsite(result.publicUrl)}><ExternalLink size={15} />{t("publish.openSite")}</Button></> : <Button variant="primary" disabled={busy !== null || blockers.length > 0} onClick={() => void publish()}>{busy === "publish" ? t("publish.publishing") : state?.deployment ? t("publish.update") : t("publish.publish")}</Button>}</div>
         </section>}
       </Dialog.Content>
     </Dialog.Portal>

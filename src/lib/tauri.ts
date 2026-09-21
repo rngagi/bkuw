@@ -1,4 +1,5 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
+import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { z } from "zod";
@@ -86,12 +87,15 @@ export const publishHelpUrls = {
 } as const;
 
 export const backend = {
+  copyText(value: string): Promise<void> {
+    return writeText(value);
+  },
   openPublishHelp(topic: keyof typeof publishHelpUrls): Promise<void> {
     return openUrl(publishHelpUrls[topic]);
   },
   openPublicWebsite(url: string): Promise<void> {
     if (!/^https:\/\/[a-z0-9-]+\.[a-z0-9-]+\.workers\.dev\/?$/i.test(url)) return Promise.reject(new Error("Invalid workers.dev URL"));
-    return openUrl(url);
+    return openUrl(url.endsWith("/") ? url : `${url}/`);
   },
   getPublishState() {
     return call("get_publish_state", {}, publishStateSchema);

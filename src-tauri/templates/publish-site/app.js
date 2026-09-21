@@ -1,95 +1,561 @@
-(() => {
-  "use strict";
-  const $ = (selector) => document.querySelector(selector);
-  const els = { title: $("#site-title"), list: $("#entry-list"), count: $("#entry-count"), search: $("#search-input"), state: $("#detail-state"), content: $("#detail-content"), detail: $("#entry-detail"), theme: $("#theme-button"), info: $("#info-button"), infoDialog: $("#info-dialog"), infoContent: $("#info-content"), back: $("#back-button") };
-  let corpus = null, selected = null, filtered = [], activeAudio = null, listScroll = 0;
-  const text = {
-    "zh-TW": { search: "搜尋詞形、讀音或定義", entries: (n) => `${n} 個詞項`, empty: "找不到符合的詞項", missing: "找不到這個詞項", failed: "辭典資料無法載入，請稍後再試。", image: "圖片無法載入", audio: "音檔無法播放", play: "播放", pause: "暫停", about: "關於本辭典", close: "關閉", back: "返回詞項列表", dark: "切換為深色模式", light: "切換為亮色模式", notes: "備註", relations: "相關詞項", root: "詞根", base: "基底" },
-    en: { search: "Search forms, pronunciation or definitions", entries: (n) => `${n} entries`, empty: "No matching entries", missing: "This entry was not found", failed: "The dictionary could not be loaded. Try again later.", image: "Image unavailable", audio: "Audio unavailable", play: "Play", pause: "Pause", about: "About this dictionary", close: "Close", back: "Back to entry list", dark: "Use dark theme", light: "Use light theme", notes: "Notes", relations: "Related entries", root: "Root", base: "Base" }
-  };
-  let locale = "zh-TW";
-  const t = (key) => text[locale]?.[key] ?? text.en[key] ?? key;
-  const escape = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
-  const fold = (value) => String(value ?? "").normalize("NFD").replace(/\p{M}/gu, "").toLocaleLowerCase(locale);
-  const mediaUrl = (path) => new URL(path, new URL(corpus.site.mediaBaseUrl, location.href)).href;
-  const systemName = (id) => corpus.writingSystems.find((item) => item.id === id)?.name ?? id;
-  const allText = (entry) => [entry.primaryForm, entry.notes, ...entry.forms.map((f) => f.text), ...entry.senses.flatMap((s) => [s.partOfSpeech, s.gloss, s.definition, s.semanticDomain, ...s.examples.flatMap((e) => [e.translation, e.notes, ...e.forms.map((f) => f.text)])])].join(" ");
-  function applyTheme(value) {
-    const dark = value === "dark" || (value === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
-    document.documentElement.dataset.theme = dark ? "dark" : "light";
-    els.theme.setAttribute("aria-label", dark ? t("light") : t("dark"));
+"use strict";
+
+const STORAGE = {
+  theme: "theme-mode",
+};
+
+const messages = {
+  "zh-TW": {
+    switchToLight: "切換至亮色模式",
+    switchToDark: "切換至深色模式",
+    aboutDictionary: "關於本辭典",
+    close: "關閉",
+    search: "搜尋詞項",
+    searchPlaceholder: "搜尋詞形或釋義",
+    backToList: "返回詞項列表",
+    loading: "正在載入辭典…",
+    loadError: "無法載入辭典資料。請確認本機伺服器與 data/corpus.json。",
+    entriesCount: "{{shown}} / {{total}} 個詞項",
+    noResults: "找不到符合「{{query}}」的詞項",
+    noSelection: "請從左側選擇詞項",
+    dictionaryEntry: "詞項",
+    unnamedSense: "未命名義項",
+    semanticDomain: "語意類別：{{value}}",
+    audio: "音檔",
+    senseAudio: "義項錄音 {{number}}",
+    exampleAudio: "例句錄音 {{number}}",
+    playAudio: "播放{{label}}",
+    pauseAudio: "暫停{{label}}",
+    seekAudio: "調整{{label}}播放位置",
+    audioUnavailable: "無法播放這個音檔",
+    images: "圖片",
+    imageAlt: "{{headword}}第 {{sense}} 個義項的圖片 {{number}}",
+    imageUnavailable: "無法載入圖片",
+    examples: "例句",
+    exampleNumber: "例句 {{number}}",
+    translation: "翻譯",
+    notes: "備註",
+    relations: "相關詞項",
+    root: "詞根",
+    base: "詞基",
+    poweredBy: "使用 bkuw 建立 & 發布",
+  },
+  en: {
+    switchToLight: "Switch to light mode",
+    switchToDark: "Switch to dark mode",
+    aboutDictionary: "About this dictionary",
+    close: "Close",
+    search: "Search entries",
+    searchPlaceholder: "Search forms or definitions",
+    backToList: "Back to entries",
+    loading: "Loading dictionary…",
+    loadError: "The dictionary data could not be loaded. Check the local server and data/corpus.json.",
+    entriesCount: "{{shown}} of {{total}} entries",
+    noResults: "No entries match “{{query}}”",
+    noSelection: "Choose an entry from the list",
+    dictionaryEntry: "Dictionary entry",
+    unnamedSense: "Unnamed sense",
+    semanticDomain: "Semantic domain: {{value}}",
+    audio: "Audio",
+    senseAudio: "Sense recording {{number}}",
+    exampleAudio: "Example recording {{number}}",
+    playAudio: "Play {{label}}",
+    pauseAudio: "Pause {{label}}",
+    seekAudio: "Seek {{label}}",
+    audioUnavailable: "This audio file could not be played",
+    images: "Images",
+    imageAlt: "Image {{number}} for sense {{sense}} of {{headword}}",
+    imageUnavailable: "Image unavailable",
+    examples: "Examples",
+    exampleNumber: "Example {{number}}",
+    translation: "Translation",
+    notes: "Notes",
+    relations: "Related entries",
+    root: "Root",
+    base: "Base",
+    poweredBy: "Built & published with bkuw",
+  },
+};
+
+const state = {
+  corpus: null,
+  locale: "zh-TW",
+  themeMode: getStored(STORAGE.theme, "system"),
+  query: "",
+  selectedId: null,
+  activeAudio: null,
+};
+
+const elements = {
+  workspace: document.querySelector(".workspace"),
+  siteTitle: document.querySelector("#site-title"),
+  theme: document.querySelector("#theme-button"),
+  themeMoon: document.querySelector(".theme-icon-moon"),
+  themeSun: document.querySelector(".theme-icon-sun"),
+  info: document.querySelector("#info-button"),
+  infoDialog: document.querySelector("#info-dialog"),
+  infoClose: document.querySelector("#info-close-button"),
+  infoContent: document.querySelector("#info-content"),
+  search: document.querySelector("#search-input"),
+  summary: document.querySelector("#result-summary"),
+  list: document.querySelector("#entry-list"),
+  detail: document.querySelector("#entry-detail"),
+  back: document.querySelector("#back-button"),
+  announcer: document.querySelector("#announcer"),
+  themeColor: document.querySelector('meta[name="theme-color"]'),
+};
+
+const systemTheme = matchMedia("(prefers-color-scheme: dark)");
+
+function getStored(key, fallback) {
+  try { return localStorage.getItem(key) || fallback; } catch { return fallback; }
+}
+
+function store(key, value) {
+  try { localStorage.setItem(key, value); } catch { /* Local storage may be disabled. */ }
+}
+
+function t(key, values = {}) {
+  const template = messages[state.locale]?.[key] ?? messages["zh-TW"][key] ?? key;
+  return Object.entries(values).reduce(
+    (result, [name, value]) => result.replaceAll(`{{${name}}}`, String(value)),
+    template,
+  );
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function fold(value) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/\p{Mark}/gu, "")
+    .toLocaleLowerCase();
+}
+
+function resolvedTheme() {
+  if (state.themeMode === "light" || state.themeMode === "dark") return state.themeMode;
+  return systemTheme.matches ? "dark" : "light";
+}
+
+function applyTheme() {
+  const theme = resolvedTheme();
+  document.documentElement.dataset.theme = theme;
+  elements.themeColor.content = theme === "dark" ? "#151816" : "#f7f8f6";
+  const target = theme === "dark" ? "light" : "dark";
+  const label = t(target === "light" ? "switchToLight" : "switchToDark");
+  elements.theme.setAttribute("aria-label", label);
+  elements.theme.title = label;
+  elements.themeMoon.toggleAttribute("hidden", target !== "dark");
+  elements.themeSun.toggleAttribute("hidden", target !== "light");
+}
+
+function applyLocalization() {
+  document.documentElement.lang = state.locale === "zh-TW" ? "zh-Hant" : "en";
+  document.querySelectorAll("[data-i18n]").forEach((node) => {
+    node.textContent = t(node.dataset.i18n);
+  });
+  elements.search.placeholder = t("searchPlaceholder");
+  elements.search.setAttribute("aria-label", t("search"));
+  elements.info.setAttribute("aria-label", t("aboutDictionary"));
+  elements.info.title = t("aboutDictionary");
+  elements.infoDialog.setAttribute("aria-label", t("aboutDictionary"));
+  elements.infoClose.setAttribute("aria-label", t("close"));
+  elements.infoClose.title = t("close");
+  applyTheme();
+}
+
+function searchableText(entry) {
+  return [
+    entry.primaryForm,
+    entry.notes,
+    ...entry.forms.map((form) => form.text),
+    ...entry.senses.flatMap((sense) => [
+      sense.partOfSpeech,
+      sense.gloss,
+      sense.definition,
+      sense.semanticDomain,
+      ...sense.examples.flatMap((example) => [
+        example.translation,
+        example.notes,
+        ...example.forms.map((form) => form.text),
+      ]),
+    ]),
+    ...(entry.relations || []).flatMap((relation) => [relation.targetHeadword, relation.fallbackText]),
+  ].filter(Boolean).join(" ");
+}
+
+function filteredEntries() {
+  if (!state.corpus) return [];
+  const query = fold(state.query.trim());
+  if (!query) return state.corpus.entries;
+  return state.corpus.entries.filter((entry) => fold(searchableText(entry)).includes(query));
+}
+
+function sectionLabel(entry) {
+  return entry.sectionLabel || Array.from(entry.primaryForm.trim())[0]?.toLocaleUpperCase() || "#";
+}
+
+function mediaUrl(path) {
+  const base = new URL(state.corpus.site.mediaBaseUrl, location.href);
+  return new URL(path, base).href;
+}
+
+function formatTime(seconds) {
+  const safe = Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
+  return `${Math.floor(safe / 60)}:${String(Math.floor(safe % 60)).padStart(2, "0")}`;
+}
+
+function playIcon() {
+  return '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7Z"/></svg>';
+}
+
+function pauseIcon() {
+  return '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M9 5v14M15 5v14"/></svg>';
+}
+
+function renderAudio(items, kind) {
+  if (!items.length) return "";
+  return `
+    <section class="media-section audio-section" aria-label="${escapeHtml(t("audio"))}">
+      <h3>${escapeHtml(t("audio"))}</h3>
+      <div class="audio-list">
+        ${items.map((item, index) => {
+          const label = t(kind === "example" ? "exampleAudio" : "senseAudio", { number: index + 1 });
+          const duration = item.durationMs / 1000;
+          return `
+            <div class="audio-player" data-audio-label="${escapeHtml(label)}">
+              <audio preload="none" src="${escapeHtml(mediaUrl(item.path))}"></audio>
+              <button class="audio-toggle" type="button" aria-label="${escapeHtml(t("playAudio", { label }))}">${playIcon()}</button>
+              <div class="audio-name"><strong>${escapeHtml(label)}</strong><small>${escapeHtml(formatTime(duration))}</small></div>
+              <input class="audio-seek" type="range" min="0" max="${duration}" step="0.01" value="0" aria-label="${escapeHtml(t("seekAudio", { label }))}" />
+              <time class="audio-time">0:00 / ${escapeHtml(formatTime(duration))}</time>
+              <span class="audio-error" role="alert" hidden>${escapeHtml(t("audioUnavailable"))}</span>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderImages(images, entry, senseIndex) {
+  if (!images.length) return "";
+  return `
+    <section class="media-section image-section" aria-label="${escapeHtml(t("images"))}">
+      <h3>${escapeHtml(t("images"))}</h3>
+      <div class="image-grid">
+        ${images.map((image, index) => {
+          const alt = t("imageAlt", { headword: entry.primaryForm, sense: senseIndex + 1, number: index + 1 });
+          return `
+            <figure class="sense-image">
+              <div class="image-frame">
+                <img src="${escapeHtml(mediaUrl(image.path))}" alt="${escapeHtml(alt)}" width="${image.width}" height="${image.height}" loading="lazy" decoding="async" />
+                <span class="image-fallback" role="status" hidden>${escapeHtml(t("imageUnavailable"))}</span>
+              </div>
+              <figcaption>${escapeHtml(image.originalFilename)}</figcaption>
+            </figure>
+          `;
+        }).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderExamples(examples, writingSystems) {
+  if (!examples.length) return "";
+  return `
+    <section class="examples-section" aria-label="${escapeHtml(t("examples"))}">
+      <h3>${escapeHtml(t("examples"))}</h3>
+      <ol class="example-list">
+        ${examples.map((example, exampleIndex) => `
+          <li class="example">
+            <span class="example-label">${escapeHtml(t("exampleNumber", { number: exampleIndex + 1 }))}</span>
+            <div class="example-forms">
+              ${example.forms.map((form) => `
+                <div class="example-form">
+                  <p lang="${escapeHtml(writingSystems.get(form.writingSystemId)?.languageTag || "")}">${escapeHtml(form.text)}</p>
+                  ${example.forms.length > 1 ? `<small>${escapeHtml(writingSystems.get(form.writingSystemId)?.name || "")}</small>` : ""}
+                </div>
+              `).join("")}
+            </div>
+            ${example.translation ? `<p class="example-translation"><span>${escapeHtml(t("translation"))}</span>${escapeHtml(example.translation)}</p>` : ""}
+            ${example.notes ? `<p class="published-notes"><strong>${escapeHtml(t("notes"))}</strong>${escapeHtml(example.notes)}</p>` : ""}
+            ${renderAudio(example.audio, "example")}
+          </li>
+        `).join("")}
+      </ol>
+    </section>
+  `;
+}
+
+function renderList() {
+  if (!state.corpus) return;
+  const entries = filteredEntries();
+  elements.summary.textContent = t("entriesCount", { shown: entries.length, total: state.corpus.entries.length });
+  if (!entries.length) {
+    elements.list.innerHTML = `<div class="state-panel"><p>${escapeHtml(t("noResults", { query: state.query }))}</p></div>`;
+    return;
   }
-  function setupTheme() {
-    applyTheme(localStorage.getItem("bkuw-theme") || "system");
-    els.theme.addEventListener("click", () => { const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark"; localStorage.setItem("bkuw-theme", next); applyTheme(next); });
-    matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => { if (!localStorage.getItem("bkuw-theme")) applyTheme("system"); });
+
+  let previousSection = null;
+  elements.list.innerHTML = entries.map((entry) => {
+    const currentSection = sectionLabel(entry);
+    const heading = currentSection !== previousSection
+      ? `<h2 class="entry-section-heading">${escapeHtml(currentSection)}</h2>`
+      : "";
+    previousSection = currentSection;
+    const summaries = entry.senses.slice(0, 2).map((sense) => {
+      const prefix = sense.partOfSpeech ? `${sense.partOfSpeech} · ` : "";
+      return `${prefix}${sense.gloss || sense.definition || t("unnamedSense")}`;
+    }).join("；");
+    return `${heading}<button class="entry-list-item" type="button" data-entry-id="${escapeHtml(entry.id)}" aria-current="${entry.id === state.selectedId}"><strong>${escapeHtml(entry.primaryForm || "…")}</strong><small>${escapeHtml(summaries)}</small></button>`;
+  }).join("");
+
+  elements.list.querySelectorAll("[data-entry-id]").forEach((button) => {
+    button.addEventListener("click", () => navigateToEntry(button.dataset.entryId, true));
+  });
+}
+
+function renderDetail() {
+  if (!state.corpus) return;
+  const entry = state.corpus.entries.find((item) => item.id === state.selectedId);
+  if (!entry) {
+    elements.detail.innerHTML = `<div class="state-panel"><p>${escapeHtml(t("noSelection"))}</p></div>`;
+    return;
   }
-  function renderList() {
-    els.count.textContent = t("entries")(filtered.length);
-    if (!filtered.length) { els.list.innerHTML = `<div class="state-message">${escape(t("empty"))}</div>`; return; }
-    els.list.innerHTML = filtered.map((entry) => {
-      const sense = entry.senses[0] || {};
-      const summary = [sense.partOfSpeech, sense.gloss || sense.definition].filter(Boolean).join(" · ");
-      return `<button class="entry-item" type="button" role="option" data-slug="${escape(entry.slug)}" aria-selected="${entry.slug === selected}"><span class="entry-headword">${escape(entry.primaryForm)}</span><span class="entry-summary">${escape(summary)}</span></button>`;
-    }).join("");
+
+  const writingSystems = new Map(state.corpus.writingSystems.map((system) => [system.id, system]));
+  const secondaryForms = entry.forms.filter((form) => form.text !== entry.primaryForm);
+  const forms = secondaryForms.length
+    ? `<dl class="entry-forms">${secondaryForms.map((form) => `<div class="entry-form"><dt>${escapeHtml(writingSystems.get(form.writingSystemId)?.name || "")}</dt><dd>${escapeHtml(form.text)}</dd></div>`).join("")}</dl>`
+    : "";
+  const senses = entry.senses.map((sense, senseIndex) => `
+    <article class="sense">
+      <span class="sense-number" aria-hidden="true"></span>
+      <div class="sense-content">
+        <div class="sense-heading">
+          <h2>${escapeHtml(sense.gloss || sense.definition || t("unnamedSense"))}</h2>
+          ${sense.partOfSpeech ? `<span class="pos-tag">${escapeHtml(sense.partOfSpeech)}</span>` : ""}
+        </div>
+        ${sense.definition && sense.definition !== sense.gloss ? `<p class="definition">${escapeHtml(sense.definition)}</p>` : ""}
+        ${sense.semanticDomain ? `<p class="semantic-domain">${escapeHtml(t("semanticDomain", { value: sense.semanticDomain }))}</p>` : ""}
+        ${renderAudio(sense.audio, "sense")}
+        ${renderImages(sense.images, entry, senseIndex)}
+        ${renderExamples(sense.examples, writingSystems)}
+      </div>
+    </article>
+  `).join("");
+  const relations = entry.relations?.length
+    ? `<section class="relations-section"><h2>${escapeHtml(t("relations"))}</h2><ul>${entry.relations.map((relation) => {
+      const label = t(relation.type);
+      const value = relation.targetHeadword || relation.fallbackText || "";
+      const target = relation.targetSlug
+        ? `<a href="#/entry/${encodeURIComponent(relation.targetSlug)}">${escapeHtml(value)}</a>`
+        : escapeHtml(value);
+      return `<li><strong>${escapeHtml(label)}</strong>${target}</li>`;
+    }).join("")}</ul></section>`
+    : "";
+
+  elements.detail.innerHTML = `
+    <article class="entry-document">
+      <header class="entry-header">
+        <p class="entry-kicker">${escapeHtml(t("dictionaryEntry"))}</p>
+        <h1 id="entry-heading">${escapeHtml(entry.primaryForm || "…")}</h1>
+        ${forms}
+        ${entry.notes ? `<p class="published-notes"><strong>${escapeHtml(t("notes"))}</strong>${escapeHtml(entry.notes)}</p>` : ""}
+      </header>
+      <div class="senses">${senses}</div>
+      ${relations}
+    </article>
+  `;
+  document.title = `${entry.primaryForm} · ${state.corpus.site.title}`;
+  bindDetailMedia();
+}
+
+function resetAudioPlayer(player) {
+  const audio = player.querySelector("audio");
+  const button = player.querySelector(".audio-toggle");
+  const label = player.dataset.audioLabel;
+  button.innerHTML = playIcon();
+  button.setAttribute("aria-label", t("playAudio", { label }));
+  if (audio.ended) {
+    audio.currentTime = 0;
+    player.querySelector(".audio-seek").value = "0";
   }
-  function renderAudio(items) {
-    if (!items?.length) return "";
-    return `<div class="audio-list">${items.map((item) => `<div class="audio-player" data-audio><button type="button" aria-label="${escape(t("play"))}">▶</button><input type="range" min="0" max="1000" value="0" aria-label="${escape(item.originalFilename || t("play"))}"><span class="audio-time">0:00</span><audio preload="metadata" src="${escape(mediaUrl(item.path))}"></audio></div>`).join("")}</div>`;
-  }
-  function renderEntry(entry) {
-    const forms = entry.forms.filter((form) => form.text && form.text !== entry.primaryForm).map((form) => `<span><span class="form-label">${escape(systemName(form.writingSystemId))}</span> ${escape(form.text)}</span>`).join("");
-    const senses = entry.senses.map((sense, index) => `<section class="sense">
-      <div class="sense-heading"><span class="sense-number">${index + 1}</span>${sense.partOfSpeech ? `<span class="pos">${escape(sense.partOfSpeech)}</span>` : ""}${sense.semanticDomain ? `<span class="domain">${escape(sense.semanticDomain)}</span>` : ""}</div>
-      ${sense.gloss ? `<p class="gloss">${escape(sense.gloss)}</p>` : ""}${sense.definition ? `<p class="definition">${escape(sense.definition)}</p>` : ""}
-      ${sense.images?.length ? `<div class="media-grid">${sense.images.map((image) => `<figure class="media-frame"><img src="${escape(mediaUrl(image.path))}" alt="" loading="lazy"><div class="media-error" hidden>${escape(t("image"))}</div></figure>`).join("")}</div>` : ""}
-      ${renderAudio(sense.audio)}
-      ${sense.examples?.length ? `<ol class="examples">${sense.examples.map((example) => `<li class="example">${example.forms.map((form) => `<p class="example-form"><span class="sr-only">${escape(systemName(form.writingSystemId))}: </span>${escape(form.text)}</p>`).join("")}${example.translation ? `<div class="example-translation">${escape(example.translation)}</div>` : ""}${example.notes ? `<div class="example-notes"><strong>${escape(t("notes"))}:</strong> ${escape(example.notes)}</div>` : ""}${renderAudio(example.audio)}</li>`).join("")}</ol>` : ""}
-    </section>`).join("");
-    const relations = entry.relations?.length ? `<section class="relations"><h2>${escape(t("relations"))}</h2><ul>${entry.relations.map((relation) => `<li>${escape(t(relation.type))}: ${relation.targetSlug ? `<a href="#/entry/${encodeURIComponent(relation.targetSlug)}">${escape(relation.targetHeadword || relation.fallbackText)}</a>` : escape(relation.fallbackText || relation.targetHeadword || "")}</li>`).join("")}</ul></section>` : "";
-    els.content.innerHTML = `<div class="detail-inner"><h2 class="entry-title">${escape(entry.primaryForm)}</h2><div class="forms">${forms}</div>${entry.notes ? `<p class="entry-notes"><strong>${escape(t("notes"))}:</strong> ${escape(entry.notes)}</p>` : ""}${senses}${relations}</div>`;
-    els.state.hidden = true; els.content.hidden = false;
-    els.content.querySelectorAll("img").forEach((img) => img.addEventListener("error", () => { img.hidden = true; img.nextElementSibling.hidden = false; }));
-    setupAudio();
-  }
-  function showSlug(slug, focus = false) {
-    const entry = corpus.entries.find((item) => item.slug === slug);
-    selected = entry?.slug ?? null; renderList();
-    if (!entry) { els.content.hidden = true; els.state.hidden = false; els.state.textContent = t("missing"); return; }
-    renderEntry(entry); document.body.classList.add("detail-open");
-    if (focus) els.detail.focus();
-  }
-  function route() {
-    const match = location.hash.match(/^#\/entry\/([^/]+)$/);
-    const slug = match ? decodeURIComponent(match[1]) : corpus?.entries[0]?.slug;
-    if (slug) showSlug(slug);
-  }
-  function setupAudio() {
-    document.querySelectorAll("[data-audio]").forEach((player) => {
-      const audio = player.querySelector("audio"), button = player.querySelector("button"), range = player.querySelector("input"), time = player.querySelector(".audio-time");
-      const update = () => { range.value = audio.duration ? Math.round(audio.currentTime / audio.duration * 1000) : 0; time.textContent = Number.isFinite(audio.currentTime) ? `${Math.floor(audio.currentTime / 60)}:${String(Math.floor(audio.currentTime % 60)).padStart(2, "0")}` : "0:00"; };
-      button.addEventListener("click", async () => { if (audio.paused) { if (activeAudio && activeAudio !== audio) activeAudio.pause(); activeAudio = audio; try { await audio.play(); } catch { button.textContent = "!"; button.setAttribute("aria-label", t("audio")); } } else audio.pause(); });
-      audio.addEventListener("play", () => { button.textContent = "Ⅱ"; button.setAttribute("aria-label", t("pause")); });
-      audio.addEventListener("pause", () => { button.textContent = "▶"; button.setAttribute("aria-label", t("play")); });
-      audio.addEventListener("timeupdate", update); audio.addEventListener("ended", update); audio.addEventListener("error", () => { button.textContent = "!"; button.disabled = true; button.setAttribute("aria-label", t("audio")); });
-      range.addEventListener("input", () => { if (audio.duration) audio.currentTime = Number(range.value) / 1000 * audio.duration; });
+}
+
+function bindDetailMedia() {
+  state.activeAudio = null;
+  elements.detail.querySelectorAll(".audio-player").forEach((player) => {
+    const audio = player.querySelector("audio");
+    const button = player.querySelector(".audio-toggle");
+    const seek = player.querySelector(".audio-seek");
+    const time = player.querySelector(".audio-time");
+    const error = player.querySelector(".audio-error");
+    const label = player.dataset.audioLabel;
+    const duration = Number(seek.max);
+
+    button.addEventListener("click", async () => {
+      error.hidden = true;
+      if (!audio.paused) {
+        audio.pause();
+        return;
+      }
+      if (state.activeAudio && state.activeAudio !== player) {
+        const previous = state.activeAudio.querySelector("audio");
+        previous.pause();
+        resetAudioPlayer(state.activeAudio);
+      }
+      state.activeAudio = player;
+      try { await audio.play(); } catch { error.hidden = false; }
     });
+    audio.addEventListener("play", () => {
+      button.innerHTML = pauseIcon();
+      button.setAttribute("aria-label", t("pauseAudio", { label }));
+    });
+    audio.addEventListener("pause", () => resetAudioPlayer(player));
+    audio.addEventListener("ended", () => resetAudioPlayer(player));
+    audio.addEventListener("timeupdate", () => {
+      seek.value = String(audio.currentTime);
+      time.textContent = `${formatTime(audio.currentTime)} / ${formatTime(duration)}`;
+    });
+    audio.addEventListener("error", () => {
+      error.hidden = false;
+      button.disabled = true;
+    });
+    seek.addEventListener("input", () => {
+      audio.currentTime = Number(seek.value);
+      time.textContent = `${formatTime(audio.currentTime)} / ${formatTime(duration)}`;
+    });
+  });
+
+  elements.detail.querySelectorAll(".sense-image img").forEach((image) => {
+    image.addEventListener("error", () => {
+      image.hidden = true;
+      image.nextElementSibling.hidden = false;
+    });
+  });
+}
+
+function entryFromHash() {
+  const match = location.hash.match(/^#\/entry\/(.+)$/);
+  if (!match || !state.corpus) return null;
+  const slug = decodeURIComponent(match[1]);
+  return state.corpus.entries.find((entry) => entry.slug === slug) ?? null;
+}
+
+function navigateToEntry(id, updateHash) {
+  const entry = state.corpus?.entries.find((item) => item.id === id);
+  if (!entry) return;
+  state.selectedId = entry.id;
+  if (updateHash && location.hash !== `#/entry/${encodeURIComponent(entry.slug)}`) {
+    location.hash = `/entry/${encodeURIComponent(entry.slug)}`;
   }
-  async function init() {
-    setupTheme();
-    try {
-      const response = await fetch("./data/corpus.json", { cache: "no-cache" }); if (!response.ok) throw new Error(String(response.status));
-      corpus = await response.json(); locale = corpus.site.defaultLocale === "en" ? "en" : "zh-TW";
-      applyTheme(localStorage.getItem("bkuw-theme") || "system");
-      document.documentElement.lang = locale; document.title = corpus.site.title; els.title.textContent = corpus.site.title; els.search.placeholder = t("search"); els.back.setAttribute("aria-label", t("back")); $("#info-title").textContent = t("about"); $("#info-close").setAttribute("aria-label", t("close"));
-      if (corpus.site.description) document.querySelector('meta[name="description"]').content = corpus.site.description;
-      if (corpus.site.info?.html) { els.info.hidden = false; els.info.setAttribute("aria-label", t("about")); els.infoContent.innerHTML = corpus.site.info.html; }
-      filtered = corpus.entries; renderList(); route();
-    } catch { els.state.textContent = t("failed"); els.count.textContent = ""; }
+  renderList();
+  renderDetail();
+  if (matchMedia("(max-width: 47.99rem)").matches) {
+    document.body.classList.add("mobile-detail");
   }
-  els.search.addEventListener("input", () => { const query = fold(els.search.value.trim()); filtered = !query ? corpus.entries : corpus.entries.filter((entry) => fold(allText(entry)).includes(query)); renderList(); });
-  els.list.addEventListener("click", (event) => { const button = event.target.closest("[data-slug]"); if (!button) return; listScroll = els.list.parentElement.scrollTop; location.hash = `#/entry/${encodeURIComponent(button.dataset.slug)}`; showSlug(button.dataset.slug, true); });
-  els.back.addEventListener("click", () => { document.body.classList.remove("detail-open"); els.list.parentElement.scrollTop = listScroll; });
-  els.info.addEventListener("click", () => els.infoDialog.showModal()); $("#info-close").addEventListener("click", () => els.infoDialog.close());
-  addEventListener("hashchange", route); init();
-})();
+}
+
+function renderAll() {
+  if (!state.corpus) return;
+  elements.siteTitle.textContent = state.corpus.site.title;
+  const infoHtml = state.corpus.site.info?.html?.trim() || "";
+  elements.info.hidden = !infoHtml;
+  elements.infoContent.innerHTML = infoHtml;
+  renderList();
+  renderDetail();
+}
+
+async function loadCorpus() {
+  try {
+    const response = await fetch("./data/corpus.json", { cache: "no-cache", headers: { Accept: "application/json" } });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const corpus = await response.json();
+    if (corpus.schemaVersion !== 1 || !Array.isArray(corpus.entries)) throw new Error("Unsupported corpus schema");
+    state.corpus = corpus;
+    state.locale = corpus.site.defaultLocale === "en" ? "en" : "zh-TW";
+    applyLocalization();
+    const linked = entryFromHash();
+    state.selectedId = linked?.id || corpus.site.defaultEntryId || corpus.entries[0]?.id || null;
+    if (linked && matchMedia("(max-width: 47.99rem)").matches) document.body.classList.add("mobile-detail");
+    elements.workspace.setAttribute("aria-busy", "false");
+    renderAll();
+  } catch (error) {
+    console.error(error);
+    elements.workspace.setAttribute("aria-busy", "false");
+    elements.detail.innerHTML = `<div class="state-panel" role="alert"><p>${escapeHtml(t("loadError"))}</p></div>`;
+    elements.list.innerHTML = "";
+  }
+}
+
+elements.search.addEventListener("input", (event) => {
+  state.query = event.target.value;
+  renderList();
+});
+
+elements.theme.addEventListener("click", () => {
+  state.themeMode = resolvedTheme() === "dark" ? "light" : "dark";
+  store(STORAGE.theme, state.themeMode);
+  applyTheme();
+});
+
+systemTheme.addEventListener("change", () => {
+  if (state.themeMode === "system") applyTheme();
+});
+
+elements.info.addEventListener("click", () => {
+  if (typeof elements.infoDialog.showModal === "function") elements.infoDialog.showModal();
+  else elements.infoDialog.setAttribute("open", "");
+});
+
+elements.infoClose.addEventListener("click", () => {
+  if (typeof elements.infoDialog.close === "function") elements.infoDialog.close();
+  else elements.infoDialog.removeAttribute("open");
+});
+
+elements.infoDialog.addEventListener("click", (event) => {
+  if (event.target !== elements.infoDialog) return;
+  const bounds = elements.infoDialog.getBoundingClientRect();
+  const inside = event.clientX >= bounds.left && event.clientX <= bounds.right
+    && event.clientY >= bounds.top && event.clientY <= bounds.bottom;
+  if (!inside) elements.infoClose.click();
+});
+
+elements.back.addEventListener("click", () => {
+  document.body.classList.remove("mobile-detail");
+  elements.search.focus();
+});
+
+window.addEventListener("hashchange", () => {
+  const entry = entryFromHash();
+  if (entry) navigateToEntry(entry.id, false);
+  else document.body.classList.remove("mobile-detail");
+});
+
+window.addEventListener("keydown", (event) => {
+  const editing = event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement || event.target instanceof HTMLTextAreaElement;
+  if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === "k") {
+    event.preventDefault();
+    elements.search.focus();
+    elements.search.select();
+  } else if (!editing && event.key === "/") {
+    event.preventDefault();
+    elements.search.focus();
+  } else if (event.key === "Escape" && document.activeElement === elements.search && state.query) {
+    elements.search.value = "";
+    state.query = "";
+    renderList();
+  }
+});
+
+applyLocalization();
+void loadCorpus();

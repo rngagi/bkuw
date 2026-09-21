@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import mainWindowCapability from "../../src-tauri/capabilities/default.json";
 
-const { invokeMock, openUrlMock } = vi.hoisted(() => ({ invokeMock: vi.fn(), openUrlMock: vi.fn() }));
+const { invokeMock, openUrlMock, writeTextMock } = vi.hoisted(() => ({ invokeMock: vi.fn(), openUrlMock: vi.fn(), writeTextMock: vi.fn() }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: invokeMock }));
+vi.mock("@tauri-apps/plugin-clipboard-manager", () => ({ writeText: writeTextMock }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn() }));
 vi.mock("@tauri-apps/plugin-opener", () => ({ openUrl: openUrlMock }));
 
@@ -26,6 +27,15 @@ describe("Tauri adapter", () => {
     openUrlMock.mockResolvedValue(undefined);
     await backend.openScriptCodeRegistry();
     expect(openUrlMock).toHaveBeenCalledWith("https://www.unicode.org/iso15924/iso15924-codes.html");
+  });
+  it("uses native clipboard access and opens a workers.dev root URL allowed by Tauri", async () => {
+    writeTextMock.mockResolvedValue(undefined);
+    openUrlMock.mockResolvedValue(undefined);
+    await backend.copyText("https://dictionary.account.workers.dev");
+    await backend.openPublicWebsite("https://dictionary.account.workers.dev");
+    expect(writeTextMock).toHaveBeenCalledWith("https://dictionary.account.workers.dev");
+    expect(openUrlMock).toHaveBeenCalledWith("https://dictionary.account.workers.dev/");
+    await expect(backend.openPublicWebsite("https://example.com")).rejects.toThrow("Invalid workers.dev URL");
   });
   it("validates environment results and allows every documented help link", async () => {
     invokeMock.mockResolvedValue({ state: "missingPackages", path: "C:\\TeX\\xelatex.exe", version: "XeTeX", missingFiles: ["fancybox.sty"], diagnosticPath: null });

@@ -31,7 +31,7 @@
 
 ## Cloudflare 公開辭典網站
 
-- [x] 發佈精靈、Token credential、Migration 8、publication snapshot、Workers Static Assets、R2 media Worker、正式網站 template 與雙語 UI。R2 Object API 使用 raw request body；Worker upload 使用含 filename 的 ES module multipart。精靈同頁說明 account subdomain、Worker name 與完整網址，不再以 Worker name 代填 account subdomain，並在首次成功前提供具 account-wide 警告的更正動作。R2 bucket 固定由 `<worker>-media` 衍生；最後一步列出八個發佈階段及失敗位置。驗證：`pnpm check`、`pnpm test`（104 passed）、`pnpm test:rust`（83 passed，1 個既有 XeLaTeX 測試 ignored）。
+- [x] 發佈精靈、Token credential、Migration 8、publication snapshot、Workers Static Assets、R2 media Worker、正式網站 template 與雙語 UI。R2 Object API 使用 raw request body；Worker upload 使用含 filename 的 ES module multipart。精靈同頁說明 account subdomain、Worker name 與完整網址，不再以 Worker name 代填 account subdomain，並在首次成功前提供具 account-wide 警告的更正動作。R2 bucket 固定由 `<worker>-media` 衍生；最後一步列出八個發佈階段及失敗位置。正式網站已與 prototype 對齊，修正殘留 loading、手機返回、更新快取，並原樣沿用 project 自動／手動排序及 section labels；完成頁以原生 clipboard 與 opener 實作複製及開啟。驗證：`pnpm check`、`pnpm test`（105 passed）、`pnpm test:rust`（84 passed，1 個既有 XeLaTeX 測試 ignored）、`pnpm test:e2e:build`、`pnpm test:e2e`（2 specs、4 passed）與 `pnpm tauri build --no-bundle`。
 - [x] 本機驗證：`pnpm test:e2e:build`、`pnpm test:e2e`（4 passed）、`pnpm tauri build --no-bundle`，並開啟 build 供人工測試。
 - [ ] 使用自己的 Cloudflare 帳號完成首次發佈與一次差異更新；驗證 workers.dev、搜尋、deep-link、亮暗、info、writing systems、notes、relations、圖片、兩種 audio 與舊媒體清理。
 

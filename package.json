@@ -40,6 +40,7 @@
     "@radix-ui/react-tooltip": "latest",
     "@tanstack/react-virtual": "latest",
     "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-clipboard-manager": "^2",
     "@tauri-apps/plugin-dialog": "^2",
     "@tauri-apps/plugin-opener": "^2.5.4",
     "class-variance-authority": "latest",

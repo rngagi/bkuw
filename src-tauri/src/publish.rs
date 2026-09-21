@@ -780,7 +780,16 @@ fn prepare(
             "targetHeadword":relation.target_entry_id.as_ref().and_then(|id| headword_by_id.get(id)),
             "fallbackText":relation.fallback_text,"sortOrder":relation.sort_order
         })).collect::<Vec<_>>() } else { Vec::new() };
-        json!({"id":entry.id,"slug":slugs.get(&entry.id),"primaryForm":primary_form,"notes":if settings.include_entry_notes {entry.notes.clone()} else {None},"forms":forms,"senses":senses,"relations":relations})
+        json!({
+            "id":entry.id,
+            "slug":slugs.get(&entry.id),
+            "sectionLabel":snapshot.export.sections.get(&entry.id).cloned().flatten(),
+            "primaryForm":primary_form,
+            "notes":if settings.include_entry_notes {entry.notes.clone()} else {None},
+            "forms":forms,
+            "senses":senses,
+            "relations":relations
+        })
     }).collect::<Vec<_>>();
     let info_html = settings
         .info_markdown
@@ -1642,8 +1651,9 @@ mod tests {
     use crate::{
         database::ProjectSession,
         domain::{
-            CreateProjectRequest, EntryForm, EntryRelation, Example, ExampleForm, SaveEntryRequest,
-            Sense, UpdateProjectSettingsRequest, WritingSystem,
+            CreateProjectRequest, EntryForm, EntryRelation, EntrySortMode, EntrySortSettingsV2,
+            EntrySortSource, Example, ExampleForm, ManualSortItem, ManualSortLayoutV1,
+            SaveEntryRequest, Sense, UpdateProjectSettingsRequest, WritingSystem,
         },
     };
     use std::{
@@ -2004,5 +2014,91 @@ mod tests {
             "private example note"
         );
         assert_eq!(source["relations"][0]["targetHeadword"], "guò");
+    }
+
+    #[test]
+    fn corpus_preserves_project_manual_order_and_section_labels() {
+        let directory = tempdir().unwrap();
+        let mut session = ProjectSession::create(CreateProjectRequest {
+            parent_dir: directory.path().to_string_lossy().into_owned(),
+            name: "Manual Publication Order".into(),
+            language_name: Some("Test".into()),
+            language_code: Some("tst".into()),
+        })
+        .unwrap();
+        let primary_id = session.snapshot().unwrap().writing_systems[0].id.clone();
+        let mut ids = Vec::new();
+        for text in ["alpha", "zeta"] {
+            let mut entry = session.create_entry().unwrap();
+            ids.push(entry.id.clone());
+            entry.forms.push(EntryForm {
+                id: format!("form-{text}"),
+                writing_system_id: primary_id.clone(),
+                text: text.into(),
+                variant_label: None,
+                dialect: None,
+                status: None,
+                notes: None,
+                sort_order: 0,
+            });
+            entry.senses.push(Sense {
+                id: format!("sense-{text}"),
+                gloss: Some(text.into()),
+                definition: None,
+                part_of_speech: None,
+                semantic_domain: None,
+                sort_order: 0,
+                examples: Vec::new(),
+            });
+            session
+                .save_entry(SaveEntryRequest {
+                    expected_revision: 0,
+                    entry,
+                })
+                .unwrap();
+        }
+        session
+            .save_manual_sort_layout(ManualSortLayoutV1 {
+                version: 1,
+                items: vec![
+                    ManualSortItem::Heading {
+                        id: "featured".into(),
+                        label: "Featured".into(),
+                    },
+                    ManualSortItem::Entry {
+                        entry_id: ids[1].clone(),
+                    },
+                    ManualSortItem::Heading {
+                        id: "regular".into(),
+                        label: "Regular".into(),
+                    },
+                    ManualSortItem::Entry {
+                        entry_id: ids[0].clone(),
+                    },
+                ],
+            })
+            .unwrap();
+        session
+            .save_entry_sort_settings(EntrySortSettingsV2 {
+                version: 2,
+                mode: EntrySortMode::Manual,
+                source: EntrySortSource::WritingSystem,
+                writing_system_id: primary_id,
+                alphabet: Vec::new(),
+            })
+            .unwrap();
+
+        let publication = prepare(
+            &session.publish_snapshot().unwrap(),
+            &session.load_publish_settings().unwrap(),
+        )
+        .unwrap();
+        let corpus: Value =
+            serde_json::from_slice(&publication.assets["/data/corpus.json"]).unwrap();
+        let entries = corpus["entries"].as_array().unwrap();
+        assert_eq!(entries[0]["primaryForm"], "zeta");
+        assert_eq!(entries[0]["sectionLabel"], "Featured");
+        assert_eq!(entries[1]["primaryForm"], "alpha");
+        assert_eq!(entries[1]["sectionLabel"], "Regular");
     }
 }
