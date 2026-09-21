@@ -113,6 +113,18 @@ Project 自動排序可選擇以 writing system 或語意類別分組。Writing-
 - 禁止 gradients、glassmorphism、oversized cards、decorative shadows 與無必要動畫。唯一動畫例外是啟動畫面的 bkuw 字樣：使用隨附的 Pacifico 字型，尊重 `prefers-reduced-motion`，且不等待字型背景檢查才顯示專案入口。
 - 不以紅色作為狀態的唯一線索；所有互動需具備 keyboard focus 與 accessible label。
 
+## 發佈公開辭典網站
+
+Header 提供「發佈網站」精靈；首次是設定並發佈，已有成功 deployment 時沿用同一組 Cloudflare 資源更新。精靈以新手可完成的 checklist 說明網站公開性、Workers Free plan、R2 checkout／免費額度與可能費用，並連到 Cloudflare 官方註冊、帳號與 R2 頁面。bkuw 只在使用者按下發佈時上傳，不背景同步。v1 固定使用 `workers.dev`，不處理自訂網域、網站刪除、回復、排程或 OAuth。
+
+使用者輸入 32 字元 Account ID，經預填頁面建立只含 Workers Scripts Edit 與 Workers R2 Storage Edit 的 API Token。Token 驗證成功後存入 macOS Keychain 或 Windows Credential Manager，不寫入 `.bkuw`、SQLite、log 或 React state；credential store 不可用時只保留至程式關閉並提示使用者。中斷連線只刪除本機 Token，不刪除公開資源。
+
+網站設定包含必填標題、選填 meta description、固定介面語言 `zh-TW`／`en`、選填的安全 Markdown info，以及 entry notes、example notes、root/base relations 與公開 writing systems。Primary writing system 必須公開，其餘系統可個別關閉。Markdown 支援標題、段落、粗斜體、清單、inline code 與 http(s)／mailto／頁內／相對連結；raw HTML 僅作文字顯示，不執行不安全 URL。Worker 與專用 R2 bucket 名稱在首次成功前可改，之後鎖定。
+
+檢查前 flush autosave，Rust 建立不可變 publication snapshot，顯示詞項、義項、例句與媒體數量、預計網址、上傳／保留／待刪除媒體及 bytes。主要詞形、媒體路徑與 SHA-256、Markdown link、writing-system selection 及 25 MiB corpus JSON 上限都在發佈前阻擋。正式網站為桌面雙欄、手機列表／細項介面，支援 Unicode case／diacritic folding、hash deep-link、單一音檔播放、圖片 lazy loading、keyboard focus、200% 文字縮放、reduced motion、選填 info，以及跟隨系統後可保存的亮暗切換。亮色按鈕顯示月亮，深色顯示太陽；右下固定連到 bkuw 網站的小膠囊。
+
+每個 project 使用一個 Worker 與一個專用 R2 bucket。網站程式與 `data/corpus.json` 使用 Workers Static Assets，圖片及 WebM 以 SHA-256 content-addressed key 放在 R2，Worker 以同網域提供 GET／HEAD／Range。更新只傳遠端缺少或大小不同的媒體；新 corpus digest、首頁與至少一個媒體線上驗證成功後才清理不再使用的 `media/` objects。bucket marker 與 Worker version annotation 不符時停止，不覆寫其他資源；清理失敗不讓已上線網站回報失敗，會保存 pending 狀態供下次重試。
+
 ## 語言支援
 
 App UI 必須完整支援 `en` 與 `zh-TW`。首次啟動依 OS locale 決定，不支援時 fallback 至 English。使用者可在 app settings 即時切換並持久保存，不需重啟。

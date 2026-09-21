@@ -20,9 +20,10 @@ use crate::{
         DeletedEntry, EntryForm, EntryRelation, EntrySenseSummary, EntrySortMode,
         EntrySortSettingsV2, EntrySortSource, EntrySummary, Example, ExampleForm, ExportSettingsV1,
         FontPreset, LatexExportSettings, LexicalEntry, ManualSortLayoutV1, Project,
-        ProjectSnapshot, RelatedEntriesMode, RemoveSenseImageRequest, ReverseIndexMode,
-        SaveEntryRequest, SectionMode, Sense, SenseImage, SenseImageContent, SenseImageMutation,
-        UpdateProjectSettingsRequest, WritingSystem,
+        ProjectSnapshot, PublishDeploymentState, PublishSettingsV1, RelatedEntriesMode,
+        RemoveSenseImageRequest, ReverseIndexMode, SaveEntryRequest, SectionMode, Sense,
+        SenseImage, SenseImageContent, SenseImageMutation, UpdateProjectSettingsRequest,
+        WritingSystem,
     },
     error::{AppError, AppResult},
     search::{normalize_text, search_key},
@@ -34,7 +35,8 @@ const EXPORT_SETTINGS_MIGRATION: &str = include_str!("../migrations/003_export_s
 const ENTRY_ORDERING_MIGRATION: &str = include_str!("../migrations/004_entry_ordering.sql");
 const SENSE_SEARCH_MIGRATION: &str = include_str!("../migrations/005_sense_search.sql");
 const SENSE_IMAGES_MIGRATION: &str = include_str!("../migrations/006_sense_images.sql");
-const LATEST_SCHEMA_VERSION: i64 = 7;
+const PUBLISH_SITE_MIGRATION: &str = include_str!("../migrations/008_publish_site.sql");
+const LATEST_SCHEMA_VERSION: i64 = 8;
 
 pub struct ProjectSession {
     root: PathBuf,
@@ -890,6 +892,165 @@ impl ProjectSession {
             sense_images: load_export_sense_images(&self.connection)?,
         })
     }
+
+    pub(crate) fn publish_snapshot(&self) -> AppResult<crate::publish::PublishSnapshot> {
+        let export = self.export_snapshot()?;
+        let mut audio = Vec::new();
+        let mut statement = self.connection.prepare(
+            "SELECT id, sense_id, example_id, relative_path, original_filename, duration_ms,
+                    byte_size, sha256, sort_order
+             FROM audio_attachments ORDER BY sort_order, id",
+        )?;
+        let rows = statement.query_map([], |row| {
+            Ok(crate::publish::PublishAudio {
+                id: row.get(0)?,
+                sense_id: row.get(1)?,
+                example_id: row.get(2)?,
+                relative_path: row.get(3)?,
+                original_filename: row.get(4)?,
+                duration_ms: row.get::<_, i64>(5)?,
+                byte_size: row.get::<_, i64>(6)?,
+                sha256: row.get(7)?,
+                sort_order: row.get(8)?,
+            })
+        })?;
+        for row in rows {
+            audio.push(row?);
+        }
+        Ok(crate::publish::PublishSnapshot { export, audio })
+    }
+
+    pub fn load_publish_settings(&self) -> AppResult<PublishSettingsV1> {
+        let project = load_project(&self.connection)?;
+        let writing_systems = load_writing_systems(&self.connection)?;
+        let stored = self
+            .connection
+            .query_row(
+                "SELECT settings_json FROM publish_settings WHERE project_id = ?1",
+                params![project.id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()?;
+        if let Some(json) = stored {
+            let settings = serde_json::from_str(&json).map_err(|error| {
+                AppError::with_details(
+                    "publish_settings_invalid",
+                    "The saved website settings are invalid.",
+                    error.to_string(),
+                )
+            })?;
+            return Ok(settings);
+        }
+        let stem = crate::publish::resource_stem(&project.name, &project.id);
+        Ok(PublishSettingsV1 {
+            version: 1,
+            title: project
+                .language_name
+                .filter(|value| !value.trim().is_empty())
+                .map(|value| format!("{value}線上辭典"))
+                .unwrap_or_else(|| project.name.clone()),
+            description: project.description,
+            locale: project.analysis_language.unwrap_or_else(|| "zh-TW".into()),
+            info_markdown: None,
+            include_entry_notes: false,
+            include_example_notes: false,
+            include_relations: false,
+            writing_system_ids: writing_systems.into_iter().map(|value| value.id).collect(),
+            worker_name: stem.clone(),
+            bucket_name: format!("{stem}-media"),
+        })
+    }
+
+    pub fn save_publish_settings(
+        &mut self,
+        settings: PublishSettingsV1,
+    ) -> AppResult<PublishSettingsV1> {
+        crate::publish::validate_settings(&settings, &self.snapshot()?.writing_systems)?;
+        if let Some(deployment) = self.load_publish_deployment()?
+            && (settings.worker_name != deployment.worker_name
+                || settings.bucket_name != deployment.bucket_name)
+        {
+            return Err(AppError::new(
+                "publish_resource_locked",
+                "Worker and bucket names cannot change after the first publish.",
+            ));
+        }
+        let project_id: String =
+            self.connection
+                .query_row("SELECT id FROM projects LIMIT 1", [], |row| row.get(0))?;
+        let json = serde_json::to_string(&settings).map_err(|error| {
+            AppError::with_details(
+                "publish_settings_invalid",
+                "The website settings could not be saved.",
+                error.to_string(),
+            )
+        })?;
+        self.connection.execute(
+            "INSERT INTO publish_settings(project_id, version, settings_json, updated_at)
+             VALUES (?1, 1, ?2, ?3)
+             ON CONFLICT(project_id) DO UPDATE SET settings_json=excluded.settings_json,
+               updated_at=excluded.updated_at",
+            params![project_id, json, now()],
+        )?;
+        Ok(settings)
+    }
+
+    pub fn load_publish_deployment(&self) -> AppResult<Option<PublishDeploymentState>> {
+        self.connection
+            .query_row(
+                "SELECT account_id, worker_name, bucket_name, workers_subdomain, public_url,
+                        worker_version_id, corpus_sha256, last_published_at, cleanup_pending
+                 FROM publish_deployments LIMIT 1",
+                [],
+                |row| {
+                    Ok(PublishDeploymentState {
+                        version: 1,
+                        account_id: row.get(0)?,
+                        worker_name: row.get(1)?,
+                        bucket_name: row.get(2)?,
+                        workers_subdomain: row.get(3)?,
+                        public_url: row.get(4)?,
+                        worker_version_id: row.get(5)?,
+                        corpus_sha256: row.get(6)?,
+                        last_published_at: row.get(7)?,
+                        cleanup_pending: row.get::<_, i64>(8)? != 0,
+                    })
+                },
+            )
+            .optional()
+            .map_err(Into::into)
+    }
+
+    pub fn save_publish_deployment(&mut self, value: &PublishDeploymentState) -> AppResult<()> {
+        let project_id: String =
+            self.connection
+                .query_row("SELECT id FROM projects LIMIT 1", [], |row| row.get(0))?;
+        self.connection.execute(
+            "INSERT INTO publish_deployments(
+               project_id, version, account_id, worker_name, bucket_name, workers_subdomain,
+               public_url, worker_version_id, corpus_sha256, last_published_at, cleanup_pending)
+             VALUES (?1, 1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+             ON CONFLICT(project_id) DO UPDATE SET account_id=excluded.account_id,
+               worker_name=excluded.worker_name, bucket_name=excluded.bucket_name,
+               workers_subdomain=excluded.workers_subdomain, public_url=excluded.public_url,
+               worker_version_id=excluded.worker_version_id, corpus_sha256=excluded.corpus_sha256,
+               last_published_at=excluded.last_published_at,
+               cleanup_pending=excluded.cleanup_pending",
+            params![
+                project_id,
+                value.account_id,
+                value.worker_name,
+                value.bucket_name,
+                value.workers_subdomain,
+                value.public_url,
+                value.worker_version_id,
+                value.corpus_sha256,
+                value.last_published_at,
+                i64::from(value.cleanup_pending),
+            ],
+        )?;
+        Ok(())
+    }
 }
 
 fn load_live_entries(connection: &Connection) -> AppResult<HashMap<String, LexicalEntry>> {
@@ -1193,6 +1354,13 @@ fn migrate(connection: &mut Connection, root: &Path) -> AppResult<()> {
             params![now()],
         )?;
     }
+    if current < 8 {
+        transaction.execute_batch(PUBLISH_SITE_MIGRATION)?;
+        transaction.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (8, ?1)",
+            params![now()],
+        )?;
+    }
     transaction.commit()?;
     Ok(())
 }
@@ -1258,7 +1426,8 @@ fn load_export_sense_images(
     connection: &Connection,
 ) -> AppResult<Vec<crate::export::ExportSenseImage>> {
     let mut statement = connection.prepare(
-        "SELECT i.id, i.sense_id, i.relative_path, i.sha256
+        "SELECT i.id, i.sense_id, i.relative_path, i.original_filename,
+                i.width, i.height, i.byte_size, i.sha256
          FROM sense_images i
          JOIN senses s ON s.id = i.sense_id
          JOIN lexical_entries e ON e.id = s.entry_id
@@ -1270,7 +1439,11 @@ fn load_export_sense_images(
             id: row.get(0)?,
             sense_id: row.get(1)?,
             relative_path: row.get(2)?,
-            sha256: row.get(3)?,
+            original_filename: row.get(3)?,
+            width: row.get(4)?,
+            height: row.get(5)?,
+            byte_size: row.get(6)?,
+            sha256: row.get(7)?,
         })
     })?;
     rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
@@ -2305,8 +2478,8 @@ mod tests {
         AttachSenseImageRequest, CorpusPartOfSpeech, CreateProjectRequest, DeleteEntryRequest,
         EntryForm, EntryRelation, EntrySortMode, EntrySortSettingsV2, EntrySortSource, Example,
         ExampleForm, ExportKind, ExportProjectRequest, FontPreset, ManualSortItem,
-        ManualSortLayoutV1, RelatedEntriesMode, RemoveSenseImageRequest, SaveEntryRequest, Sense,
-        UpdateProjectSettingsRequest, WritingSystem,
+        ManualSortLayoutV1, PublishDeploymentState, RelatedEntriesMode, RemoveSenseImageRequest,
+        SaveEntryRequest, Sense, UpdateProjectSettingsRequest, WritingSystem,
     };
     use crate::font_manager::FontManager;
 
@@ -2333,6 +2506,56 @@ mod tests {
             .write_to(&mut output, image::ImageFormat::Png)
             .expect("encode test PNG");
         output.into_inner()
+    }
+
+    #[test]
+    fn publish_settings_persist_without_credentials_and_resource_names_lock_after_publish() {
+        let (_directory, mut session) = create_session();
+        let mut settings = session.load_publish_settings().expect("default settings");
+        settings.title = "Public Test Dictionary".into();
+        settings.info_markdown = Some("# About\n\nPublic information.".into());
+        settings.include_entry_notes = true;
+        session
+            .save_publish_settings(settings.clone())
+            .expect("save settings");
+        session
+            .save_publish_deployment(&PublishDeploymentState {
+                version: 1,
+                account_id: "0123456789abcdef0123456789abcdef".into(),
+                worker_name: settings.worker_name.clone(),
+                bucket_name: settings.bucket_name.clone(),
+                workers_subdomain: "test-dictionary".into(),
+                public_url: format!(
+                    "https://{}.test-dictionary.workers.dev",
+                    settings.worker_name
+                ),
+                worker_version_id: Some("version-1".into()),
+                corpus_sha256: "0".repeat(64),
+                last_published_at: "2026-09-21T00:00:00Z".into(),
+                cleanup_pending: false,
+            })
+            .expect("save deployment");
+        let root = session.snapshot().expect("snapshot").root_path;
+        session.close().expect("close");
+
+        let mut reopened = ProjectSession::open(root).expect("reopen");
+        assert_eq!(reopened.load_publish_settings().expect("reload"), settings);
+        let stored: String = reopened
+            .connection
+            .query_row("SELECT settings_json FROM publish_settings", [], |row| {
+                row.get(0)
+            })
+            .expect("stored json");
+        assert!(!stored.to_ascii_lowercase().contains("token"));
+        let mut changed = settings;
+        changed.worker_name.push_str("-other");
+        assert_eq!(
+            reopened
+                .save_publish_settings(changed)
+                .expect_err("resource names are locked")
+                .code,
+            "publish_resource_locked"
+        );
     }
 
     #[test]

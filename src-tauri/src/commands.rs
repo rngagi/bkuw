@@ -5,12 +5,14 @@ use tauri::{AppHandle, Manager, State, ipc::Channel};
 use crate::{
     database::ProjectSession,
     domain::{
-        AttachSenseImageRequest, CreateProjectFromCsvRequest, CreateProjectRequest, CsvDelimiter,
-        CsvImportPreview, CsvImportResult, CsvInspection, CsvPreviewRequest, DeleteEntryRequest,
-        DeletedEntry, EntrySortSettingsV2, EntrySummary, ExportKind, ExportPreview,
-        ExportProjectRequest, ExportResult, ExportSettingsV1, FontInstallProgress, FontPackStatus,
-        LexicalEntry, ManualSortLayoutV1, ProjectSnapshot, RemoveSenseImageRequest,
-        SaveEntryRequest, SenseImage, SenseImageContent, SenseImageMutation, TexEngineStatus,
+        AttachSenseImageRequest, CloudflareConnectionStatus, ConnectCloudflareRequest,
+        CreateProjectFromCsvRequest, CreateProjectRequest, CsvDelimiter, CsvImportPreview,
+        CsvImportResult, CsvInspection, CsvPreviewRequest, DeleteEntryRequest, DeletedEntry,
+        EntrySortSettingsV2, EntrySummary, ExportKind, ExportPreview, ExportProjectRequest,
+        ExportResult, ExportSettingsV1, FontInstallProgress, FontPackStatus, LexicalEntry,
+        ManualSortLayoutV1, ProjectSnapshot, PublishPreview, PublishProgress, PublishRequest,
+        PublishResult, PublishSettingsV1, PublishState, RemoveSenseImageRequest, SaveEntryRequest,
+        SenseImage, SenseImageContent, SenseImageMutation, TexEngineStatus,
         UpdateProjectSettingsRequest,
     },
     error::{AppError, AppResult},
@@ -35,6 +37,224 @@ fn font_manager(app: &AppHandle) -> AppResult<crate::font_manager::FontManager> 
 pub struct AppState {
     session: Mutex<Option<ProjectSession>>,
     latex_installer: crate::export::environment::InstallerState,
+    publish_runtime: crate::publish::PublishRuntime,
+}
+
+#[tauri::command]
+pub fn get_publish_state(state: State<'_, AppState>) -> AppResult<PublishState> {
+    let guard = active_session(&state)?;
+    let session = guard
+        .as_ref()
+        .ok_or_else(|| AppError::new("no_project", "No project is currently open."))?;
+    let settings = session.load_publish_settings()?;
+    let deployment = session.load_publish_deployment()?;
+    let connection = crate::publish::connection_status(
+        &state.publish_runtime,
+        deployment.as_ref().map(|value| value.account_id.as_str()),
+        deployment
+            .as_ref()
+            .map(|value| value.workers_subdomain.clone()),
+    );
+    Ok(PublishState {
+        settings,
+        deployment,
+        connection,
+    })
+}
+
+#[tauri::command]
+pub fn get_cloudflare_token_url(account_id: String) -> AppResult<String> {
+    crate::publish::token_template_url(account_id.trim())
+}
+
+#[tauri::command]
+pub async fn connect_cloudflare(
+    app: AppHandle,
+    request: ConnectCloudflareRequest,
+) -> AppResult<CloudflareConnectionStatus> {
+    run_blocking(move || {
+        let state = app.state::<AppState>();
+        crate::publish::connect(
+            &state.publish_runtime,
+            request.account_id.trim(),
+            request.api_token.trim(),
+            request.requested_subdomain.as_deref(),
+        )
+    })
+    .await
+}
+
+#[tauri::command]
+pub fn disconnect_cloudflare(state: State<'_, AppState>, account_id: String) {
+    state.publish_runtime.disconnect(account_id.trim());
+}
+
+#[tauri::command]
+pub fn save_publish_settings(
+    state: State<'_, AppState>,
+    settings: PublishSettingsV1,
+) -> AppResult<PublishSettingsV1> {
+    let mut guard = active_session(&state)?;
+    guard
+        .as_mut()
+        .ok_or_else(|| AppError::new("no_project", "No project is currently open."))?
+        .save_publish_settings(settings)
+}
+
+#[tauri::command]
+pub async fn preview_publish(app: AppHandle) -> AppResult<PublishPreview> {
+    let (snapshot, settings, account_id) = {
+        let state = app.state::<AppState>();
+        let guard = active_session(&state)?;
+        let session = guard
+            .as_ref()
+            .ok_or_else(|| AppError::new("no_project", "No project is currently open."))?;
+        let deployment = session.load_publish_deployment()?;
+        (
+            session.publish_snapshot()?,
+            session.load_publish_settings()?,
+            deployment
+                .map(|value| value.account_id)
+                .or_else(|| state.publish_runtime.active_account()),
+        )
+    };
+    run_blocking(move || {
+        let state = app.state::<AppState>();
+        crate::publish::preview(
+            &snapshot,
+            &settings,
+            &state.publish_runtime,
+            account_id.as_deref(),
+        )
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn publish_site(
+    app: AppHandle,
+    request: PublishRequest,
+    on_progress: Channel<PublishProgress>,
+) -> AppResult<PublishResult> {
+    let (snapshot, settings, account_id, project_id) = {
+        let state = app.state::<AppState>();
+        let guard = active_session(&state)?;
+        let session = guard
+            .as_ref()
+            .ok_or_else(|| AppError::new("no_project", "No project is currently open."))?;
+        let snapshot = session.publish_snapshot()?;
+        let project_id = snapshot.export.project.id.clone();
+        let deployment = session.load_publish_deployment()?;
+        let account_id = deployment
+            .as_ref()
+            .map(|value| value.account_id.clone())
+            .or_else(|| state.publish_runtime.active_account())
+            .ok_or_else(|| {
+                AppError::new(
+                    "cloudflare_not_connected",
+                    "Connect Cloudflare before publishing.",
+                )
+            })?;
+        (
+            snapshot,
+            session.load_publish_settings()?,
+            account_id,
+            project_id,
+        )
+    };
+    let app_for_publish = app.clone();
+    let (result, saved_deployment) = run_blocking(move || {
+        let state = app_for_publish.state::<AppState>();
+        crate::publish::publish(
+            &snapshot,
+            &settings,
+            &account_id,
+            &request.snapshot_token,
+            &state.publish_runtime,
+            &on_progress,
+        )
+    })
+    .await?;
+    let state = app.state::<AppState>();
+    let mut guard = active_session(&state)?;
+    let session = guard
+        .as_mut()
+        .ok_or_else(|| AppError::new("no_project", "No project is currently open."))?;
+    if session.snapshot()?.project.id != project_id {
+        return Err(AppError::new(
+            "project_changed",
+            "Another project was opened while publishing.",
+        ));
+    }
+    session.save_publish_deployment(&saved_deployment)?;
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn cancel_publish(state: State<'_, AppState>) {
+    state.publish_runtime.cancel();
+}
+
+#[tauri::command]
+pub async fn retry_publish_cleanup(app: AppHandle) -> AppResult<usize> {
+    let (snapshot, settings, deployment, project_id) = {
+        let state = app.state::<AppState>();
+        let guard = active_session(&state)?;
+        let session = guard
+            .as_ref()
+            .ok_or_else(|| AppError::new("no_project", "No project is currently open."))?;
+        let deployment = session.load_publish_deployment()?.ok_or_else(|| {
+            AppError::new(
+                "publish_not_deployed",
+                "This project has not been published.",
+            )
+        })?;
+        let snapshot = session.publish_snapshot()?;
+        let project_id = snapshot.export.project.id.clone();
+        (
+            snapshot,
+            session.load_publish_settings()?,
+            deployment,
+            project_id,
+        )
+    };
+    let app_for_cleanup = app.clone();
+    let deleted = run_blocking(move || {
+        let state = app_for_cleanup.state::<AppState>();
+        crate::publish::retry_cleanup_for_snapshot(
+            &state.publish_runtime,
+            &deployment,
+            &snapshot,
+            &settings,
+        )
+    })
+    .await?;
+    let state = app.state::<AppState>();
+    let mut guard = active_session(&state)?;
+    if guard
+        .as_ref()
+        .ok_or_else(|| AppError::new("no_project", "No project is currently open."))?
+        .snapshot()?
+        .project
+        .id
+        != project_id
+    {
+        return Err(AppError::new(
+            "project_changed",
+            "Another project was opened while cleaning website media.",
+        ));
+    }
+    if let Some(mut deployment) = guard
+        .as_ref()
+        .and_then(|session| session.load_publish_deployment().ok().flatten())
+    {
+        deployment.cleanup_pending = false;
+        guard
+            .as_mut()
+            .ok_or_else(|| AppError::new("no_project", "No project is currently open."))?
+            .save_publish_deployment(&deployment)?;
+    }
+    Ok(deleted)
 }
 
 fn lock_state<'a>(

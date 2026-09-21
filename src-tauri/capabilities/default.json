@@ -49,6 +49,15 @@
         },
         {
           "url": "https://miktex.org/howto/miktex-console"
+        },
+        {
+          "url": "https://dash.cloudflare.com/*"
+        },
+        {
+          "url": "https://developers.cloudflare.com/*"
+        },
+        {
+          "url": "https://*.workers.dev/*"
         }
       ]
     }

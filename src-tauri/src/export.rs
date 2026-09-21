@@ -69,6 +69,10 @@ pub(crate) struct ExportSenseImage {
     pub id: String,
     pub sense_id: String,
     pub relative_path: String,
+    pub original_filename: String,
+    pub width: u32,
+    pub height: u32,
+    pub byte_size: u64,
     pub sha256: String,
 }
 

@@ -569,6 +569,122 @@ pub struct ProjectSnapshot {
     pub entries: Vec<EntrySummary>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PublishSettingsV1 {
+    pub version: u8,
+    pub title: String,
+    pub description: Option<String>,
+    pub locale: String,
+    pub info_markdown: Option<String>,
+    pub include_entry_notes: bool,
+    pub include_example_notes: bool,
+    pub include_relations: bool,
+    pub writing_system_ids: Vec<String>,
+    pub worker_name: String,
+    pub bucket_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PublishDeploymentState {
+    pub version: u8,
+    pub account_id: String,
+    pub worker_name: String,
+    pub bucket_name: String,
+    pub workers_subdomain: String,
+    pub public_url: String,
+    pub worker_version_id: Option<String>,
+    pub corpus_sha256: String,
+    pub last_published_at: String,
+    pub cleanup_pending: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CloudflareConnectionStatus {
+    pub connected: bool,
+    pub account_id: Option<String>,
+    pub workers_subdomain: Option<String>,
+    pub credential_persisted: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PublishState {
+    pub settings: PublishSettingsV1,
+    pub deployment: Option<PublishDeploymentState>,
+    pub connection: CloudflareConnectionStatus,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectCloudflareRequest {
+    pub account_id: String,
+    pub api_token: String,
+    pub requested_subdomain: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum PublishIssueSeverity {
+    Error,
+    Warning,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PublishIssue {
+    pub severity: PublishIssueSeverity,
+    pub code: String,
+    pub entry_id: Option<String>,
+    pub details: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PublishPreview {
+    pub snapshot_token: String,
+    pub public_url: Option<String>,
+    pub entry_count: usize,
+    pub sense_count: usize,
+    pub example_count: usize,
+    pub image_count: usize,
+    pub audio_count: usize,
+    pub upload_media_count: usize,
+    pub unchanged_media_count: usize,
+    pub delete_media_count: usize,
+    pub upload_bytes: u64,
+    pub issues: Vec<PublishIssue>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PublishProgress {
+    pub phase: String,
+    pub completed_items: usize,
+    pub total_items: usize,
+    pub uploaded_bytes: u64,
+    pub total_bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PublishRequest {
+    pub snapshot_token: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct PublishResult {
+    pub public_url: String,
+    pub uploaded_media_count: usize,
+    pub unchanged_media_count: usize,
+    pub deleted_media_count: usize,
+    pub cleanup_pending: bool,
+    pub last_published_at: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateProjectRequest {

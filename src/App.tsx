@@ -1,12 +1,13 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Group, Panel, Separator } from "react-resizable-panels";
-import { FileOutput, FolderX, ListOrdered, Plus, Search, Settings } from "lucide-react";
+import { CloudUpload, FileOutput, FolderX, ListOrdered, Plus, Search, Settings } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "./components/ui/Button";
 import { EntryEditor, type EntryEditorHandle } from "./features/entries/EntryEditor";
 import { EntryList } from "./features/entries/EntryList";
 import { ExportDialog } from "./features/export/ExportDialog";
+import { PublishDialog } from "./features/publish/PublishDialog";
 import { FontManagerButton, type FontStatus } from "./features/fonts/FontManagerButton";
 import { FontSetup } from "./features/fonts/FontSetup";
 import { LocaleSelect } from "./features/projects/LocaleSelect";
@@ -57,6 +58,8 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sortOrderOpen, setSortOrderOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [websitePublished, setWebsitePublished] = useState(false);
   const [onboarding, setOnboarding] = useState(false);
   const [error, setError] = useState<{ key: string; detail?: string } | null>(null);
   const [deletedId, setDeletedId] = useState<string | null>(null);
@@ -104,6 +107,13 @@ function App() {
     const timer = setTimeout(() => void refreshEntries(search), 180);
     return () => clearTimeout(timer);
   }, [refreshEntries, search, snapshot?.project.id]);
+
+  useEffect(() => {
+    if (!snapshot) { setWebsitePublished(false); return; }
+    let active = true;
+    void backend.getPublishState().then((value) => { if (active) setWebsitePublished(Boolean(value.deployment)); }).catch(() => undefined);
+    return () => { active = false; };
+  }, [snapshot?.project.id]);
 
   async function flush() {
     return editorRef.current?.flush();
@@ -241,7 +251,7 @@ function App() {
     <main className="app-shell">
       <header className="app-header">
         <div className="project-title"><strong>bkuw</strong><span aria-hidden="true">/</span><span>{snapshot.project.name}</span></div>
-        <div className="header-actions"><div className="header-preferences"><LocaleSelect /><FontManagerButton status={fontStatus} onClick={() => setFontManagerOpen(true)} /></div>{snapshot.entrySortSettings.mode === "manual" && <Button size="small" onClick={() => setSortOrderOpen(true)}><ListOrdered size={15} />{t("sorting.manageManual")}</Button>}<Button size="small" onClick={() => setExportOpen(true)}><FileOutput size={15} />{t("export.title")}</Button><Button size="small" onClick={() => { setOnboarding(false); setSettingsOpen(true); }}><Settings size={15} />{t("common.settings")}</Button><Button size="small" variant="ghost" onClick={() => void closeProject()}><FolderX size={15} />{t("workspace.closeProject")}</Button></div>
+        <div className="header-actions"><div className="header-preferences"><LocaleSelect /><FontManagerButton status={fontStatus} onClick={() => setFontManagerOpen(true)} /></div>{snapshot.entrySortSettings.mode === "manual" && <Button size="small" onClick={() => setSortOrderOpen(true)}><ListOrdered size={15} />{t("sorting.manageManual")}</Button>}<Button size="small" onClick={() => setPublishOpen(true)}><CloudUpload size={15} />{websitePublished ? t("publish.update") : t("publish.title")}</Button><Button size="small" onClick={() => setExportOpen(true)}><FileOutput size={15} />{t("export.title")}</Button><Button size="small" onClick={() => { setOnboarding(false); setSettingsOpen(true); }}><Settings size={15} />{t("common.settings")}</Button><Button size="small" variant="ghost" onClick={() => void closeProject()}><FolderX size={15} />{t("workspace.closeProject")}</Button></div>
       </header>
       {error && <ErrorBanner error={error} onClose={() => setError(null)} />}
       <Group orientation="horizontal" className="workspace">
@@ -258,6 +268,7 @@ function App() {
       <SettingsDialog open={settingsOpen} onboarding={onboarding} snapshot={snapshot} onOpenChange={(open) => { setSettingsOpen(open); if (!open) setOnboarding(false); }} onSave={saveSettings} onManageManual={() => setSortOrderOpen(true)} onManageFonts={() => { setSettingsOpen(false); setFontManagerOpen(true); }} />
       <SortOrderDialog open={sortOrderOpen} snapshot={snapshot} onOpenChange={setSortOrderOpen} onSave={saveManualSortLayout} />
       <ExportDialog open={exportOpen} snapshot={snapshot} onOpenChange={setExportOpen} onFlush={flush} onSetAnalysisLanguage={setAnalysisLanguage} onNavigateEntry={(id) => { setExportOpen(false); void selectEntry(id); }} />
+      <PublishDialog open={publishOpen} snapshot={snapshot} onOpenChange={setPublishOpen} onFlush={flush} onDeploymentChange={setWebsitePublished} />
       {fontManagerOpen && <div className="font-manager-overlay"><FontSetup autoContinue={false} canClose onContinue={() => { setFontManagerOpen(false); void checkFonts(); }} /></div>}
     </main>
   );

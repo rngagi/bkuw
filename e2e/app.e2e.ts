@@ -6,16 +6,18 @@ import { $, browser, expect } from "@wdio/globals";
 
 describe("bkuw desktop shell", () => {
   it("renders the detected locale and opens the project dialog", async () => {
+    const chinese = (await $("html").getAttribute("lang")).startsWith("zh");
     const heading = await $("h1");
-    await expect(heading).toBeDisplayed();
+    await heading.waitForDisplayed({ timeout: 15_000 });
     const initialHeading = await heading.getText();
     if (initialHeading.includes("可攜字型") || initialHeading.includes("portable fonts")) {
       const chineseFonts = initialHeading.includes("可攜字型");
       await $(chineseFonts ? "button=下載全部字型" : "button=Download all fonts").click();
       await browser.waitUntil(async () => !(await $("h1").getText()).includes(chineseFonts ? "可攜字型" : "portable fonts"), { timeout: 180_000, timeoutMsg: "portable font setup did not finish" });
     }
-    const chinese = (await $("h1").getText()).includes("詞彙專案");
-    await $(chinese ? "button=建立專案" : "button=Create project").click();
+    const createButton = await $(chinese ? "button=建立專案" : "button=Create project");
+    await createButton.waitForDisplayed({ timeout: 15_000 });
+    await createButton.click();
     await expect($("[role=dialog]")).toBeDisplayed();
     await expect($("[role=dialog] h2")).toHaveText(chinese ? "建立專案" : "Create project");
   });

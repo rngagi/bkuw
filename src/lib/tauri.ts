@@ -23,6 +23,8 @@ import {
   type FontInstallProgress, type ProjectSnapshot,
   type CsvDelimiter, type CsvPreviewRequest,
   type WritingSystem,
+  publishSettingsSchema, publishStateSchema, publishPreviewSchema, publishProgressSchema,
+  publishResultSchema, cloudflareConnectionSchema, type PublishSettings, type PublishProgress,
 } from "../types/domain";
 
 const commandErrorSchema = z.object({
@@ -74,7 +76,56 @@ export const exportHelpUrls = {
   "miktex": "https://miktex.org/howto/miktex-console"
 } as const;
 
+export const publishHelpUrls = {
+  signup: "https://dash.cloudflare.com/sign-up",
+  account: "https://dash.cloudflare.com/",
+  r2: "https://dash.cloudflare.com/?to=/:account/r2/overview",
+  workersPricing: "https://developers.cloudflare.com/workers/platform/pricing/",
+  r2GettingStarted: "https://developers.cloudflare.com/r2/get-started/",
+  accountSetup: "https://developers.cloudflare.com/fundamentals/account/create-account/",
+} as const;
+
 export const backend = {
+  openPublishHelp(topic: keyof typeof publishHelpUrls): Promise<void> {
+    return openUrl(publishHelpUrls[topic]);
+  },
+  openPublicWebsite(url: string): Promise<void> {
+    if (!/^https:\/\/[a-z0-9-]+\.[a-z0-9-]+\.workers\.dev\/?$/i.test(url)) return Promise.reject(new Error("Invalid workers.dev URL"));
+    return openUrl(url);
+  },
+  getPublishState() {
+    return call("get_publish_state", {}, publishStateSchema);
+  },
+  getCloudflareTokenUrl(accountId: string) {
+    return call("get_cloudflare_token_url", { accountId }, z.string());
+  },
+  async openCloudflareTokenPage(accountId: string): Promise<void> {
+    const url = await call("get_cloudflare_token_url", { accountId }, z.string());
+    return openUrl(url);
+  },
+  connectCloudflare(request: { accountId: string; apiToken: string; requestedSubdomain: string | null }) {
+    return call("connect_cloudflare", { request }, cloudflareConnectionSchema);
+  },
+  disconnectCloudflare(accountId: string): Promise<void> {
+    return call("disconnect_cloudflare", { accountId }, z.null()).then(() => undefined);
+  },
+  savePublishSettings(settings: PublishSettings) {
+    return call("save_publish_settings", { settings }, publishSettingsSchema);
+  },
+  previewPublish() {
+    return call("preview_publish", {}, publishPreviewSchema);
+  },
+  publishSite(snapshotToken: string, onProgress: (progress: PublishProgress) => void) {
+    const channel = new Channel<unknown>();
+    channel.onmessage = (message) => onProgress(publishProgressSchema.parse(message));
+    return call("publish_site", { request: { snapshotToken }, onProgress: channel }, publishResultSchema);
+  },
+  cancelPublish(): Promise<void> {
+    return call("cancel_publish", {}, z.null()).then(() => undefined);
+  },
+  retryPublishCleanup() {
+    return call("retry_publish_cleanup", {}, z.number());
+  },
   openLanguageCodeRegistry(): Promise<void> {
     return openUrl("https://iso639-3.sil.org/code_tables/639/data");
   },

@@ -6,6 +6,7 @@ mod error;
 mod export;
 mod font_manager;
 mod ordering;
+mod publish;
 mod search;
 
 use commands::AppState;
@@ -61,6 +62,15 @@ pub fn run() {
             commands::inspect_csv,
             commands::preview_csv_import,
             commands::create_project_from_csv,
+            commands::get_publish_state,
+            commands::get_cloudflare_token_url,
+            commands::connect_cloudflare,
+            commands::disconnect_cloudflare,
+            commands::save_publish_settings,
+            commands::preview_publish,
+            commands::publish_site,
+            commands::cancel_publish,
+            commands::retry_publish_cleanup,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

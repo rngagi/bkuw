@@ -348,3 +348,45 @@ export const audioContentSchema = z.object({ mimeType: z.literal("audio/webm"), 
 export type AudioMutation = z.infer<typeof audioMutationSchema>;
 export type AudioOwner = z.infer<typeof audioOwnerSchema>;
 export type AudioAttachment = z.infer<typeof audioAttachmentSchema>;
+
+export const publishSettingsSchema = z.object({
+  version: z.literal(1), title: z.string(), description: nullableText,
+  locale: z.enum(["zh-TW", "en"]), infoMarkdown: nullableText,
+  includeEntryNotes: z.boolean(), includeExampleNotes: z.boolean(), includeRelations: z.boolean(),
+  writingSystemIds: z.array(z.string()), workerName: z.string(), bucketName: z.string(),
+});
+export const cloudflareConnectionSchema = z.object({
+  connected: z.boolean(), accountId: nullableText, workersSubdomain: nullableText,
+  credentialPersisted: z.boolean(),
+});
+export const publishDeploymentSchema = z.object({
+  version: z.literal(1), accountId: z.string(), workerName: z.string(), bucketName: z.string(),
+  workersSubdomain: z.string(), publicUrl: z.string(), workerVersionId: nullableText,
+  corpusSha256: z.string(), lastPublishedAt: z.string(), cleanupPending: z.boolean(),
+});
+export const publishStateSchema = z.object({
+  settings: publishSettingsSchema, deployment: publishDeploymentSchema.nullable(),
+  connection: cloudflareConnectionSchema,
+});
+export const publishIssueSchema = z.object({
+  severity: z.enum(["error", "warning"]), code: z.string(), entryId: nullableText, details: nullableText,
+});
+export const publishPreviewSchema = z.object({
+  snapshotToken: z.string(), publicUrl: nullableText,
+  entryCount: z.number(), senseCount: z.number(), exampleCount: z.number(), imageCount: z.number(), audioCount: z.number(),
+  uploadMediaCount: z.number(), unchangedMediaCount: z.number(), deleteMediaCount: z.number(), uploadBytes: z.number(),
+  issues: z.array(publishIssueSchema),
+});
+export const publishProgressSchema = z.object({
+  phase: z.enum(["validating", "preparing", "uploadingMedia", "uploadingAssets", "deploying", "verifying", "cleaning", "complete"]),
+  completedItems: z.number(), totalItems: z.number(), uploadedBytes: z.number(), totalBytes: z.number(),
+});
+export const publishResultSchema = z.object({
+  publicUrl: z.string(), uploadedMediaCount: z.number(), unchangedMediaCount: z.number(),
+  deletedMediaCount: z.number(), cleanupPending: z.boolean(), lastPublishedAt: z.string(),
+});
+export type PublishSettings = z.infer<typeof publishSettingsSchema>;
+export type PublishState = z.infer<typeof publishStateSchema>;
+export type PublishPreview = z.infer<typeof publishPreviewSchema>;
+export type PublishProgress = z.infer<typeof publishProgressSchema>;
+export type PublishResult = z.infer<typeof publishResultSchema>;

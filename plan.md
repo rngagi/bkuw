@@ -29,6 +29,12 @@
 - [ ] Windows x64 CI／實機驗收：隨附工具建置、所有格式匯入、播放／拖曳及離線安裝包。
 - [ ] Windows x64 實機麥克風權限、錄製、試聽與儲存，以及 macOS 真實麥克風人工試聽；使用真實詞彙與例句確認音質。
 
+## Cloudflare 公開辭典網站
+
+- [x] 發佈精靈、Token credential、Migration 8、publication snapshot、Workers Static Assets、R2 media Worker、正式網站 template 與雙語 UI。驗證：`pnpm check`、`pnpm test`（101 passed）、`pnpm test:rust`（81 passed，1 個既有 XeLaTeX 測試 ignored）。
+- [x] 本機驗證：`pnpm test:e2e:build`、`pnpm test:e2e`（4 passed）、`pnpm tauri build --no-bundle`，並開啟 build 供人工測試。
+- [ ] 使用自己的 Cloudflare 帳號完成首次發佈與一次差異更新；驗證 workers.dev、搜尋、deep-link、亮暗、info、writing systems、notes、relations、圖片、兩種 audio 與舊媒體清理。
+
 ## 候選 backlog
 
 以下尚未承諾版本或優先順序；開始實作前須先確認 scope 與 acceptance criteria。
@@ -39,7 +45,6 @@
 - [ ] IPA helper、tags、filters 與 duplicate detection。
 - [ ] Trash／backup manager。
 - [ ] Production signing、Apple notarization 與 auto-update。
-- [ ] Publish corpus website：在 bkuw 內提供簡單的 Publish／Update 流程，完成 Cloudflare 登入後部署網站與 corpus metadata。網站程式與 metadata 使用 Workers Static Assets；圖片與音檔從一開始以 R2 作為 media storage，之後只同步雜湊變更的檔案，並由 bkuw 管理 deployment state，不要求使用者操作 Wrangler 或處理 storage migration。
 
 Cloud sync、collaboration、mobile、ASR、ELAN-style timeline、waveform segmentation、Git syncing，以及未經使用者主動觸發的自動上傳 lexical data 仍屬明確排除範圍。Publish corpus website 所需的 Cloudflare authorization、部署與 media upload 是已列入 backlog 的唯一雲端例外。
 

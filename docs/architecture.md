@@ -143,6 +143,8 @@ Entry forms 在 frontend 依 writing-system settings 自動補齊並固定排序
 
 Migration 2 新增 `metadata_options`。Migration 3 新增 `projects.analysis_language` 與 `export_settings`。Migration 4 新增 entry section override、versioned sort settings 與 manual layout。Migration 5 新增並以 Rust Unicode folding 回填 `senses.search_key`。Migration 6 新增 `sense_images`，媒體檔則放在 project 的 `media/images/`。Migration 7 新增 `audio_attachments`，以互斥的 sense/example 外鍵及 cascade delete 維持擁有者，音檔位於 `media/audio/`。舊 schema 開啟時仍遵守先建立一致性 SQLite backup、再於 transaction 套用 migration 的規則。
 
+Migration 8 新增 `publish_settings` 與 `publish_deployments`。前者保存 versioned 網站設定與固定 Cloudflare resource names；後者保存 Account ID、Worker、bucket、workers.dev subdomain、公開 URL、遠端版本、corpus digest、最後發佈時間與 cleanup state。API Token 不在 schema 內，複製 project 到另一台裝置時必須重新連線。
+
 ## Ordering module
 
 Rust `ordering` module 是工作區與 LaTeX 匯出的集中排序 seam。`EntrySortSettingsV2` 增加 `source = writingSystem | semanticDomain`；V1 JSON 以 serde default 讀成 writing-system source，在下次保存時寫回 V2，SQLite row version 仍沿用 migration 4 contract，不需 schema migration。輸入為 live entry summaries、project sort settings、manual layout、language tag 與語意類別 options；輸出包含確定順序、section label 與 `manualOrderPending`。
@@ -199,6 +201,7 @@ src/
 ├── features/settings/
 ├── features/entries/
 ├── features/export/
+├── features/publish/
 ├── features/fonts/
 ├── i18n/
 ├── lib/
@@ -206,6 +209,18 @@ src/
 ```
 
 React Hook Form 管理 entry aggregate draft，Zod 負責 frontend validation。`App.tsx` 的 React state 管理 active project/selection；目前不引入 Zustand 或 TanStack Query。列表只 virtualize DOM，不引入 server paging。
+
+## Website publication architecture
+
+Rust `publish` 是 Cloudflare 發佈的單一 deep module。公開 Tauri seam 只有 state、connect／disconnect、settings、preview、publish、cancel 與 cleanup retry；React 經 `src/lib/tauri.ts` 的 Zod DTO 呼叫，不持有 Token、不讀 project media，也不直接發 HTTP。`PublishRuntime` 將 Token 保存至平台 credential store，失敗才使用 process-memory fallback，並集中管理 active account 與 cancellation flag。
+
+`ProjectSession` 在 project lock 內建立完整 `PublishSnapshot`，包含 project ordering 的 live aggregates、sense-image metadata 與 sense／example audio metadata；Cloudflare I/O 在 background executor 執行，不長時間持有 session mutex。Snapshot builder 依 publisher 選擇過濾 forms、notes 與 relations，Primary form 同時負責唯一 Unicode slug 與 relation headword。POS 只輸出於 sense、圖片只輸出於 sense，音檔只輸出於 sense 或 example。只有 info Markdown 轉 HTML；其他 notes 全部作純文字 JSON。
+
+正式 public template 位於 `src-tauri/templates/publish-site/` 並由 Rust `include_str!` 納入 binary；被 `.gitignore` 排除的 prototype 不是 runtime dependency。`schemaVersion: 1` corpus 與 template 一起產生，Static Assets manifest 使用 Cloudflare 規定的 base64-content-plus-extension SHA-256 前 32 hex。Direct Upload 以 upload JWT 上傳 Cloudflare 指定 buckets，完成後以 completion JWT 原子部署同一 Worker；Worker 綁定 `ASSETS` 與 `MEDIA` R2 bucket。
+
+R2 物件固定為 `media/images/<sha256>.png` 與 `media/audio/<sha256>.webm`。本機讀取前 canonicalize project path 並重算 SHA-256；遠端 bucket 必須具有相同 project ID 的 `.bkuw/owner.json`，Worker settings 的 `workers/tag` 也必須相同，否則 fail closed。媒體 Worker 只處理 `/media/`，支援 GET、HEAD、Range、ETag、正確 Content-Type 與 immutable cache。Cloudflare client 對 429／5xx 及暫時性網路錯誤做有界 retry 並尊重秒數形式 `Retry-After`；Worker deployment 的未知結果先讀 ownership state，再以精確 corpus SHA-256 health check 決定是否進入 cleanup。
+
+發佈成功前不刪遠端媒體。Health check 最多 60 秒，比對首頁、完整 corpus bytes digest 與至少一個媒體 HEAD；通過後才將已驗證 project bucket 的 stale `media/` keys 刪除。失敗的 delete 記錄 `cleanup_pending`，不撤回已成功部署的網站。Static Assets 單檔超過 25 MiB 在 preview 阻擋；v1 不分片。
 
 ## Verification strategy
 

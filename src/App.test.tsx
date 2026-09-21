@@ -32,6 +32,7 @@ const { backendMock, prepareImageMock } = vi.hoisted(() => ({
     openOverleafCompilerHelp: vi.fn(),
     listFontPacks: vi.fn(),
     installFontPacks: vi.fn(),
+    getPublishState: vi.fn(),
   },
   prepareImageMock: vi.fn(),
 }));
@@ -99,6 +100,11 @@ describe("App keyboard and delete workflow", () => {
       { id: "tex-gyre-termes", version: "2.004", state: "installed", mandatory: true, installedBytes: 1 },
     ]);
     backendMock.createProject.mockResolvedValue(snapshot);
+    backendMock.getPublishState.mockResolvedValue({
+      settings: { version: 1, title: "Test", description: null, locale: "en", infoMarkdown: null, includeEntryNotes: false, includeExampleNotes: false, includeRelations: false, writingSystemIds: ["ws-1"], workerName: "bkuw-test-project1", bucketName: "bkuw-test-project1-media" },
+      deployment: null,
+      connection: { connected: false, accountId: null, workersSubdomain: null, credentialPersisted: false },
+    });
     backendMock.createEntry.mockResolvedValue(entry);
     backendMock.queryEntries.mockResolvedValue([]);
     backendMock.listSenseImages.mockResolvedValue([]);

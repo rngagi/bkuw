@@ -34,7 +34,8 @@ image = { version = "0.25", default-features = false, features = ["jpeg", "png"]
 icu_collator = "2.2"
 icu_locale = "2.2"
 rusqlite = { version = "0.37", features = ["backup", "bundled"] }
-reqwest = { version = "0.13", default-features = false, features = ["blocking", "rustls", "system-proxy"] }
+reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "multipart", "rustls", "system-proxy"] }
+pulldown-cmark = { version = "0.13", default-features = false, features = ["html"] }
 sha2 = "0.10"
 thiserror = "2"
 unicode-segmentation = "1.12"
@@ -51,3 +52,7 @@ tempfile = "3"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
+keyring = { version = "3.6", default-features = false, features = ["windows-native"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3.6", default-features = false, features = ["apple-native"] }

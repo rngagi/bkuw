@@ -737,7 +737,7 @@ mod tests {
         let connection = Connection::open(root.join("project.sqlite")).unwrap();
         connection
             .execute_batch(
-                "DROP TABLE audio_attachments; DELETE FROM schema_migrations WHERE version=7;",
+                "DROP TABLE audio_attachments; DELETE FROM schema_migrations WHERE version>=7;",
             )
             .unwrap();
         drop(connection);
