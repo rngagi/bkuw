@@ -24,5 +24,6 @@ dist-ssr
 *.sw?
 
 .cache/
+/prototype/publish-site/
 src-tauri/resources/audio/*
 !src-tauri/resources/audio/README.txt
