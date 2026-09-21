@@ -85,6 +85,31 @@ pub async fn connect_cloudflare(
 }
 
 #[tauri::command]
+pub async fn update_workers_subdomain(
+    app: AppHandle,
+    subdomain: String,
+) -> AppResult<CloudflareConnectionStatus> {
+    {
+        let state = app.state::<AppState>();
+        let guard = active_session(&state)?;
+        let session = guard
+            .as_ref()
+            .ok_or_else(|| AppError::new("no_project", "No project is currently open."))?;
+        if session.load_publish_deployment()?.is_some() {
+            return Err(AppError::new(
+                "publish_resources_locked",
+                "The Cloudflare resource names are locked after the first successful publish.",
+            ));
+        }
+    }
+    run_blocking(move || {
+        let state = app.state::<AppState>();
+        crate::publish::update_workers_subdomain(&state.publish_runtime, subdomain.trim())
+    })
+    .await
+}
+
+#[tauri::command]
 pub fn disconnect_cloudflare(state: State<'_, AppState>, account_id: String) {
     state.publish_runtime.disconnect(account_id.trim());
 }

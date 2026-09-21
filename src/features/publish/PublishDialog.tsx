@@ -16,6 +16,8 @@ interface Props {
 
 function clone<T>(value: T): T { return JSON.parse(JSON.stringify(value)) as T; }
 function bytes(value: number) { return value < 1024 ? `${value} B` : value < 1024 ** 2 ? `${(value / 1024).toFixed(1)} KiB` : `${(value / 1024 ** 2).toFixed(1)} MiB`; }
+const publishPhases = ["validating", "preparing", "uploadingMedia", "uploadingAssets", "deploying", "verifying", "cleaning", "complete"] as const;
+const subdomainPattern = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
 export function PublishDialog({ open, snapshot, onOpenChange, onFlush, onDeploymentChange }: Props) {
   const { t } = useTranslation();
@@ -41,7 +43,7 @@ export function PublishDialog({ open, snapshot, onOpenChange, onFlush, onDeploym
     setBusy("loading");
     backend.getPublishState().then((value) => {
       setState(value); setSettings(clone(value.settings)); setAccountId(value.connection.accountId ?? value.deployment?.accountId ?? "");
-      setSubdomain(value.connection.workersSubdomain ?? value.deployment?.workersSubdomain ?? value.settings.workerName);
+      setSubdomain(value.connection.workersSubdomain ?? value.deployment?.workersSubdomain ?? "");
       if (value.connection.connected) { setEmailVerified(true); setR2Ready(true); }
     }).catch(showError).finally(() => setBusy(null));
   }, [open, snapshot.project.id]);
@@ -62,12 +64,20 @@ export function PublishDialog({ open, snapshot, onOpenChange, onFlush, onDeploym
     try {
       const connection = await backend.connectCloudflare({ accountId, apiToken: tokenInput.current?.value ?? "", requestedSubdomain: subdomain.trim() || null });
       if (tokenInput.current) tokenInput.current.value = "";
-      setTokenReady(false); setSubdomain(connection.workersSubdomain ?? subdomain); setState((current) => current ? { ...current, connection } : current); setStep(2);
+      setTokenReady(false); setSubdomain(connection.workersSubdomain ?? subdomain); setState((current) => current ? { ...current, connection } : current);
+    } catch (value) { showError(value); } finally { setBusy(null); }
+  }
+  async function updateSubdomain() {
+    setBusy("subdomain"); setError(null);
+    try {
+      const connection = await backend.updateWorkersSubdomain(subdomain.trim());
+      setSubdomain(connection.workersSubdomain ?? "");
+      setState((current) => current ? { ...current, connection } : current);
     } catch (value) { showError(value); } finally { setBusy(null); }
   }
   async function saveAndPreview() {
     if (!settings) return;
-    setBusy("preview"); setError(null);
+    setBusy("preview"); setError(null); setProgress(null); setResult(null);
     try {
       await onFlush();
       const saved = await backend.savePublishSettings(settings);
@@ -76,7 +86,7 @@ export function PublishDialog({ open, snapshot, onOpenChange, onFlush, onDeploym
   }
   async function publish() {
     if (!preview) return;
-    setBusy("publish"); setError(null); setResult(null);
+    setBusy("publish"); setError(null); setResult(null); setProgress(null);
     try {
       const value = await backend.publishSite(preview.snapshotToken, setProgress);
       setResult(value); setState(await backend.getPublishState()); onDeploymentChange?.(true);
@@ -98,6 +108,9 @@ export function PublishDialog({ open, snapshot, onOpenChange, onFlush, onDeploym
   const blockers = preview?.issues.filter((item) => item.severity === "error") ?? [];
   const canCancel = progress && !["deploying", "verifying", "cleaning", "complete"].includes(progress.phase);
   const publicUrl = settings?.workerName && subdomain ? `https://${settings.workerName}.${subdomain}.workers.dev` : null;
+  const currentPhaseIndex = progress ? publishPhases.indexOf(progress.phase) : -1;
+  const publishFailed = Boolean(progress && error && busy !== "publish" && !result);
+  const savedSubdomain = state?.connection.workersSubdomain ?? "";
 
   return <Dialog.Root open={open} onOpenChange={(value) => { if (busy === "publish") return; onOpenChange(value); }}>
     <Dialog.Portal>
@@ -140,13 +153,14 @@ export function PublishDialog({ open, snapshot, onOpenChange, onFlush, onDeploym
           <div className="publish-address-card">
             <h3>{t("publish.addressHeading")}</h3><p>{t("publish.addressHelp")}</p>
             <div className="publish-resource-grid">
-              <label className="field"><span>{t("publish.subdomain")}</span><input value={subdomain} disabled={Boolean(state?.connection.connected)} maxLength={63} onChange={(event) => setSubdomain(event.target.value.toLowerCase())} /><small>{t("publish.subdomainHelp")}</small></label>
+              <label className="field"><span>{t("publish.subdomain")}</span><input value={subdomain} disabled={Boolean(state?.deployment)} maxLength={63} placeholder={t("publish.subdomainPlaceholder")} onChange={(event) => setSubdomain(event.target.value.toLowerCase())} /><small>{t("publish.subdomainHelp")}</small></label>
               <label className="field"><span>{t("publish.workerName")}</span><input value={settings.workerName} disabled={Boolean(state?.deployment)} maxLength={58} onChange={(event) => { const workerName = event.target.value.toLowerCase(); patch({ workerName, bucketName: `${workerName}-media` }); }} /><small>{t("publish.workerNameHelp")}</small></label>
               <label className="field full"><span>{t("publish.bucketName")}</span><output>{settings.bucketName}</output><small>{t("publish.bucketNameHelp")}</small></label>
             </div>
+            {state?.connection.connected && !state.deployment && <div className="publish-subdomain-action"><p>{t("publish.subdomainChangeWarning")}</p><Button size="small" variant="secondary" disabled={busy !== null || !subdomainPattern.test(subdomain) || subdomain === savedSubdomain} onClick={() => void updateSubdomain()}>{busy === "subdomain" ? t("publish.savingSubdomain") : t("publish.saveSubdomain")}</Button></div>}
             {publicUrl && <div className="publish-url-preview"><strong>{t("publish.publicUrl")}</strong><code>{publicUrl}</code><p>{t("publish.publicUrlHelp", { worker: settings.workerName, subdomain })}</p></div>}
           </div>
-          <div className="dialog-actions"><Button variant="ghost" onClick={() => setStep(0)}>{t("common.back")}</Button>{state?.connection.connected ? <Button variant="primary" onClick={() => setStep(2)}>{t("common.next")}</Button> : <Button variant="primary" disabled={busy !== null || accountId.length !== 32 || !tokenReady || !settings.workerName.trim() || !subdomain.trim()} onClick={() => void connect()}>{busy === "connect" ? t("publish.checking") : t("publish.connect")}</Button>}</div>
+          <div className="dialog-actions"><Button variant="ghost" onClick={() => setStep(0)}>{t("common.back")}</Button>{state?.connection.connected ? <Button variant="primary" onClick={() => setStep(2)}>{t("common.next")}</Button> : <Button variant="primary" disabled={busy !== null || accountId.length !== 32 || !tokenReady || !settings.workerName.trim()} onClick={() => void connect()}>{busy === "connect" ? t("publish.checking") : t("publish.connect")}</Button>}</div>
         </section>}
 
         {settings && step === 2 && <section className="publish-section">
@@ -174,7 +188,18 @@ export function PublishDialog({ open, snapshot, onOpenChange, onFlush, onDeploym
           <div className="publish-counts"><span>{t("publish.count.entries", { count: preview.entryCount })}</span><span>{t("publish.count.senses", { count: preview.senseCount })}</span><span>{t("publish.count.examples", { count: preview.exampleCount })}</span><span>{t("publish.count.images", { count: preview.imageCount })}</span><span>{t("publish.count.audio", { count: preview.audioCount })}</span></div>
           <div className="publish-transfer"><strong>{t("publish.transferTitle")}</strong><span>{t("publish.transfer", { upload: preview.uploadMediaCount, keep: preview.unchangedMediaCount, remove: preview.deleteMediaCount, bytes: bytes(preview.uploadBytes) })}</span>{preview.publicUrl && <code>{preview.publicUrl}</code>}</div>
           {preview.issues.length > 0 && <div className="publish-issues">{preview.issues.map((issue, index) => <p className={issue.severity} key={`${issue.code}-${index}`}>{t(issue.code, { defaultValue: issue.code })}{issue.details ? `: ${issue.details}` : ""}</p>)}</div>}
-          {progress && <div className="publish-progress" role="status"><div><span>{t(`publish.phase.${progress.phase}`)}</span><span>{progress.totalItems ? `${progress.completedItems}/${progress.totalItems}` : ""}</span></div><progress max={Math.max(progress.totalItems, 1)} value={progress.completedItems} /></div>}
+          <div className="publish-phase-panel" aria-live="polite">
+            <h3>{t("publish.progressHeading")}</h3>
+            <ol>{publishPhases.map((phase, index) => {
+              const status = result || (progress && index < currentPhaseIndex) ? "done" : progress && index === currentPhaseIndex ? publishFailed ? "failed" : "active" : "pending";
+              return <li className={status} key={phase} aria-current={status === "active" ? "step" : undefined}>
+                <span className="publish-phase-marker" aria-hidden="true">{status === "done" ? <Check size={13} /> : status === "failed" ? <X size={13} /> : index + 1}</span>
+                <span><strong>{t(`publish.phase.${phase}`)}</strong><small>{t(`publish.phaseStatus.${status}`)}</small></span>
+                {progress && index === currentPhaseIndex && progress.totalItems > 0 && <output>{progress.completedItems}/{progress.totalItems}</output>}
+              </li>;
+            })}</ol>
+            {progress && !result && <div className="publish-progress" role="status"><div><span>{t(`publish.phase.${progress.phase}`)}</span><span>{progress.totalBytes ? `${bytes(progress.uploadedBytes)} / ${bytes(progress.totalBytes)}` : progress.totalItems ? `${progress.completedItems}/${progress.totalItems}` : ""}</span></div><progress max={Math.max(progress.totalItems, 1)} value={progress.completedItems} /></div>}
+          </div>
           {result && <div className="publish-success"><CloudUpload size={28} /><div><strong>{t("publish.complete")}</strong><a href={result.publicUrl} onClick={(event) => { event.preventDefault(); void backend.openPublicWebsite(result.publicUrl); }}>{result.publicUrl}</a><p>{t("publish.resultStats", { upload: result.uploadedMediaCount, keep: result.unchangedMediaCount, remove: result.deletedMediaCount })}</p>{result.cleanupPending && <p className="warning-banner">{t("publish.cleanupPending")}</p>}</div></div>}
           <div className="dialog-actions"><Button variant="ghost" disabled={busy === "publish"} onClick={() => setStep(2)}>{t("common.back")}</Button>{canCancel && <Button variant="secondary" onClick={() => void backend.cancelPublish()}>{t("common.cancel")}</Button>}{result ? <><Button variant="secondary" onClick={() => void navigator.clipboard.writeText(result.publicUrl)}><Copy size={15} />{t("publish.copyUrl")}</Button><Button variant="primary" onClick={() => void backend.openPublicWebsite(result.publicUrl)}><ExternalLink size={15} />{t("publish.openSite")}</Button></> : <Button variant="primary" disabled={busy !== null || blockers.length > 0} onClick={() => void publish()}>{busy === "publish" ? t("publish.publishing") : state?.deployment ? t("publish.update") : t("publish.publish")}</Button>}</div>
         </section>}

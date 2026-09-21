@@ -119,9 +119,9 @@ Header 提供「發佈網站」精靈；首次是設定並發佈，已有成功 
 
 使用者輸入 32 字元 Account ID，經預填頁面建立只含 Workers Scripts Edit 與 Workers R2 Storage Edit 的 API Token。Token 驗證成功後存入 macOS Keychain 或 Windows Credential Manager，不寫入 `.bkuw`、SQLite、log 或 React state；credential store 不可用時只保留至程式關閉並提示使用者。中斷連線只刪除本機 Token，不刪除公開資源。
 
-網站設定包含必填標題、選填 meta description、固定介面語言 `zh-TW`／`en`、選填的安全 Markdown info，以及 entry notes、example notes、root/base relations 與公開 writing systems。Primary writing system 必須公開，其餘系統可個別關閉。Markdown 支援標題、段落、粗斜體、清單、inline code 與 http(s)／mailto／頁內／相對連結；raw HTML 僅作文字顯示，不執行不安全 URL。精靈在同一頁說明 Worker 名稱、帳號子網域及完整公開 URL；Worker 名稱在首次成功前可改，R2 bucket 固定衍生為 `<worker-name>-media`，首次成功後一起鎖定。
+網站設定包含必填標題、選填 meta description、固定介面語言 `zh-TW`／`en`、選填的安全 Markdown info，以及 entry notes、example notes、root/base relations 與公開 writing systems。Primary writing system 必須公開，其餘系統可個別關閉。Markdown 支援標題、段落、粗斜體、清單、inline code 與 http(s)／mailto／頁內／相對連結；raw HTML 僅作文字顯示，不執行不安全 URL。精靈在同一頁說明 Worker 名稱、帳號子網域及完整公開 URL；帳號已有子網域時由 Cloudflare 讀取，不以 Worker 名稱代填。首次成功發佈前可明確套用新的帳號子網域，介面會警告這項設定會改變同帳號所有 Worker 網址。Worker 名稱在首次成功前可改，R2 bucket 固定衍生為 `<worker-name>-media`，首次成功後一起鎖定。
 
-檢查前 flush autosave，Rust 建立不可變 publication snapshot，顯示詞項、義項、例句與媒體數量、預計網址、上傳／保留／待刪除媒體及 bytes。主要詞形、媒體路徑與 SHA-256、Markdown link、writing-system selection 及 25 MiB corpus JSON 上限都在發佈前阻擋。正式網站為桌面雙欄、手機列表／細項介面，支援 Unicode case／diacritic folding、hash deep-link、單一音檔播放、圖片 lazy loading、keyboard focus、200% 文字縮放、reduced motion、選填 info，以及跟隨系統後可保存的亮暗切換。亮色按鈕顯示月亮，深色顯示太陽；右下固定連到 bkuw 網站的小膠囊。
+檢查前 flush autosave，Rust 建立不可變 publication snapshot，顯示詞項、義項、例句與媒體數量、預計網址、上傳／保留／待刪除媒體及 bytes。發佈時固定列出驗證、準備資源、上傳媒體、上傳網站、部署、線上驗證、清理與完成，個別標示尚未開始、執行中、已完成或失敗位置；進度條顯示目前階段的檔案數或 bytes。主要詞形、媒體路徑與 SHA-256、Markdown link、writing-system selection 及 25 MiB corpus JSON 上限都在發佈前阻擋。正式網站為桌面雙欄、手機列表／細項介面，支援 Unicode case／diacritic folding、hash deep-link、單一音檔播放、圖片 lazy loading、keyboard focus、200% 文字縮放、reduced motion、選填 info，以及跟隨系統後可保存的亮暗切換。亮色按鈕顯示月亮，深色顯示太陽；右下固定連到 bkuw 網站的小膠囊。
 
 每個 project 使用一個 Worker 與一個專用 R2 bucket。網站程式與 `data/corpus.json` 使用 Workers Static Assets，圖片及 WebM 以 SHA-256 content-addressed key 放在 R2，Worker 以同網域提供 GET／HEAD／Range。更新只傳遠端缺少或大小不同的媒體；新 corpus digest、首頁與至少一個媒體線上驗證成功後才清理不再使用的 `media/` objects。bucket marker 與 Worker version annotation 不符時停止，不覆寫其他資源；清理失敗不讓已上線網站回報失敗，會保存 pending 狀態供下次重試。
 

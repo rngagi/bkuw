@@ -7,7 +7,7 @@ import type { ProjectSnapshot, PublishSettings, PublishState } from "../../types
 const { backendMock } = vi.hoisted(() => ({
   backendMock: {
     getPublishState: vi.fn(), openPublishHelp: vi.fn(), openCloudflareTokenPage: vi.fn(),
-    connectCloudflare: vi.fn(), disconnectCloudflare: vi.fn(), savePublishSettings: vi.fn(),
+    connectCloudflare: vi.fn(), updateWorkersSubdomain: vi.fn(), disconnectCloudflare: vi.fn(), savePublishSettings: vi.fn(),
     previewPublish: vi.fn(), publishSite: vi.fn(), cancelPublish: vi.fn(),
     openPublicWebsite: vi.fn(), retryPublishCleanup: vi.fn(),
   },
@@ -40,6 +40,7 @@ describe("PublishDialog", () => {
   beforeEach(async () => {
     await i18n.changeLanguage("en"); vi.resetAllMocks();
     backendMock.getPublishState.mockResolvedValue(connected);
+    backendMock.updateWorkersSubdomain.mockImplementation(async (workersSubdomain) => ({ ...connected.connection, workersSubdomain }));
     backendMock.savePublishSettings.mockImplementation(async (value) => value);
     backendMock.previewPublish.mockResolvedValue({ snapshotToken: "snapshot", publicUrl: "https://bkuw-test-12345678.test-dictionary.workers.dev", entryCount: 2, senseCount: 3, exampleCount: 1, imageCount: 1, audioCount: 2, uploadMediaCount: 3, unchangedMediaCount: 0, deleteMediaCount: 0, uploadBytes: 1024, issues: [] });
     backendMock.publishSite.mockImplementation(async (_token, onProgress) => {
@@ -81,6 +82,7 @@ describe("PublishDialog", () => {
     await waitFor(() => expect(backendMock.publishSite).toHaveBeenCalledWith("snapshot", expect.any(Function)));
     expect(await screen.findByText("Website published")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "https://bkuw-test-12345678.test-dictionary.workers.dev" })).toBeInTheDocument();
+    expect(screen.getAllByText("Done")).toHaveLength(8);
   });
 
   it("requires the novice account checklist before continuing", async () => {
@@ -99,10 +101,25 @@ describe("PublishDialog", () => {
     expect(screen.getByText("https://renamed-dictionary.test-dictionary.workers.dev")).toBeInTheDocument();
   });
 
+  it("does not copy the Worker name into a missing account subdomain and can correct it", async () => {
+    backendMock.getPublishState.mockResolvedValue({ ...connected, connection: { ...connected.connection, workersSubdomain: null } });
+    await reachAddress();
+    const input = screen.getByLabelText(/^Account subdomain/);
+    expect(input).toHaveValue("");
+    fireEvent.change(input, { target: { value: "walishcs" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply account subdomain" }));
+    await waitFor(() => expect(backendMock.updateWorkersSubdomain).toHaveBeenCalledWith("walishcs"));
+    expect(screen.getByText("https://bkuw-test-12345678.walishcs.workers.dev")).toBeInTheDocument();
+  });
+
   it("shows safe Cloudflare error details", async () => {
-    backendMock.publishSite.mockRejectedValue(new CommandError("cloudflare_api", "Cloudflare failed", "10021: Missing main module filename"));
+    backendMock.publishSite.mockImplementation(async (_token, onProgress) => {
+      onProgress({ phase: "preparing", completedItems: 0, totalItems: 1, uploadedBytes: 0, totalBytes: 0 });
+      throw new CommandError("cloudflare_api", "Cloudflare failed", "10028: multipart/form-data enhancement not implemented");
+    });
     await reachSettings(); fireEvent.click(screen.getByRole("button", { name: "Check" }));
     await screen.findByText("2 entries"); fireEvent.click(screen.getByRole("button", { name: "Publish" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("10021: Missing main module filename");
+    expect(await screen.findByRole("alert")).toHaveTextContent("10028: multipart/form-data enhancement not implemented");
+    expect(screen.getByText("Failed here")).toBeInTheDocument();
   });
 });

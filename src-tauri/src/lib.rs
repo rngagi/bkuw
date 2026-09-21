@@ -65,6 +65,7 @@ pub fn run() {
             commands::get_publish_state,
             commands::get_cloudflare_token_url,
             commands::connect_cloudflare,
+            commands::update_workers_subdomain,
             commands::disconnect_cloudflare,
             commands::save_publish_settings,
             commands::preview_publish,

@@ -328,6 +328,12 @@ pub fn connect(
         client.create_subdomain(value)?;
         subdomain = Some(value.to_owned());
     }
+    if subdomain.is_none() {
+        return Err(AppError::new(
+            "cloudflare_subdomain_missing",
+            "Enter an account subdomain to create the workers.dev address.",
+        ));
+    }
     let credential_persisted = runtime.remember_token(account_id, token);
     Ok(CloudflareConnectionStatus {
         connected: true,
@@ -335,6 +341,27 @@ pub fn connect(
         workers_subdomain: subdomain,
         credential_persisted,
     })
+}
+
+pub fn update_workers_subdomain(
+    runtime: &PublishRuntime,
+    requested_subdomain: &str,
+) -> AppResult<CloudflareConnectionStatus> {
+    validate_resource_name(requested_subdomain, 63, "cloudflare_subdomain_invalid")?;
+    let account_id = runtime.active_account().ok_or_else(|| {
+        AppError::new(
+            "cloudflare_not_connected",
+            "Connect Cloudflare before changing the account subdomain.",
+        )
+    })?;
+    let token = runtime.token(&account_id)?;
+    let client = CloudflareClient::new(&account_id, &token)?;
+    client.create_subdomain(requested_subdomain)?;
+    Ok(connection_status(
+        runtime,
+        Some(&account_id),
+        Some(requested_subdomain.to_owned()),
+    ))
 }
 
 pub fn connection_status(
@@ -493,6 +520,7 @@ pub fn publish(
         .collect::<Vec<_>>();
     let total_bytes = uploads.iter().map(|item| item.size).sum();
     let mut uploaded_bytes = 0;
+    emit(progress, "uploadingMedia", 0, uploads.len(), 0, total_bytes);
     for (index, asset) in uploads.iter().enumerate() {
         runtime.check_cancelled()?;
         client.upload_object(&settings.bucket_name, asset)?;
@@ -1269,12 +1297,9 @@ impl<'a> CloudflareClient<'a> {
     ) -> AppResult<()> {
         let object_url = self.object_url(bucket, key);
         let response = self.send_with_retry(|| {
-            let part = multipart::Part::bytes(bytes.to_vec())
-                .file_name("body")
-                .mime_str(content_type)
-                .expect("validated media MIME type");
             self.auth(self.client.put(object_url.clone()))
-                .multipart(multipart::Form::new().part("body", part))
+                .header(reqwest::header::CONTENT_TYPE, content_type)
+                .body(bytes.to_vec())
         })?;
         let _: Envelope<Value> = decode(response)?;
         Ok(())
@@ -1799,6 +1824,27 @@ mod tests {
         let request = captured.lock().unwrap();
         assert!(request.contains("name=\"main.js\"; filename=\"main.js\""));
         assert!(request.contains("application/javascript+module"));
+    }
+
+    #[test]
+    fn r2_object_upload_sends_the_object_as_the_raw_request_body() {
+        let uploaded = r#"{"success":true,"result":{"key":".bkuw/owner.json"},"errors":null}"#;
+        let (root, captured, server) = capture_request(response("200 OK", uploaded, ""));
+        let client = CloudflareClient::new_with_root("account", "token", root).unwrap();
+        let body = br#"{"schemaVersion":1,"projectId":"project"}"#;
+        client
+            .upload_bytes("bucket", ".bkuw/owner.json", body, "application/json")
+            .unwrap();
+        server.join().unwrap();
+        let request = captured.lock().unwrap();
+        let (_, request_body) = request.split_once("\r\n\r\n").unwrap();
+        assert!(
+            request
+                .to_ascii_lowercase()
+                .contains("content-type: application/json")
+        );
+        assert!(!request.to_ascii_lowercase().contains("multipart/form-data"));
+        assert_eq!(request_body.as_bytes(), body);
     }
 
     #[test]

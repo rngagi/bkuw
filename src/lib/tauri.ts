@@ -106,6 +106,9 @@ export const backend = {
   connectCloudflare(request: { accountId: string; apiToken: string; requestedSubdomain: string | null }) {
     return call("connect_cloudflare", { request }, cloudflareConnectionSchema);
   },
+  updateWorkersSubdomain(subdomain: string) {
+    return call("update_workers_subdomain", { subdomain }, cloudflareConnectionSchema);
+  },
   disconnectCloudflare(accountId: string): Promise<void> {
     return call("disconnect_cloudflare", { accountId }, z.null()).then(() => undefined);
   },
