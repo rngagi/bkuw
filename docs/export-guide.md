@@ -1,4 +1,4 @@
-# bkuw 匯出指南 / Export guide
+# bkuw 匯出指南
 
 ## 逐步匯出
 
@@ -24,20 +24,8 @@
 
 Overleaf 需要網路與帳號；bkuw 不會自動上傳資料。ZIP 自帶字型、授權與選用圖片。若本機編譯失敗或逾時，來源與 `diagnostic.log` 仍保留；PDF 未產生時不會標示完成。
 
-## Step-by-step export
-
-1. Choose Local PDF (default), Overleaf ZIP, LaTeX sources, or corpus CSV.
-2. Configure writing systems, photos, fonts and related entries; map POS for CSV.
-3. Check requirements: resolve data issues and download required fonts. Local PDF also validates XeLaTeX, packages and a minimal compilation.
-4. Confirm the counts, warnings and output, then choose a destination. Cancelling the destination keeps this step open.
-5. Review the result paths. For Overleaf, follow the official links above to upload the ZIP, select XeLaTeX and root `main.tex`, recompile and download the PDF.
-
-Back preserves settings and requires a fresh check. Local installer assistance downloads and verifies a full Windows TeX Live or macOS Apple Silicon MacTeX installer, then opens the official wizard. Keep the full installation selected and authorize only in the system UI. Allow several GB of download and disk space. Installer handoff is not success: finish installation and choose Check again. Download can be cancelled and retried. Repair existing installations with their own package manager. Save standalone scripts and the [bilingual installation guide](../src-tauri/templates/latex/INSTALL.md) from the requirements step if needed.
-
-Once TeX and managed fonts are available, local compilation works offline. Overleaf requires an account and internet access; bkuw never uploads data automatically. Compilation failures preserve sources and diagnostic logs.
-
-## 字型與輸出 / Fonts and output
+## 字型與輸出
 
 字型由 bkuw 以固定來源、SHA-256 與 manifest 驗證後存入專用 cache，不需安裝至作業系統。TeX Gyre Termes 為必要字型，IPA 固定 Charis SIL，Hant Auto 與 zh-TW 分析文字使用昭源宋體。來源與 ZIP 包含實際使用的字型與授權。相片輸出為適合排版的衍生檔，專案原始 PNG 不變。CSV 維持 rngagi-corpus v0.3 九欄契約。
 
-bkuw caches verified managed fonts without installing them into the OS. TeX Gyre Termes is mandatory, IPA uses Charis SIL, and Hant Auto / zh-TW analysis text use Chiron Sung HK. Sources and ZIP include used fonts and licenses. Photo derivatives are sized for print without changing project PNGs. Corpus CSV retains the rngagi-corpus v0.3 nine-column contract.
+字型 catalog、固定來源、SHA-256 與解析規則由 [`src-tauri/src/font_manager.rs`](../src-tauri/src/font_manager.rs) 擁有；PDF 圖片尺寸與編碼限制由 [`src-tauri/src/export.rs`](../src-tauri/src/export.rs) 的 `LATEX_IMAGE_MAX_WIDTH`、`LATEX_IMAGE_MAX_HEIGHT` 與 `LATEX_JPEG_QUALITY` 擁有。CSV 欄位以 [rngagi-corpus v0.3 契約](corpus-csv-contract.md)為準。

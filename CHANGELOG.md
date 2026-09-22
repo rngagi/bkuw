@@ -1,6 +1,24 @@
 # bkuw 變更紀錄
 
-本文件記錄程式變更，不宣告版本已發布；公開版本、發布日期與安裝包以 [GitHub Releases](https://github.com/rngagi/bkuw/releases) 為準。現行行為見 [產品規格](docs/product-spec.md)，驗收狀態見 [執行清單](plan.md)。歷史條目中的 MP3 儲存與舊發布流程只描述當時實作。
+本文件記錄各版本的程式變更。公開日期與安裝包以 [GitHub Releases](https://github.com/rngagi/bkuw/releases) 為準；現行行為見[產品規格](docs/product-spec.md)，指定版本的測試結果見[驗證報告](docs/reports/README.md)。歷史條目中的 MP3 儲存與舊發布流程只描述當時實作。
+
+## 1.0.0
+
+### 中文
+
+- 完成 local-first 詞彙編輯器：自訂書寫系統、多義項、例句、root/base 關係、Unicode 搜尋、自動儲存、刪除還原及專案備份。
+- 加入義項相片，以及義項／例句的多音檔匯入、WebM／Opus 轉換、錄音與播放。
+- 加入 UTF-8 CSV 建立專案、自動／語意類別／完全自訂排序，以及 rngagi-corpus CSV、portable XeLaTeX、Overleaf ZIP 與本機 PDF 匯出。
+- 加入 Cloudflare 發佈精靈；網站與 corpus 使用 Workers Static Assets，媒體使用專案專用 R2 bucket，支援差異上傳、線上驗證及驗證後清理。
+- 公開辭典網站沿用專案排序，提供桌面雙欄與手機介面、搜尋、deep-link、亮暗主題、info、圖片及義項／例句音檔。
+
+### English
+
+- Completed the local-first lexical editor with configurable writing systems, senses, examples, root/base relations, Unicode search, autosave, undo after deletion, and project backups.
+- Added sense photos and multi-file audio import, WebM/Opus conversion, recording, and playback for senses and examples.
+- Added UTF-8 CSV project creation, automatic/semantic/manual ordering, and rngagi-corpus CSV, portable XeLaTeX, Overleaf ZIP, and local PDF exports.
+- Added guided Cloudflare publication using Workers Static Assets and a project-owned R2 media bucket, with differential uploads, online verification, and post-verification cleanup.
+- The public dictionary preserves project ordering and supports desktop/mobile layouts, search, deep links, light/dark themes, optional info, images, and sense/example audio.
 
 ## 0.6.3
 

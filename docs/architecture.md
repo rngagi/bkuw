@@ -16,7 +16,7 @@ SQLite + project filesystem
 
 Frontend 不可直接執行 SQL。所有 `invoke` 集中在 `src/lib/tauri.ts`，讓 command 名稱、DTO shape 與 error mapping 只有一個 seam。Project/database module 的外部 interface 提供 create/open/close project、settings、entry query/load/create/save/delete/restore 與 export snapshot；連線、SQL、normalization、backup 和 transaction 都留在 implementation 內。Export module 是 deep module：公開 preview/run/detect 行為，內部封裝 corpus flattening、ICU4X sorting、TeX rendering/escaping、ZIP、atomic write 與 XeLaTeX process。
 
-## Project lifecycle
+## 專案生命週期
 
 - 一次只允許一個 active project。
 - 建立 project 時產生 `<name>.bkuw/project.sqlite` 與 `backups/`，遇到既有路徑不得覆寫。
@@ -26,7 +26,7 @@ Frontend 不可直接執行 SQL。所有 `invoke` 集中在 `src/lib/tauri.ts`�
 - 關閉 project 時先 flush pending save，再關閉 connection 與釋放 lock。
 - Tauri main window 僅有 open/save dialog、必要 core capability，以及 scope 嚴格限定為官方 ISO 639-3、Unicode ISO 15924、Overleaf project／官方匯入、編譯器、主文件、編譯、下載教學，以及 TeX Live／MacTeX／MiKTeX 官方說明 URL 的 opener permission；不開放 shell、HTTP 或 broad filesystem plugin。Project database 操作限制在 active canonical project；export 只操作使用者經 dialog 選定的目的地。
 
-## Command interface
+## Command 介面
 
 主要 commands：
 
@@ -93,7 +93,7 @@ App-level zoom shortcut controller 使用 Tauri WebView `setZoom`，只額外授
 
 固定 FFmpeg 8.0.1 與 Opus 1.6.1 來源 URL／SHA-256 由 `scripts/audio/prepare.sh` 管理，禁用網路與非必要 codecs，不啟用 GPL／nonfree，Windows 靜態連結工具 runtime。`pnpm audio:prepare` 首次由來源建置工具，開發／build 先檢查工具；Windows 開發需 MSYS2 MINGW64，`ensure.mjs` 以 `BKUW_MSYS2_LOCATION` 指定安裝目錄，預設 `C:/msys64`；CI／release 傳入 setup action 回傳的實際位置。建置以 shell 工具產生 manifest，不依賴 Python。安裝包包含 tools、binary SHA-256 manifest、licenses、完整來源 archives 與 build recipe；終端使用者不需安裝或下載轉檔工具。既有 CI 的平台 jobs 驗證真實轉檔與 WebView 播放，Linux fast-checks 不建置桌面音訊工具。
 
-## SQLite schema
+## SQLite 結構
 
 所有 IDs 使用 UUID，timestamps 使用 UTC RFC 3339。所有 connections 啟用 foreign keys、busy timeout，並使用適合單機桌面程式的 WAL mode。
 
@@ -145,7 +145,7 @@ Migration 2 新增 `metadata_options`。Migration 3 新增 `projects.analysis_la
 
 Migration 8 新增 `publish_settings` 與 `publish_deployments`。前者保存 versioned 網站設定與固定 Cloudflare resource names；後者保存 Account ID、Worker、bucket、workers.dev subdomain、公開 URL、遠端版本、corpus digest、最後發佈時間與 cleanup state。API Token 不在 schema 內，複製 project 到另一台裝置時必須重新連線。
 
-## Ordering module
+## 排序模組
 
 Rust `ordering` module 是工作區與 LaTeX 匯出的集中排序 seam。`EntrySortSettingsV2` 增加 `source = writingSystem | semanticDomain`；V1 JSON 以 serde default 讀成 writing-system source，在下次保存時寫回 V2，SQLite row version 仍沿用 migration 4 contract，不需 schema migration。輸入為 live entry summaries、project sort settings、manual layout、language tag 與語意類別 options；輸出包含確定順序、section label 與 `manualOrderPending`。
 
@@ -155,7 +155,7 @@ Writing-system source 的自訂 alphabet 使用 longest-match tokenization，確
 
 Manual layout 把 heading 與 entry 當作同一線性序列。已刪除 entry 在讀取時忽略；layout 未收錄的新／恢復 entry 依自動規則插入對應 section 尾端並標示 pending。切回 auto 不刪除 layout。Frontend 只送出 typed settings/layout commands，不自行推導持久化順序。
 
-## CSV import module
+## CSV 匯入模組
 
 `csv_import` 是建立新 project 的 deep module。公開介面只有 inspection、preview 與 create；內部封裝 UTF-8／BOM 驗證、comma／tab／semicolon detection、header contract、mapping discriminated unions、row materialization、rngagi notes parser、group conflict rules、metadata collection、UUID、NFC、preview token 與 aggregate construction。React 只透過 `src/lib/tauri.ts` 選檔並傳送 typed DTO，不讀來源 bytes、SQLite 或 project filesystem。
 
@@ -167,7 +167,7 @@ CSV inspection 將可修正的 parse failure 分成 stable error codes，並以 
 
 `ManualSortItem` 的 Tauri JSON contract 固定使用 camelCase，尤其 entry variant 必須是 `entryId`；Rust 以 `rename_all_fields` 保證 tagged enum 的 struct fields 與 TypeScript schema 一致。Manual mode 若因舊版部分成功狀態而缺少 layout，workspace 仍提供直接管理入口，editor 載入所有 live entries 並在首次保存時建立 layout，無須手動修資料庫。
 
-## Export architecture
+## 匯出架構
 
 `ProjectSession` 依 `ProjectSnapshot.entries` 的既定順序建立只含 live entries 的完整 `ExportSnapshot`，並附上每個 entry 的 section label、active project root 與 live sense-image metadata；LaTeX renderer 不再自行排序。完整 aggregate 以固定組數的 bulk queries 載入 forms、senses、examples、example forms、relations 與 image metadata，再於 Rust 組裝，避免資料量增加時出現巢狀 N+1 queries。Preview 以 snapshot + format 的 SHA-256 token 綁定資料；真正匯出前重新建立 snapshot，token 不同即回傳 `export_stale`。React 不讀 SQL 或 filesystem，所有 DTO 由 `src/types/domain.ts` 的 Zod schema 驗證。
 
@@ -175,7 +175,7 @@ Preview、font integrity scan、XeLaTeX detection 與 export 都透過 Tauri asy
 
 CSV renderer 固定 rngagi-corpus v0.3 九欄。ICU4X 依 profile language tag 排 primary form，entry UUID 與 sense order 是 deterministic tie-breakers。Writer 使用 UTF-8、無 BOM、CRLF 及 RFC 4180 quoting。輸出先寫同層 temporary sibling；Unix 使用 replace rename，Windows 使用 `MoveFileExW` 的 replace/write-through flags，避免留下半成品。
 
-LaTeX renderer 從零建立通用 XeLaTeX source，不複製 `docs/main.tex` 的授權巨集。所有 user text 經集中 escaping；writing-system font macros 使用純字母 control sequence 與 project-relative font paths。Pronunciation writing system 的 form 只傳入詞頭 macro 的右側參數，並從其他 forms metadata 排除。Export settings 的 Rust validation 保證 headword／pronunciation IDs 不同，frontend 同時過濾重複選項；舊 profile 若重複則 normalize 為未指定 pronunciation。Related-entry renderer 依 profile 選擇 root/base/both，掃描 export snapshot 中直接指向 target 的 relations；snapshot 已排除 soft-deleted entries，source 以 entry 為單位去重且不遞迴。Reverse index 由 Rust 排序並直接產生 `hyperlink`／`pageref`，不使用 makeindex。
+LaTeX renderer 以 [`src-tauri/templates/latex/main.tex`](../src-tauri/templates/latex/main.tex) 產生通用 XeLaTeX source。所有 user text 經集中 escaping；writing-system font macros 使用純字母 control sequence 與 project-relative font paths。Pronunciation writing system 的 form 只傳入詞頭 macro 的右側參數，並從其他 forms metadata 排除。Export settings 的 Rust validation 保證 headword／pronunciation IDs 不同，frontend 同時過濾重複選項；舊 profile 若重複則 normalize 為未指定 pronunciation。Related-entry renderer 依 profile 選擇 root/base/both，掃描 export snapshot 中直接指向 target 的 relations；snapshot 已排除 soft-deleted entries，source 以 entry 為單位去重且不遞迴。Reverse index 由 Rust 排序並直接產生 `hyperlink`／`pageref`，不使用 makeindex。
 
 `includeSenseImages` 預設為 false，以 serde default 相容舊 export profile。啟用時，preview 與 render 都只讀 `media/images/<uuid>.png` 並驗證 PNG signature 與 DB SHA-256。Render 在記憶體中以 Lanczos3 將來源等比例縮入 `1000×900px` 且不放大；實際不透明圖使用品質 82 JPEG，含有效透明像素的圖使用 best-compression PNG，再以對應的 `.jpg`／`.png` 路徑加入 source tree。LaTeX folder、Overleaf ZIP 與隔離 PDF build 共用同一組衍生 bytes，project-local PNG 不被改寫；template 使用 `graphicx` 限制欄寬與最大高度並保持比例。未啟用時不讀或打包媒體，CSV renderer 永遠不表示相片。
 
@@ -191,7 +191,7 @@ ZIP 打包 `main.tex`、`entries.tex`、`reverse-index.tex`、`.latexmkrc`、bil
 
 CSV 的外部相容契約見 `docs/corpus-csv-contract.md`。目前沒有跨 repository 自動 contract test；`rngagi-corpus` 版本變更必須人工重驗與更新 golden fixture。
 
-## Frontend structure
+## 前端結構
 
 ```text
 src/
@@ -210,7 +210,7 @@ src/
 
 React Hook Form 管理 entry aggregate draft，Zod 負責 frontend validation。`App.tsx` 的 React state 管理 active project/selection；目前不引入 Zustand 或 TanStack Query。列表只 virtualize DOM，不引入 server paging。
 
-## Website publication architecture
+## 網站發佈架構
 
 Rust `publish` 是 Cloudflare 發佈的單一 deep module。公開 Tauri seam 只有 state、connect／disconnect、settings、preview、publish、cancel 與 cleanup retry；React 經 `src/lib/tauri.ts` 的 Zod DTO 呼叫，不持有 Token、不讀 project media，也不直接發 HTTP。`PublishRuntime` 將 Token 保存至平台 credential store，失敗才使用 process-memory fallback，並集中管理 active account 與 cancellation flag。
 
@@ -222,21 +222,21 @@ R2 bucket 固定由 Worker 名稱衍生為 `<worker-name>-media`；Rust 在載�
 
 發佈成功前不刪遠端媒體。Health check 最多 60 秒，比對首頁、完整 corpus bytes digest 與至少一個媒體 HEAD；通過後才將已驗證 project bucket 的 stale `media/` keys 刪除。失敗的 delete 記錄 `cleanup_pending`，不撤回已成功部署的網站。Static Assets 單檔超過 25 MiB 在 preview 阻擋；v1 不分片。
 
-## Verification strategy
+## 驗證策略
 
 - Rust integration tests 透過 project/database module interface 使用 temporary project 與真實 SQLite。
 - Vitest + React Testing Library 測互動、autosave、translations、validation 與 nested editors。
 - WebdriverIO Tauri service 執行主要 desktop workflow smoke test。
-- GitHub Actions 先在 Ubuntu 執行 TypeScript、Rust format 與 frontend unit checks，再於 Windows x64 與 macOS Apple Silicon jobs 執行 platform-specific Clippy、Rust tests 與 release-mode desktop E2E；一般 CI 不建立或上傳 installer artifacts，也不建立 macOS Intel 產物。一般 Markdown 變更略過 application jobs；`src-tauri` 內的文件仍觸發 application 與 portable XeLaTeX test，後者也會在 CI workflow 變更時執行，同一 pull request 的舊 CI run 會取消。成功的 trusted `main` push CI 會觸發 release planner；planner 僅在 exact HEAD 相對第一個 parent 同步增加四個 canonical versions，且對應 tag 尚不存在時，才於 Windows／macOS jobs 建置並暫存 NSIS／DMG。受限 `contents: write` 的 final job 驗證檔名與 SHA-256，最後建立以 exact SHA 為 target、含自動 changelog 的 Draft Release；GitHub 只在人工 Publish 時 materialize tag。`publish-draft` module 可安全更新尚未 materialize tag 的草稿 target，或更新 tag 已指向相同 commit 的既有草稿；manual recovery 可重用指定 release run 的 installer artifacts，無須重新打包。發布前保留人工確認閘門。
+- GitHub Actions 分成 Ubuntu 快速檢查、portable XeLaTeX、Windows x64 與 macOS Apple Silicon 驗證，以及獨立的 release workflow。觸發條件、版本判定、權限、安裝包與 Draft Release 復原程序由 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)、[`.github/workflows/release.yml`](../.github/workflows/release.yml) 與[發布流程](distribution.md)共同定義。
 
-### Export wizard and local TeX setup
+### 匯出精靈與本機 TeX 環境
 
-`ExportDialog` keeps output intent, settings, preview and current step in component state; Overleaf maps to the existing `latex` export kind, without a database migration. Autosave and settings are flushed before preview, and returning to edit invalidates the preview. `LatexRequirements` only mounts for local PDF at the requirements step, ignores stale async responses, and rechecks on focus after installer handoff. The typed adapter validates all environment/progress DTOs with Zod. Dependency errors have translation keys in both locales.
+`ExportDialog` 在 component state 保存輸出種類、設定、preview 與目前步驟；Overleaf 沿用既有的 `latex` export kind，不需要 database migration。建立 preview 前會 flush autosave 與設定，返回編輯時使既有 preview 失效。`LatexRequirements` 只在本機 PDF 的準備步驟 mount，會忽略過期的 async response，並在安裝器交接後於視窗重新取得焦點時檢查。Typed adapter 以 Zod 驗證所有環境與進度 DTO；相依性錯誤在兩種介面語言都有 translation key。
 
-`export::environment` owns executable/version checks, template-derived package checks through the engine's sibling `kpsewhich`, an isolated 30-second compilation probe, diagnostics, installer download/handoff, and script generation. Version checks time out after 10 seconds; package probes after 5 seconds. The probe uses managed font files and no lexical data. Export snapshots are taken under the project lock; probing, network, and compilation run outside it. Existing `detect_xelatex` remains compatible with callers; normal compilation keeps its existing isolation and snapshot validation.
+`export::environment` 負責執行檔與版本檢查、透過同一 TeX 發行版的 `kpsewhich` 檢查 template 相依套件、隔離的 30 秒編譯探測、診斷、安裝器下載與交接，以及安裝腳本產生。版本檢查 10 秒逾時，套件查詢 5 秒逾時。探測只使用 bkuw 管理的字型，不包含詞彙資料。Export snapshot 在 project lock 內取得；探測、網路與編譯都在鎖外執行。`detect_xelatex` 保持既有呼叫相容性，正常編譯維持隔離環境與 snapshot 驗證。
 
-Installer download is explicitly requested, restricted to catalog HTTPS URLs with redirects disabled, streamed to an app-private temporary file, and verified against a pinned SHA-256 before launch. Progress is throttled to 200 ms. A process-wide AppState guard prevents overlapping downloads; cancellation is observed between chunks, with network reads bounded to 30 seconds. Partial downloads are deleted automatically. Verified installers live in unique `latex-installers` subdirectories and may be deleted after installation. macOS uses `/usr/bin/open` for the verified `.pkg`; Windows launches the verified `.exe` with the matching historical repository. No frontend shell/HTTP/filesystem capability is introduced. Installer handoff is not installation success; existing TeX blocks a new install. Script exports use the same catalog and user-selected output directory.
+安裝器只在明確操作後下載。來源限 catalog 內的 HTTPS URL，停用 redirect，串流至 app-private 暫存檔，並在啟動前比對固定 SHA-256。進度最多每 200 ms 更新一次；process-wide `AppState` guard 防止重疊下載，取消在資料區塊之間生效，單次網路讀取上限 30 秒。未完成檔案自動刪除；驗證完成的安裝器放在唯一的 `latex-installers` 子目錄，安裝後可以移除。macOS 以 `/usr/bin/open` 開啟已驗證的 `.pkg`；Windows 開啟已驗證的 `.exe` 並使用相符的歷史 repository。前端沒有新增 shell、HTTP 或廣域 filesystem capability。交接安裝器不等於安裝成功；偵測到既有 TeX 時不啟動另一套安裝。匯出的腳本使用同一 catalog 與使用者選定的目的地。
 
-Catalog provenance: MacTeX `mactex-20260324.pkg` SHA-256 comes from Homebrew's `Casks/m/mactex.rb`; the TeX Live 2025 final installer was hashed from the official historic mirror and cross-checked against its published SHA-512. Catalog changes require revalidation; an unavailable or replaced download fails closed rather than falling back to an unverified installer. The installer itself manages package retrieval after handoff. Official package-manager links guide repair of an existing environment.
+Catalog 來源記錄在 [`src-tauri/src/export/environment.rs`](../src-tauri/src/export/environment.rs)：MacTeX `mactex-20260324.pkg` 的 SHA-256 取自 Homebrew `Casks/m/mactex.rb`；TeX Live 2025 final installer 從官方歷史 mirror 取得雜湊，並與公布的 SHA-512 交叉核對。Catalog 變更必須重新驗證；來源消失或內容被替換時直接失敗，不改用未驗證的安裝器。交接後的套件下載由官方安裝器管理；既有環境的修復則連到官方 package manager 說明。
 
-The real XeLaTeX smoke test can reuse an existing verified font cache through `BKUW_LATEX_SMOKE_FONT_CACHE`; when unset, it installs fonts in its temporary test directory. The fixture includes Traditional Chinese, IPA and a sense photo. Desktop E2E reuses packs only after `list_font_packs` reports successful integrity verification.
+真實 XeLaTeX smoke test 可透過 `BKUW_LATEX_SMOKE_FONT_CACHE` 重用已驗證的字型 cache；未設定時在測試暫存目錄安裝字型。Fixture 包含繁中、IPA 與義項相片。Desktop E2E 只有在 `list_font_packs` 通過完整性檢查後才重用字型套件。

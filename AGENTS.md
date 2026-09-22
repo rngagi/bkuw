@@ -37,8 +37,8 @@
 - Commit each independently completed feature, fix, or workflow change after its required verification passes. Keep unrelated completed work in separate commits; do not commit incomplete work merely to satisfy this cadence.
 - Run `pnpm check`, `pnpm test`, and `pnpm test:rust` before marking an implementation checklist item complete.
 - Run `pnpm tauri build --no-bundle` before marking the milestone complete.
-- Update `plan.md`, `docs/product-spec.md`, and `docs/architecture.md` when their corresponding behavior changes.
-- Only check an item in `plan.md` after its stated verification succeeds.
+- Update `docs/process/roadmap.md`, `docs/product-spec.md`, and `docs/architecture.md` when their corresponding behavior changes.
+- Only check an item in `docs/process/roadmap.md` after its stated verification succeeds.
 
 ## UI rules
 

@@ -30,7 +30,7 @@ version commit 的 `main` CI 成功後，`.github/workflows/release.yml` 自動�
 
 Desktop E2E 使用 release-mode app，而非未最佳化的 debug app。這可使包含 portable fonts 與 ZIP 的 LaTeX export 保持在 WebdriverIO Tauri direct-eval 的時間限制內；Rust integration tests 仍負責完整 export failure／rollback coverage。
 
-## 目前的信任狀態
+## 簽章狀態
 
 沒有平台憑證時仍可在 GitHub Actions 產生安裝包，但 macOS Gatekeeper 與 Windows SmartScreen 可能顯示未受信任警告。憑證、密碼、API key 與 cloud signing credentials 必須只放在 GitHub Actions secrets，不可提交到 repository。
 
@@ -63,7 +63,7 @@ Release workflow 使用這個設定，成功後會將 DMG 放進該次 release r
    sudo xattr -dr com.apple.quarantine /Applications/bkuw.app
    ```
 
-   `-d` 會刪除指定 attribute，`-r` 會處理整個 app bundle。Apple Developer Forums 也記錄了同一種 [`xattr -r -d com.apple.quarantine` 用法](https://developer.apple.com/forums/thread/727651)。若檔案不在 `/Applications`，必須改成實際的 `.app` 路徑。
+   `-d` 會刪除指定 attribute，`-r` 會處理整個 app bundle。若檔案不在 `/Applications`，必須改成實際的 `.app` 路徑。
 
 不要使用 `spctl --master-disable` 全域關閉 Gatekeeper。若來源不明、簽章檢查異常，或重新下載後仍失敗，應刪除該檔案，而不是移除 quarantine；Apple 說明這類訊息也可能代表 app 確實遭修改或損壞：[Safely open apps on your Mac](https://support.apple.com/102445)。
 

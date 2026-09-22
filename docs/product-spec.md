@@ -6,6 +6,8 @@
 
 產品名稱在 UI、文件、視窗標題與產出檔案中一律寫作小寫 `bkuw`。
 
+共享資料欄位由 [`src-tauri/src/domain.rs`](../src-tauri/src/domain.rs) 的 DTO 定義，frontend 對應 schema 位於 [`src/types/domain.ts`](../src/types/domain.ts)。本文件描述行為；欄位名稱、版本值與 serialization 以這兩個來源為準。
+
 ## 核心原則
 
 - Local-first：不需帳號、雲端、遠端資料庫或網路。
@@ -49,6 +51,8 @@ Phonemic text 儲存時不包含 delimiter、顯示時加 `/…/`；phonetic tex
 每個 sense 與 example 可添加多個音檔，依添加順序排列；音檔不綁定 writing system，entry 層級沒有音檔。
 
 從電腦選取 WAV、MP3、M4A/AAC、FLAC、OGG/Opus、AIFF、WebM 的常見音訊檔，使用隨附工具離線轉成 WebM／Opus、64 kbps VBR、單聲道、48 kHz。支援 PCM、MP3、AAC、ALAC、FLAC、Vorbis、Opus；空檔、損毀、無法解碼或含多個音軌的來源拒絕匯入。每個來源最多 256 MiB、30 分鐘，轉檔最多 5 分鐘；容許最多 50 ms 的編碼延遲。專案只保存 WebM 與 NFC 來源檔名，不修改電腦上的來源檔，不做降噪、音量正規化或靜音裁切。上傳提示只顯示接受的來源格式與限制，不顯示內部儲存參數。
+
+音訊格式、大小、時間、輸出與轉檔 deadline 由 [`src-tauri/src/database/audio.rs`](../src-tauri/src/database/audio.rs) 的 `MAX_SOURCE_BYTES`、`MAX_DURATION`、`MAX_AUDIO_BYTES` 與 `prepare` 定義；錄音暫存限制由 [`src/lib/audioCapture.ts`](../src/lib/audioCapture.ts) 定義。
 
 可一次選取多檔，逐檔顯示進度與錯誤，成功的音檔即使其他檔案失敗也會保留。每筆顯示檔名、長度、大小，提供播放／暫停、拖曳進度及刪除。同時只播放一筆，離開詞條或專案時停止。播放失敗有英文與台灣繁中訊息。編輯義項／例句不會刪除音檔；刪除其擁有者時清理附件，詞條軟刪除則保留音檔供還原。
 
@@ -117,6 +121,8 @@ Project 自動排序可選擇以 writing system 或語意類別分組。Writing-
 
 Header 提供「發佈網站」精靈；首次是設定並發佈，已有成功 deployment 時沿用同一組 Cloudflare 資源更新。精靈以新手可完成的 checklist 說明網站公開性、Workers Free plan、R2 checkout／免費額度與可能費用，並連到 Cloudflare 官方註冊、帳號與 R2 頁面。bkuw 只在使用者按下發佈時上傳，不背景同步。v1 固定使用 `workers.dev`，不處理自訂網域、網站刪除、回復、排程或 OAuth。
 
+網站設定與 deployment 欄位由 [`PublishSettingsV1` 與 `PublishDeploymentState`](../src-tauri/src/domain.rs) 定義；resource name、`<worker-name>-media` 衍生規則及 25 MiB Static Assets 限制由 [`src-tauri/src/publish.rs`](../src-tauri/src/publish.rs) 的 `media_bucket_name`、`validate_settings` 與 `STATIC_ASSET_LIMIT` 定義。
+
 使用者輸入 32 字元 Account ID，經預填頁面建立只含 Workers Scripts Edit 與 Workers R2 Storage Edit 的 API Token。Token 驗證成功後存入 macOS Keychain 或 Windows Credential Manager，不寫入 `.bkuw`、SQLite、log 或 React state；credential store 不可用時只保留至程式關閉並提示使用者。中斷連線只刪除本機 Token，不刪除公開資源。
 
 網站設定包含必填標題、選填 meta description、固定介面語言 `zh-TW`／`en`、選填的安全 Markdown info，以及 entry notes、example notes、root/base relations 與公開 writing systems。Primary writing system 必須公開，其餘系統可個別關閉。Markdown 支援標題、段落、粗斜體、清單、inline code 與 http(s)／mailto／頁內／相對連結；raw HTML 僅作文字顯示，不執行不安全 URL。精靈在同一頁說明 Worker 名稱、帳號子網域及完整公開 URL；帳號已有子網域時由 Cloudflare 讀取，不以 Worker 名稱代填。首次成功發佈前可明確套用新的帳號子網域，介面會警告這項設定會改變同帳號所有 Worker 網址。Worker 名稱在首次成功前可改，R2 bucket 固定衍生為 `<worker-name>-media`，首次成功後一起鎖定。
@@ -134,6 +140,8 @@ App UI 必須完整支援 `en` 與 `zh-TW`。首次啟動依 OS locale 決定，
 ## 匯出流程
 
 Header 的 Export wizard 依「選擇輸出、設定內容、檢查準備狀態、確認並匯出、結果」逐步操作。預設本機 PDF，可主動選擇 Overleaf ZIP、LaTeX 原始碼或 corpus CSV。返回上一步保留設定；返回編輯會清除舊 preview，重新檢查後才能繼續。Preview 前必須 flush autosave；preview token 綁定當下 project snapshot，資料變動後不得以舊 token 匯出。Blocking error 會禁止輸出，warning 會說明無法表示或被省略的資料，並可導覽到相關 entry。
+
+匯出設定欄位由 [`ExportSettingsV1`](../src-tauri/src/domain.rs) 定義；圖片衍生尺寸、JPEG 品質與 PDF 編譯上限由 [`src-tauri/src/export.rs`](../src-tauri/src/export.rs) 的 `LATEX_IMAGE_MAX_WIDTH`、`LATEX_IMAGE_MAX_HEIGHT`、`LATEX_JPEG_QUALITY` 與 XeLaTeX runner 定義。
 
 Preview、LaTeX/ZIP 產生與 XeLaTeX 編譯不得凍結 webview。等待期間顯示目前階段的本地化 indeterminate progress；PDF 明確說明 XeLaTeX 在背景執行且最長可能接近 120 秒。只有選擇 LaTeX／PDF 時才檢查 portable fonts，只有選擇 PDF 時才偵測 XeLaTeX，避免開啟一般 CSV wizard 時進行無關 I/O。
 
@@ -161,8 +169,8 @@ bkuw 自行管理 portable font packs，不依賴 OS 已安裝字型，也不把
 
 ## 後續候選
 
-候選工作、優先順序與尚待完成的人工驗收集中在 [執行清單](../plan.md)，不在產品規格重複維護。
+候選工作、優先順序與尚待完成的人工驗收集中在 [roadmap](process/roadmap.md)，不在產品規格重複維護。
 
 ## 明確排除
 
-目前不包含 accounts、authentication、cloud sync、team collaboration、permissions、server backend、匯入既有專案、Big5 CSV、mobile、AI transcription、ASR、ELAN-style timeline、waveform segmentation、Git syncing、code signing、notarization、auto-update，或未經使用者主動觸發的自動上傳 lexical data。Publish corpus website 所需的 Cloudflare authorization、部署與 media upload 是已列入 backlog 的唯一雲端例外。受信任的 `main` version commit 通過 exact-SHA CI 後可自動建立 unsigned Draft GitHub Release；正式發布前須人工確認安裝包、checksums 與警告內容。
+不包含 bkuw accounts、cloud sync、team collaboration、permissions、一般用途 server backend、匯入既有專案、Big5 CSV、mobile、AI transcription、ASR、ELAN-style timeline、waveform segmentation、Git syncing、code signing、notarization、auto-update，或未經主動觸發的資料上傳。Cloudflare 公開辭典是唯一的雲端部署功能；它使用使用者自己的 Account ID 與 API Token，且只在按下發佈或更新時傳輸公開快照與媒體。受信任的 `main` version commit 通過 exact-SHA CI 後建立 unsigned Draft GitHub Release，人工檢查安裝包、checksums 與說明後再發布。
